@@ -1,91 +1,80 @@
 
 
-# Fix Eskom Tariff Display: Show All Charges and Correct Ordering
+# Add All Missing Eskom Charge Types to Extraction and Display
 
-## Problem Summary
+## Problem
+Each Eskom tariff (e.g. Miniflex <= 300km < 500V) has up to 14 distinct charge line items from the PDF schedule. Currently only 7 are captured. The remaining 7 are missing from the AI extraction schema entirely.
 
-1. **Missing charges in UI**: The expanded tariff card only shows "Basic Charge" and "Demand Charge". It ignores legacy charge, generation capacity charge, transmission network charge, ancillary services, and electrification/rural subsidy -- even when these are already stored in the database.
-2. **Missing charges in extraction**: The AI tool schema doesn't include fields for `ancillary_services_per_kwh` or `electrification_rural_per_kwh`, so these are never extracted from the PDF.
-3. **Wrong tariff ordering**: Tariffs are shown alphabetically instead of following the PDF's Transmission Zone x Voltage matrix order (<=300km first, then >300-600km, etc.).
+## Full Charge List Per Eskom Tariff
 
-## What's Already in the Database (for Miniflex <= 300km < 500V)
-
-| Charge | Amount | Unit | Notes |
-|--------|--------|------|-------|
-| basic | 198.52 | R/month | - |
-| demand | 4.01 | R/kVA | - |
-| demand | 49.85 | R/kVA | Generation capacity |
-| network_demand | 57.33 | R/kVA | Transmission network |
-| ancillary | 0.0023 | R/kWh | Legacy charge |
-| energy (x6) | varies | R/kWh | Peak/Std/Off-Peak x High/Low |
-
-Missing from extraction: electrification and rural network subsidy charge, ancillary services charge.
+| # | Charge | Unit | Current Status |
+|---|--------|------|---------------|
+| 1 | Active energy (Peak/Std/Off-Peak x High/Low) | c/kWh | Captured |
+| 2 | Basic charge | R/month | Captured (as `basic`) |
+| 3 | Demand charge | R/kVA | Captured (as `demand`) |
+| 4 | Generation capacity charge | R/kVA | Captured (as `demand` with notes) |
+| 5 | Transmission network charge | R/kVA | Captured (as `network_demand`) |
+| 6 | Legacy charge | c/kWh | Captured (as `ancillary` with notes) |
+| 7 | Ancillary services charge | c/kWh | Schema exists, not yet re-extracted |
+| 8 | Electrification & rural subsidy | c/kWh | Schema exists, not yet re-extracted |
+| 9 | Service charge | R/account/day | **Missing** |
+| 10 | Administration charge | c/kWh | **Missing** |
+| 11 | Network demand charge | R/kVA | **Missing** |
+| 12 | Urban low voltage subsidy | c/kWh | **Missing** |
+| 13 | Affordability subsidy | c/kWh | **Missing** |
+| 14 | Reactive energy charge | c/kVArh | **Missing** |
 
 ## Changes
 
-### 1. Update the expanded tariff card UI to show ALL charge types
+### 1. Add 6 missing fields to AI extraction tool schema
 
-**File:** `src/components/tariffs/TariffList.tsx` (lines 762-789)
+**File:** `supabase/functions/process-tariff-file/index.ts` (tool parameters, ~line 926)
 
-Replace the 4-item grid (Basic, Demand, Phase, Voltage) with a comprehensive charge display that renders ALL non-energy rates from the database:
+Add these fields to the tariff object schema:
+- `service_charge_per_day` (number) -- Service charge in R/account/day
+- `administration_charge_per_kwh` (number) -- Administration charge in c/kWh
+- `network_demand_charge_per_kva` (number) -- Network demand charge in R/kVA/month
+- `urban_low_voltage_subsidy_per_kwh` (number) -- Urban low voltage subsidy in c/kWh
+- `affordability_subsidy_per_kwh` (number) -- Affordability subsidy in c/kWh
+- `reactive_energy_charge_per_kvarh` (number) -- Reactive energy charge in c/kVArh
 
-```text
-Basic Charge:        R 198.52/month
-Demand Charge:       R 4.01/kVA
-Gen Capacity:        R 49.85/kVA
-Network (Tx):        R 57.33/kVA
-Legacy Charge:       0.23 c/kWh
-Ancillary Services:  (when available)
-Elec & Rural Subsidy:(when available)
-```
+### 2. Save the 6 new charge types to tariff_rates
 
-The display will dynamically render all charge types found in `tariffRates[tariff.id]` where `charge !== 'energy'`, using the `notes` field for labels where available (e.g. "Generation capacity"). This way any new charge types added in future extractions will automatically appear.
+**File:** `supabase/functions/process-tariff-file/index.ts` (rate saving section, after existing ancillary/electrification saves)
 
-### 2. Add missing charge fields to AI extraction schema
+Map each new field to a `tariff_rates` row:
 
-**File:** `supabase/functions/process-tariff-file/index.ts` (lines 899-950)
+| Extracted Field | charge | unit | notes |
+|----------------|--------|------|-------|
+| `service_charge_per_day` | `service` | `R/day` | "Service charge" |
+| `administration_charge_per_kwh` | `admin` | `R/kWh` | "Administration charge" |
+| `network_demand_charge_per_kva` | `network_demand` | `R/kVA` | "Network demand" |
+| `urban_low_voltage_subsidy_per_kwh` | `subsidy` | `R/kWh` | "Urban low voltage subsidy" |
+| `affordability_subsidy_per_kwh` | `subsidy` | `R/kWh` | "Affordability subsidy" |
+| `reactive_energy_charge_per_kvarh` | `reactive` | `R/kVArh` | "Reactive energy" |
 
-Add to the tool function parameters:
-- `ancillary_services_per_kwh` (number) - Ancillary services charge in c/kWh
-- `electrification_rural_per_kwh` (number) - Electrification and rural network subsidy in c/kWh
+c/kWh values will be divided by 100 to store as R/kWh. c/kVArh divided by 100 to store as R/kVArh.
 
-### 3. Save the new charge types to tariff_rates
+### 3. Update AI extraction prompt
 
-**File:** `supabase/functions/process-tariff-file/index.ts` (after line 1188)
+**File:** `supabase/functions/process-tariff-file/index.ts` (Eskom prompt section)
 
-Add rate row creation for the two new charges:
-- `ancillary_services_per_kwh` -> charge: "ancillary", notes: "Ancillary services"
-- `electrification_rural_per_kwh` -> charge: "ancillary", notes: "Electrification & rural subsidy"
+Add all 6 new charges to the extraction instructions so the AI knows to look for them in the PDF tables.
 
-### 4. Update AI extraction prompt to request these charges
+### 4. UI already handles this dynamically
 
-**File:** `supabase/functions/process-tariff-file/index.ts` (Eskom extraction prompt ~line 868)
+The previous change to `TariffList.tsx` already renders all non-energy rates dynamically from `tariffRates`, using the `notes` field for labels. No UI changes needed -- once the new charges are saved, they will automatically appear in the expanded tariff cards.
 
-Add to the TABLE STRUCTURE GUIDE:
-- Ancillary services charge [c/kWh]
-- Electrification and rural network subsidy charge [c/kWh]
+### 5. Re-extraction required
 
-And to the field list in the prompt.
+After deploying the updated edge function, the Eskom PDF will need to be re-extracted (or failed/pending batches re-triggered) to capture all 14 charge types.
 
-### 5. Fix tariff ordering within period groups
-
-**File:** `src/components/tariffs/TariffList.tsx` (around line 710, inside `group.tariffs.map`)
-
-Sort tariffs within each period group by:
-1. `scale_code` (family name: Megaflex, Miniflex, etc.)
-2. Transmission zone order: <=300km, >300-600km, >600-900km, >900km
-3. Voltage order: <500V, >=500V&<66kV, >=66kV&<=132kV, >132kV
-
-This matches the PDF's natural row order (Transmission Zone groups, with voltage sub-rows).
-
-## Summary
+## Technical Summary
 
 | File | Change |
 |------|--------|
-| `TariffList.tsx` (lines 762-789) | Show all charge types dynamically, not just basic + demand |
-| `TariffList.tsx` (line 710) | Sort tariffs by zone then voltage to match PDF order |
-| `process-tariff-file/index.ts` (tool schema) | Add ancillary_services and electrification_rural fields |
-| `process-tariff-file/index.ts` (rate saving) | Save the two new charge types to tariff_rates |
-| `process-tariff-file/index.ts` (prompt) | Tell AI to extract the additional charges |
+| `process-tariff-file/index.ts` (tool schema) | Add 6 new charge fields |
+| `process-tariff-file/index.ts` (rate saving) | Save 6 new charge types to `tariff_rates` |
+| `process-tariff-file/index.ts` (prompt) | Tell AI to extract all charge columns |
+| `TariffList.tsx` | No change needed (already dynamic) |
 
-After these changes, re-extracting the Eskom PDF will capture all charge columns. Existing data already has legacy, gen capacity, and network charges -- those will immediately appear in the UI.
