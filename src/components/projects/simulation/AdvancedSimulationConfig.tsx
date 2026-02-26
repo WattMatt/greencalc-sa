@@ -1337,15 +1337,15 @@ function BatteryCharacteristicsSection({
           </Select>
         </div>
 
-        {/* TOU Arbitrage: period selectors (no more "Charge from" here) */}
+        {/* TOU Arbitrage: discharge period grid */}
         {batteryStrategy === 'tou-arbitrage' && (
-          <div className="space-y-2 text-xs">
-            <Label className="text-[10px] text-muted-foreground">Discharge during</Label>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="rounded border bg-muted/30 px-3 py-2 space-y-2">
+            <span className="text-[10px] text-muted-foreground">Discharge during</span>
+            <div className="grid grid-cols-2 gap-4">
               {/* High Demand Season */}
               <div className="space-y-1.5">
                 <div className="text-[10px] font-semibold text-center" style={{ color: 'hsl(230 70% 50%)' }}>High Demand</div>
-                <div className="grid grid-cols-[auto_1fr_1fr] gap-x-2 gap-y-1 items-center">
+                <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-1 items-center">
                   <div />
                   <div className="text-[9px] text-muted-foreground text-center">Wkday</div>
                   <div className="text-[9px] text-muted-foreground text-center">Wkend</div>
@@ -1354,7 +1354,7 @@ function BatteryCharacteristicsSection({
                     const color = period === 'peak' ? 'hsl(0 72% 51%)' : period === 'standard' ? 'hsl(38 92% 50%)' : 'hsl(160 84% 39%)';
                     return (
                       <Fragment key={period}>
-                        <span className="text-[9px] font-medium" style={{ color }}>{label}</span>
+                        <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
                         <div className="flex justify-center">
                           <Checkbox
                             checked={dischargeTouSelection.highSeason.weekday[period]}
@@ -1365,7 +1365,7 @@ function BatteryCharacteristicsSection({
                               };
                               onDischargeTouSelectionChange?.(updated);
                             }}
-                            className="h-3.5 w-3.5"
+                            className="h-3 w-3"
                           />
                         </div>
                         <div className="flex justify-center">
@@ -1378,7 +1378,7 @@ function BatteryCharacteristicsSection({
                               };
                               onDischargeTouSelectionChange?.(updated);
                             }}
-                            className="h-3.5 w-3.5"
+                            className="h-3 w-3"
                           />
                         </div>
                       </Fragment>
@@ -1389,7 +1389,7 @@ function BatteryCharacteristicsSection({
               {/* Low Demand Season */}
               <div className="space-y-1.5">
                 <div className="text-[10px] font-semibold text-center" style={{ color: 'hsl(270 50% 60%)' }}>Low Demand</div>
-                <div className="grid grid-cols-[auto_1fr_1fr] gap-x-2 gap-y-1 items-center">
+                <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-1 items-center">
                   <div />
                   <div className="text-[9px] text-muted-foreground text-center">Wkday</div>
                   <div className="text-[9px] text-muted-foreground text-center">Wkend</div>
@@ -1398,7 +1398,7 @@ function BatteryCharacteristicsSection({
                     const color = period === 'peak' ? 'hsl(0 72% 51%)' : period === 'standard' ? 'hsl(38 92% 50%)' : 'hsl(160 84% 39%)';
                     return (
                       <Fragment key={period}>
-                        <span className="text-[9px] font-medium" style={{ color }}>{label}</span>
+                        <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
                         <div className="flex justify-center">
                           <Checkbox
                             checked={dischargeTouSelection.lowSeason.weekday[period]}
@@ -1409,7 +1409,7 @@ function BatteryCharacteristicsSection({
                               };
                               onDischargeTouSelectionChange?.(updated);
                             }}
-                            className="h-3.5 w-3.5"
+                            className="h-3 w-3"
                           />
                         </div>
                         <div className="flex justify-center">
@@ -1422,7 +1422,7 @@ function BatteryCharacteristicsSection({
                               };
                               onDischargeTouSelectionChange?.(updated);
                             }}
-                            className="h-3.5 w-3.5"
+                            className="h-3 w-3"
                           />
                         </div>
                       </Fragment>
