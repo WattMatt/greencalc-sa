@@ -440,13 +440,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     }
   }, [isFetched, lastSavedSimulation, savedResultsJson, includesBattery, onSystemCostsChange]);
 
-  // Sync solarCapacity slider with inverter-based AC capacity
-  useEffect(() => {
-    const acCapacity = inverterConfig.inverterSize * inverterConfig.inverterCount;
-    if (acCapacity !== solarCapacity) {
-      setSolarCapacity(acCapacity);
-    }
-  }, [inverterConfig.inverterSize, inverterConfig.inverterCount]);
+
+
 
   // Sync CPI from systemCosts to advancedConfig for O&M escalation
   useEffect(() => {
