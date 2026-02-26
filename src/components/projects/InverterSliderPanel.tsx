@@ -222,7 +222,7 @@ export function InverterSliderPanel({
               }
             }}
             className="w-20 h-7 text-right text-sm font-semibold"
-            step={0.01}
+            step={0.001}
             min={1.0}
             max={1.5}
           />
