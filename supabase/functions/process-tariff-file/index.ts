@@ -660,37 +660,70 @@ Deno.serve(async (req) => {
           await supabase.from("eskom_batch_status").insert(batchRecords);
         }
         
-        const { data: nextBatch } = await supabase
-          .from("eskom_batch_status")
-          .select("batch_index, batch_name, status")
-          .eq("municipality_id", muniData.id)
-          .neq("status", "completed")
-          .order("batch_index")
-          .limit(1)
-          .single();
+        // For PDFs: loop through batches, auto-skipping non-matching ones
+        let foundMatchingBatch = false;
         
-        if (nextBatch) {
+        while (true) {
+          const { data: nextBatch } = await supabase
+            .from("eskom_batch_status")
+            .select("batch_index, batch_name, status")
+            .eq("municipality_id", muniData.id)
+            .neq("status", "completed")
+            .order("batch_index")
+            .limit(1)
+            .single();
+          
+          if (!nextBatch) {
+            // All batches exhausted
+            const { data: completedBatches } = await supabase
+              .from("eskom_batch_status")
+              .select("batch_name, tariffs_extracted")
+              .eq("municipality_id", muniData.id)
+              .eq("status", "completed");
+            
+            const totalTariffs = completedBatches?.reduce((sum, b) => sum + (b.tariffs_extracted || 0), 0) || 0;
+            
+            return new Response(
+              JSON.stringify({ allComplete: true, message: "All Eskom batches extracted", totalBatches: eskomBatches.length, completedBatches: eskomBatches.length, totalTariffs }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          
           currentBatchIndex = nextBatch.batch_index;
+          const currentBatch = eskomBatches[currentBatchIndex];
           console.log(`Processing batch ${currentBatchIndex + 1}/${eskomBatches.length}: ${nextBatch.batch_name}`);
           
-          await supabase.from("eskom_batch_status")
-            .update({ status: "in_progress", updated_at: new Date().toISOString() })
-            .eq("municipality_id", muniData.id)
-            .eq("batch_index", currentBatchIndex);
-        } else {
-          const { data: completedBatches } = await supabase
-            .from("eskom_batch_status")
-            .select("batch_name, tariffs_extracted")
-            .eq("municipality_id", muniData.id)
-            .eq("status", "completed");
-          
-          const totalTariffs = completedBatches?.reduce((sum, b) => sum + (b.tariffs_extracted || 0), 0) || 0;
-          
-          return new Response(
-            JSON.stringify({ allComplete: true, message: "All Eskom batches extracted", totalBatches: eskomBatches.length, completedBatches: eskomBatches.length, totalTariffs }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          if (fileType === "pdf") {
+            // For PDFs: check if batch name appears in the extracted text
+            const batchNameLower = currentBatch.name.toLowerCase();
+            const textLower = (extractedText || "").toLowerCase();
+            const hasBatchContent = textLower.includes(batchNameLower);
+            
+            if (!hasBatchContent) {
+              // Auto-skip: mark as completed and continue to next batch
+              console.log(`Auto-skipping batch ${currentBatch.name} - not found in PDF text`);
+              await supabase.from("eskom_batch_status")
+                .update({ status: "completed", tariffs_extracted: 0, updated_at: new Date().toISOString() })
+                .eq("municipality_id", muniData.id)
+                .eq("batch_index", currentBatchIndex);
+              continue; // Next iteration will find the next pending batch
+            }
+            
+            // Found a matching batch - break out to proceed with AI extraction
+            foundMatchingBatch = true;
+            break;
+          } else {
+            // Excel: single batch per call (no auto-skip loop needed)
+            foundMatchingBatch = true;
+            break;
+          }
         }
+        
+        // Mark the matched batch as in_progress
+        await supabase.from("eskom_batch_status")
+          .update({ status: "in_progress", updated_at: new Date().toISOString() })
+          .eq("municipality_id", muniData.id)
+          .eq("batch_index", currentBatchIndex);
       }
       
       // Build municipality text for AI
@@ -700,24 +733,6 @@ Deno.serve(async (req) => {
         const currentBatch = eskomBatches[currentBatchIndex];
         
         if (fileType === "pdf") {
-          // For PDFs: check if batch name appears in the extracted text
-          const batchNameLower = currentBatch.name.toLowerCase();
-          const textLower = (extractedText || "").toLowerCase();
-          const hasBatchContent = textLower.includes(batchNameLower);
-          
-          if (!hasBatchContent) {
-            // This PDF doesn't contain this batch's tariff family - skip
-            await supabase.from("eskom_batch_status")
-              .update({ status: "completed", tariffs_extracted: 0, updated_at: new Date().toISOString() })
-              .eq("municipality_id", muniData.id)
-              .eq("batch_index", currentBatchIndex);
-            
-            return new Response(
-              JSON.stringify({ inserted: 0, updated: 0, skipped: 0, confidence: 100, message: `PDF does not contain ${currentBatch.name} tariffs` }),
-              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          
           // Pass full PDF text with batch context
           municipalityText = `BATCH FOCUS: ${currentBatch.name}\n${currentBatch.description}\n\n${extractedText.slice(0, 15000)}`;
         } else {
