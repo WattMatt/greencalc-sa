@@ -40,7 +40,17 @@ function mapCategory(category: string): string {
     "availability": "availability",
     "other": "other",
   };
-  return map[category.toLowerCase()] || "other";
+  return map[category.toLowerCase()] || "industrial";
+}
+
+// Map Eskom tariff family to a sensible default category
+function eskomFamilyCategory(familyName: string): string {
+  const lower = (familyName || "").toLowerCase();
+  if (lower.includes("home") || lower.includes("light")) return "domestic";
+  if (lower.includes("public lighting")) return "public_lighting";
+  if (lower.includes("landrate")) return "agricultural";
+  if (lower.includes("munic")) return "bulk_reseller";
+  return "industrial"; // Megaflex, Miniflex, Nightsave, Businessrate, Ruraflex, WEPS, etc.
 }
 
 function mapVoltage(voltage?: string): string | null {
@@ -1001,7 +1011,9 @@ Deno.serve(async (req) => {
           const tariffPlanData = {
             name: tariff.tariff_name,
             municipality_id: muniData.id,
-            category: mapCategory(tariff.customer_category || tariff.category),
+            category: isEskomExtraction 
+              ? eskomFamilyCategory(tariff.tariff_family || currentBatch?.name || "") 
+              : mapCategory(tariff.customer_category || tariff.category),
             structure: mapStructure(tariff.tariff_type),
             voltage: mapVoltage(tariff.voltage_level),
             phase: tariff.phase_type || "Single Phase",
