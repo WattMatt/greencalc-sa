@@ -841,11 +841,19 @@ Deno.serve(async (req) => {
         try {
           console.log(`Extract AI call attempt ${attempt}/${MAX_RETRIES}`);
           
+          // Use faster model for Eskom to avoid timeouts
+          const aiModel = isEskomExtraction ? "google/gemini-2.5-flash" : "google/gemini-2.5-pro";
+          console.log(`Using model: ${aiModel}`);
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 50000); // 50s timeout
+          
           const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
             headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+            signal: controller.signal,
             body: JSON.stringify({
-              model: "google/gemini-2.5-pro",
+              model: aiModel,
               messages: [
                 { role: "system", content: "You are an expert at extracting South African electricity tariff data from documents. Focus on accuracy." },
                 { role: "user", content: extractPrompt }
@@ -904,6 +912,8 @@ Deno.serve(async (req) => {
               tool_choice: { type: "function", function: { name: "save_tariffs" } }
             }),
           });
+          
+          clearTimeout(timeoutId);
 
           if (!aiRes.ok) {
             const errText = await aiRes.text();
