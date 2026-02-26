@@ -251,7 +251,7 @@ Deno.serve(async (req) => {
       const sheetNameToMuni: Record<string, string> = {};
       
       if (isEskom) {
-        municipalityNames = ["Eskom Direct"];
+        municipalityNames = ["Non-Local Authority"];
       } else if (fileType === "xlsx" || fileType === "xls") {
         for (const sheetName of sheetNames) {
           const cleanName = sheetName.replace(/\s*-\s*\d+\.?\d*%$/, '').trim();
@@ -638,7 +638,7 @@ Deno.serve(async (req) => {
       console.log(`Found ${existingTariffSummary.length} existing tariff plans for ${municipality}`);
 
       // ESKOM BATCHING
-      const isEskomExtraction = municipality.toLowerCase() === "eskom direct";
+      const isEskomExtraction = municipality.toLowerCase() === "non-local authority";
       
       const eskomBatches = isEskomExtraction ? [
         { name: "Megaflex", sheets: ["megaflex nla", "megaflex non-local", "megaflex"], description: "Urban TOU for large customers >1MVA NMD, Non-LA. TABLE FORMAT: Rows grouped by Transmission Zone (<=300km, >300-600km, >600-900km, >900km) with sub-rows per Voltage (<500V, >=500V&<66kV, >=66kV&<=132kV, >132kV). Columns: High demand (Jun-Aug) Peak/Standard/Off-Peak [c/kWh], Low demand (Sep-May) Peak/Standard/Off-Peak [c/kWh], Legacy charge [c/kWh], Gen capacity [R/kVA/m], Transmission network [R/kVA/m]. Create ONE tariff per zone+voltage combo (16 total). Energy values in c/kWh (divide by 100)." },
