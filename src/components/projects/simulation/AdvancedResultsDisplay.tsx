@@ -295,8 +295,8 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="h-[500px]">
-                <Table>
+              <div className="relative h-[500px] overflow-auto">
+                <Table className="min-w-[1800px]">
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
                       <TableHead className="w-12 text-center sticky left-0 bg-background">Year</TableHead>
@@ -468,7 +468,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                     </TableRow>
                   </TableBody>
                 </Table>
-              </ScrollArea>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
