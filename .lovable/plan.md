@@ -1,49 +1,51 @@
 
-# Fix Eskom Tariff Selection to Match Standard Province Flow
 
-## Problem 1: Eskom uses a custom UI instead of the standard 4-dropdown flow
+# Add Blended Rates Card to Tariff Selection Detail View
 
-When Eskom is selected as a province, the Year and Tariff dropdowns are hidden (lines 727, 753 in TariffSelector.tsx) and replaced by a completely separate `EskomTariffSelector` component with family tabs, transmission zone collapsibles, and voltage groupings. The user expects the same Province -> Municipality -> Year -> Tariff dropdown flow that normal provinces use.
+## Problem
 
-## Problem 2: Selected Eskom tariff details are empty
+The `BlendedRatesCard` component is fully implemented in `TariffSelector.tsx` (line 150) with All Hours / Solar Sun Hours selection, annual/high/low breakdowns, and click-to-select for simulation. However, it is **never rendered** in the selected tariff detail section. This means no blended rate selection is shown for any tariff -- Eskom or otherwise.
 
-The `EskomTariffSelector` component (lines 121-151) maps tariff data to a legacy interface but:
-- Sets `legacy_charge_per_kwh: null` instead of finding the legacy ancillary charge
-- Sets `generation_capacity_charge: null` instead of reading the capacity charge
-- Sets `transmission_zone: null` so all tariffs group under "No Zone"
-- Divides energy `r.amount / 100` (line 148) assuming c/kWh, but the data is already stored in R/kWh
-- Does not map network demand, subsidy, surcharge, or other unbundled charges to the rate display
+## Root Cause
+
+There are two issues:
+1. The `BlendedRatesCard` render call is simply missing from the tariff detail card (lines 756-862).
+2. A **data shape mismatch** exists: the DB `tariff_rates` rows use fields `charge`, `amount`, `tou`, `season` (e.g., `charge: 'energy', tou: 'peak', season: 'high', amount: 3.50`), but the `BlendedRatesCard` and its underlying `calculateAnnualBlendedRates()` function expect the `TariffRate` interface with `rate_per_kwh`, `time_of_use`, `season` (e.g., `rate_per_kwh: 3.50, time_of_use: 'Peak', season: 'High/Winter'`).
 
 ## Solution
 
-Remove the Eskom-specific branching in `TariffSelector.tsx` so Eskom uses the exact same 4-dropdown flow as every other province. The standard flow already works because the data structure is identical (tariff_plans with tariff_rates).
+### 1. Add a mapping function to convert DB tariff_rates to TariffRate shape
 
-### Changes to `src/components/projects/TariffSelector.tsx`
+Add a helper function in `TariffSelector.tsx` that converts raw DB rows into the `TariffRate` interface format:
 
-1. **Remove the `isEskomSelected` guard on the Year dropdown** (line 727): Show the Year dropdown for Eskom too. The Eskom tariffs have `effective_from`/`effective_to` fields just like regular municipality tariffs.
+- Filter to `charge === 'energy'` rows only (the blended calc only uses energy rates)
+- Map `amount` to `rate_per_kwh`
+- Map `tou` values: `peak` -> `Peak`, `standard` -> `Standard`, `off_peak` -> `Off-Peak`, `all` -> `Any`
+- Map `season` values: `high` -> `High/Winter`, `low` -> `Low/Summer`, `all` -> `All Year`
+- Map ancillary/network/subsidy charges from other rows onto matching energy rows as `network_charge_per_kwh`, `ancillary_charge_per_kwh`, etc.
 
-2. **Remove the `isEskomSelected` guard on the Tariff dropdown** (line 753): Show the Tariff dropdown for Eskom too.
+### 2. Render BlendedRatesCard in the tariff detail section
 
-3. **Remove the `isEskomSelected` guard on the tariff query** (line 574): Allow the standard tariff query to run for Eskom municipalities. Currently `enabled: !!municipalityId && !isEskomSelected` blocks it.
+After the energy rates block (line 859), add:
 
-4. **Remove the `isEskomSelected` guard on the selected tariff query** (line 658): Allow the selected tariff detail query to run for Eskom too.
+```tsx
+<BlendedRatesCard
+  rates={mapDbRatesToTariffRates((selectedTariff as any).tariff_rates)}
+  tariff={{ legacy_charge_per_kwh: legacyCharge }}
+  selectedType={selectedBlendedRateType}
+  onTypeChange={onBlendedRateTypeChange}
+/>
+```
 
-5. **Remove the Eskom Matrix Selector block** (lines 776-785): Remove the `EskomTariffSelector` component rendering entirely from this file.
-
-6. **Remove the `isEskomSelected` guard on the regular tariff display** (line 788): Show the standard tariff detail card for Eskom tariffs too.
-
-7. **Remove the auto-select "Eskom Direct" logic** (lines 459-467): This references a non-existent "Eskom Direct" municipality. The actual municipality is "Non-Local Authority" and should be selected manually like any other municipality.
-
-8. **Remove the EskomTariffSelector import** (line 10).
-
-### Result
-
-After these changes, selecting Eskom as province will show the Municipality dropdown (with "Non-Local Authority"), then the Year dropdown (with the extraction period), then the Tariff dropdown (listing all Miniflex variants by name). Selecting a tariff will display the standard detail card with energy rates, reactive energy, and other charges -- all rendered from the `tariff_rates` rows directly, no broken mapping layer in between.
+Where `legacyCharge` is extracted from the `ancillary` charge row (if present) in the tariff_rates.
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/projects/TariffSelector.tsx` | Remove all `isEskomSelected` conditional branches and the EskomTariffSelector import. Eskom now follows the identical Province -> Municipality -> Year -> Tariff flow. |
+| `src/components/projects/TariffSelector.tsx` | Add `mapDbRatesToTariffRates()` helper function. Render `BlendedRatesCard` inside the selected tariff detail card after the energy rates section. |
 
-Note: The `EskomTariffSelector.tsx` file is not deleted as it may still be used by the Tariff Management dashboard. Only its usage in the project-level tariff selection is removed.
+### Result
+
+After this change, selecting any tariff (Eskom or municipal) will show the blended rate selector with All Hours (Annual/High/Low) and Solar Sun Hours (Annual/High/Low) options. Clicking a rate selects it for use in the simulation engine.
+
