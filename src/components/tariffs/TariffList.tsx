@@ -693,7 +693,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                           });
 
                           return sortedPeriods.map(([periodKey, group]) => (
-                            <Collapsible key={periodKey} defaultOpen={sortedPeriods.length === 1}>
+                            <Collapsible key={periodKey} defaultOpen={false}>
                               <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2 rounded-md bg-muted/50 hover:bg-muted transition-colors text-sm font-medium text-foreground">
                                 <Calendar className="h-4 w-4 text-primary" />
                                 <span>{group.label}</span>
