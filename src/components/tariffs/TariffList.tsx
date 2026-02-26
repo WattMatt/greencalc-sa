@@ -707,7 +707,37 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                                 <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [[data-state=closed]>&]:rotate-[-90deg]" />
                               </CollapsibleTrigger>
                               <CollapsibleContent className="mt-1 space-y-2 pl-2 border-l-2 border-primary/20 ml-2">
-                                {group.tariffs.map((tariff) => (
+                                {[...group.tariffs].sort((a, b) => {
+                                  // Sort by scale_code first, then by transmission zone, then voltage
+                                  const scaleOrder = (a.scale_code || '').localeCompare(b.scale_code || '');
+                                  if (scaleOrder !== 0) return scaleOrder;
+                                  
+                                  // Transmission zone order from tariff name
+                                  const zoneOrder = ['<= 300km', '> 300km', '> 600km', '> 900km'];
+                                  const getZoneIndex = (name: string) => {
+                                    for (let i = zoneOrder.length - 1; i >= 0; i--) {
+                                      if (name.includes(zoneOrder[i])) return i;
+                                    }
+                                    return -1;
+                                  };
+                                  const zoneA = getZoneIndex(a.name);
+                                  const zoneB = getZoneIndex(b.name);
+                                  if (zoneA !== zoneB) return zoneA - zoneB;
+                                  
+                                  // Voltage order from tariff name
+                                  const voltageOrder = ['< 500V', '>= 500V', '>= 66kV', '> 132kV'];
+                                  const getVoltageIndex = (name: string) => {
+                                    for (let i = voltageOrder.length - 1; i >= 0; i--) {
+                                      if (name.includes(voltageOrder[i])) return i;
+                                    }
+                                    return -1;
+                                  };
+                                  const voltA = getVoltageIndex(a.name);
+                                  const voltB = getVoltageIndex(b.name);
+                                  if (voltA !== voltB) return voltA - voltB;
+                                  
+                                  return a.name.localeCompare(b.name);
+                                }).map((tariff) => (
                           <Collapsible key={tariff.id} open={expandedTariffs.has(tariff.id)}>
                             <div className="border rounded bg-background">
                               <div className="flex items-center justify-between p-3">
@@ -759,31 +789,51 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
 
                               <CollapsibleContent>
                                 <div className="px-3 pb-3 pt-1 border-t space-y-3">
-                                  {/* Fixed Charges derived from rates */}
+                                  {/* Fixed Charges derived from rates - dynamically show ALL non-energy charges */}
                                   {(() => {
                                     const rates = tariffRates[tariff.id] || [];
-                                    const basicCharge = getChargeAmount(rates, 'basic');
-                                    const demandCharge = getChargeAmount(rates, 'demand');
+                                    const nonEnergyRates = rates.filter(r => r.charge !== 'energy');
+                                    
+                                    // Build display items from non-energy rates
+                                    const chargeItems: { label: string; value: string }[] = [];
+                                    
+                                    for (const rate of nonEnergyRates) {
+                                      let label = '';
+                                      if (rate.notes) {
+                                        label = rate.notes;
+                                      } else if (rate.charge === 'basic') {
+                                        label = 'Basic Charge';
+                                      } else if (rate.charge === 'demand') {
+                                        label = 'Demand Charge';
+                                      } else if (rate.charge === 'network_demand') {
+                                        label = 'Network Demand';
+                                      } else if (rate.charge === 'ancillary') {
+                                        label = 'Ancillary';
+                                      } else {
+                                        label = rate.charge.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                                      }
+                                      
+                                      const unit = rate.unit || '';
+                                      const isSmallAmount = rate.amount < 0.01;
+                                      const displayAmount = isSmallAmount 
+                                        ? `${(rate.amount * 100).toFixed(2)} c/kWh`
+                                        : `${formatAmount(rate.amount)}${unit.includes('kVA') ? '/kVA' : unit.includes('month') ? '/month' : '/' + unit.replace('R/', '')}`;
+                                      
+                                      chargeItems.push({ label, value: displayAmount });
+                                    }
+                                    
+                                    // Always show phase and voltage
+                                    chargeItems.push({ label: 'Phase', value: tariff.phase || '-' });
+                                    chargeItems.push({ label: 'Voltage', value: tariff.voltage || '-' });
+                                    
                                     return (
                                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                                        <div className="bg-accent/30 rounded p-2">
-                                          <div className="text-muted-foreground">Basic Charge</div>
-                                          <div className="font-medium">{formatAmount(basicCharge)}</div>
-                                        </div>
-                                        <div className="bg-accent/30 rounded p-2">
-                                          <div className="text-muted-foreground">Demand Charge</div>
-                                          <div className="font-medium">
-                                            {formatAmount(demandCharge)}/kVA
+                                        {chargeItems.map((item, idx) => (
+                                          <div key={idx} className="bg-accent/30 rounded p-2">
+                                            <div className="text-muted-foreground">{item.label}</div>
+                                            <div className="font-medium">{item.value}</div>
                                           </div>
-                                        </div>
-                                        <div className="bg-accent/30 rounded p-2">
-                                          <div className="text-muted-foreground">Phase</div>
-                                          <div className="font-medium">{tariff.phase || "-"}</div>
-                                        </div>
-                                        <div className="bg-accent/30 rounded p-2">
-                                          <div className="text-muted-foreground">Voltage</div>
-                                          <div className="font-medium">{tariff.voltage || "-"}</div>
-                                        </div>
+                                        ))}
                                       </div>
                                     );
                                   })()}
