@@ -1,57 +1,115 @@
 
-
-# Add Grid Battery Charging Cost to Cashflow
+# Hourly TOU-Aware Income Calculation Across 8,760 Hours
 
 ## Problem
 
-When the battery charges from the grid (e.g., during off-peak TOU arbitrage), those kWh are imported from the grid and must be paid for. Currently, the energy engine correctly adds grid-charge kWh to `gridImport`, but the financial engine does not account for this cost. The `totalCostR` only includes insurance and maintenance, so grid charging appears "free".
+The financial engine currently multiplies total annual kWh by a single blended average rate (`tariff.averageRatePerKwh`). This is inaccurate -- each hour of every day in the year has a specific TOU rate (peak/standard/off-peak) that differs by season (high/low) and day type (weekday/saturday/sunday). The income should be calculated by iterating through all 8,760 hours of the year.
 
-## Solution
+## Approach
 
-Track grid-charged battery kWh separately in the energy simulation, then cost them in the financial engine using the applicable tariff rate.
+Build a new function that iterates day-by-day through a full 365-day year. For each day it determines the season (high/low from `TOUSettings.highSeasonMonths`), the day type (weekday/saturday/sunday), and then for each of the 24 hours looks up the TOU period and its corresponding tariff rate from the `tariffRates` array. It multiplies each hour's kWh (from the energy simulation's hourly profile) by the applicable rate, accumulating total income and total kWh per stream (solar direct, battery discharge, export, grid charge).
 
-### Step 1: Energy Engine -- Track grid-charge kWh separately
+The derived "Solar Rate" becomes `totalIncome / totalKwh` -- a weighted reference value.
 
-**File:** `src/components/projects/simulation/EnergySimulationEngine.ts`
+## Day-by-Day Calendar Logic
 
-- Add `batteryChargeFromGrid: number` to `HourResult`, `HourlyEnergyData`, and `EnergySimulationResults` (as `totalBatteryChargeFromGrid`).
-- In `dispatchTouArbitrage`, `dispatchPeakShaving`, and `dispatchScheduled`, track the `gridCharge` portion separately (where `gridImport += gridCharge`).
-- In `dispatchSelfConsumption`, grid charging is never allowed, so `batteryChargeFromGrid = 0`.
-- Accumulate the daily total in the simulation loop.
+Using the `SEASONAL_DAYS` distribution already defined in `tariffCalculations.ts`:
+- High season: 66 weekdays, 13 saturdays, 13 sundays (92 days)
+- Low season: 195 weekdays, 39 saturdays, 39 sundays (273 days)
 
-### Step 2: Financial Engine -- Add grid charging cost
+For each combination (6 total: high-weekday, high-saturday, high-sunday, low-weekday, low-saturday, low-sunday), iterate over 24 hours, look up the rate, multiply by hourly kWh, then multiply by the number of days in that category. This produces exact annual totals without needing to simulate 8,760 individual days.
 
-**File:** `src/components/projects/simulation/AdvancedSimulationEngine.ts`
+## Implementation Steps
 
-- Read `totalBatteryChargeFromGrid` from the base energy results.
-- Annualise it: `baseBatteryChargeFromGridKwh = totalBatteryChargeFromGrid * 365`.
-- Apply degradation proportionally (same as other streams).
-- Calculate cost: `gridChargeCostR = batteryChargeFromGridKwh * baseEnergyRate * energyRateIndex` (charged at the prevailing energy rate).
-- Add to `totalCostR`: `totalCostR = insuranceCostR + maintenanceCost + gridChargeCostR`.
+### 1. New utility function in `AdvancedSimulationEngine.ts`
 
-### Step 3: Types -- Add new fields to YearlyProjection
+Create `calculateAnnualHourlyIncome()`:
 
-**File:** `src/components/projects/simulation/AdvancedSimulationTypes.ts`
+```text
+Inputs:
+  - hourlyData: HourlyEnergyData[] (24 hours from energy engine)
+  - tariffRates: TariffRate[] (from DB)
+  - touSettings: TOUSettings (from localStorage)
+  - tariff?: { legacy_charge_per_kwh?: number }
 
-- Add `gridChargeCostR: number` and `batteryChargeFromGridKwh: number` to `YearlyProjection`.
+Outputs:
+  - annualSolarDirectIncome: number (R)
+  - annualBatteryDischargeIncome: number (R)
+  - annualExportIncome: number (R)
+  - annualGridChargeCost: number (R)
+  - derivedSolarDirectRate: number (R/kWh)
+  - derivedBatteryDischargeRate: number (R/kWh)
+  - derivedExportRate: number (R/kWh)
+  - derivedGridChargeRate: number (R/kWh)
+  - totalAnnualSolarDirectKwh: number
+  - totalAnnualBatteryDischargeKwh: number
+  - totalAnnualExportKwh: number
+  - totalAnnualGridChargeKwh: number
+```
 
-### Step 4: Cashflow Table -- Display grid charging cost
+Logic:
+- For each of the 6 (season x dayType) combinations:
+  - Get the TOU hour map from `touSettings`
+  - Get the day count from `SEASONAL_DAYS`
+  - For each hour 0-23:
+    - Determine TOU period from the hour map
+    - Look up rate via `getCombinedRate(tariffRates, touPeriod, season, tariff)`
+    - Multiply: `hourlyData[h].solarUsed * rate * dayCount` (accumulate to solarDirectIncome)
+    - Same for `batteryDischarge`, `gridExport`, and `batteryChargeFromGrid` (if tracked)
+- Derive weighted rates: `derivedRate = totalIncome / totalKwh`
 
-**File:** `src/components/projects/simulation/AdvancedResultsDisplay.tsx`
+### 2. Update `runAdvancedSimulation` signature
 
-- Add a "Grid Charge Cost (R)" column in the costs section of the cashflow table.
-- Display `gridChargeCostR` for each year.
-- Include in column totals.
+Add optional parameters:
+- `tariffRates?: TariffRate[]`
+- `touSettings?: TOUSettings`
 
-### Step 5: Column Totals
+When these are provided, use the hourly-weighted calculation instead of `baseEnergyRate * kWh`. The base annual income (Year 1) comes from `calculateAnnualHourlyIncome()`. For subsequent years, apply escalation index and degradation as before.
 
-**File:** `src/components/projects/simulation/AdvancedSimulationEngine.ts`
+### 3. Update `SimulationPanel.tsx`
 
-- Add `gridChargeCostR` to the `ColumnTotals` interface and accumulate it in the totals loop.
+Pass `tariffRates` and TOU settings into `runAdvancedSimulation`:
 
-## Technical Notes
+```text
+runAdvancedSimulation(
+  energyResults,
+  tariffData,
+  systemCosts,
+  solarCapacity,
+  batteryCapacity,
+  advancedConfig,
+  tariffRates,     // NEW
+  touSettings      // NEW (from useTOUSettings hook)
+)
+```
 
-- The grid charge rate should use the same `baseEnergyRate * energyRateIndex` as other energy flows. In a future iteration, a separate off-peak rate could be applied for more accuracy.
-- This cost is distinct from the regular grid import cost (which the building pays regardless). It represents the **additional** grid consumption solely for battery charging.
-- Net cashflow formula becomes: `totalIncomeR - totalCostR - replacementCost` (unchanged structure, but `totalCostR` now includes grid charging).
+Add `useTOUSettings()` hook import to `SimulationPanel.tsx`.
 
+### 4. Update `AdvancedConfigComparison.tsx`
+
+Same parameter additions for the comparison panel's call to `runAdvancedSimulation`.
+
+### 5. Yearly projection logic changes in `AdvancedSimulationEngine.ts`
+
+When hourly income data is available:
+- Year 1 base values come from the hourly calculation (already annualised)
+- `solarDirectIncomeR = baseAnnualSolarDirectIncome * (panelEfficiency/100) * energyRateIndex`
+- `solarDirectRateR` becomes the derived rate (reference only)
+- Same pattern for battery discharge, export, and grid charge cost
+- Grid charge cost: `gridChargeCostR = baseAnnualGridChargeCost * (panelEfficiency/100) * energyRateIndex`
+
+### 6. No changes to types
+
+The `YearlyProjection` and `ColumnTotals` interfaces already have all needed fields. The rate fields (`solarDirectRateR`, `batteryDischargeRateR`, `exportRateR`) will now contain derived weighted averages instead of the single blended rate.
+
+## Files Modified
+
+1. **`src/components/projects/simulation/AdvancedSimulationEngine.ts`** -- Add `calculateAnnualHourlyIncome()`, update `runAdvancedSimulation` signature and income logic
+2. **`src/components/projects/SimulationPanel.tsx`** -- Pass `tariffRates` and TOU settings; add `useTOUSettings` hook
+3. **`src/components/projects/simulation/AdvancedConfigComparison.tsx`** -- Pass `tariffRates` and TOU settings
+
+## Backward Compatibility
+
+- If `tariffRates` is not provided, falls back to the current blended rate approach (no breaking changes)
+- All existing interfaces remain unchanged
+- The function signature uses optional parameters
