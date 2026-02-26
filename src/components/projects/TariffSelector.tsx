@@ -15,7 +15,63 @@ import {
   isFlatRateTariff,
   getFlatRate,
   type BlendedRatesBreakdown,
+  type TariffRate,
 } from "@/lib/tariffCalculations";
+
+/**
+ * Maps raw DB tariff_rates rows (charge, tou, season, amount)
+ * into the TariffRate interface expected by calculateAnnualBlendedRates().
+ */
+function mapDbRatesToTariffRates(
+  dbRates: any[],
+  tariff?: { legacy_charge_per_kwh?: number }
+): TariffRate[] {
+  if (!dbRates || dbRates.length === 0) return [];
+
+  const touMap: Record<string, string> = {
+    peak: 'Peak',
+    standard: 'Standard',
+    off_peak: 'Off-Peak',
+    off_Peak: 'Off-Peak',
+    'Off-Peak': 'Off-Peak',
+    all: 'Any',
+  };
+
+  const seasonMap: Record<string, string> = {
+    high: 'High/Winter',
+    low: 'Low/Summer',
+    all: 'All Year',
+  };
+
+  // Build lookup for ancillary charges by season+tou
+  const ancillaryLookup = new Map<string, number>();
+  const networkLookup = new Map<string, number>();
+  const elecRuralLookup = new Map<string, number>();
+  const affordabilityLookup = new Map<string, number>();
+
+  for (const r of dbRates) {
+    const key = `${r.season || 'all'}|${r.tou || 'all'}`;
+    if (r.charge === 'ancillary') ancillaryLookup.set(key, Number(r.amount) || 0);
+    if (r.charge === 'network_demand' || r.charge === 'network_access') networkLookup.set(key, (networkLookup.get(key) || 0) + (Number(r.amount) || 0));
+    if (r.charge === 'electrification_rural') elecRuralLookup.set(key, Number(r.amount) || 0);
+    if (r.charge === 'affordability_subsidy') affordabilityLookup.set(key, Number(r.amount) || 0);
+  }
+
+  return dbRates
+    .filter((r: any) => r.charge === 'energy')
+    .map((r: any) => {
+      const key = `${r.season || 'all'}|${r.tou || 'all'}`;
+      return {
+        rate_per_kwh: Number(r.amount) || 0,
+        time_of_use: touMap[r.tou] || 'Any',
+        season: seasonMap[r.season] || 'All Year',
+        network_charge_per_kwh: networkLookup.get(key) || 0,
+        ancillary_charge_per_kwh: ancillaryLookup.get(key) || 0,
+        electrification_rural_per_kwh: elecRuralLookup.get(key) || 0,
+        affordability_subsidy_per_kwh: affordabilityLookup.get(key) || 0,
+      } as TariffRate;
+    });
+}
 
 // Helper function to organize energy rates by season and TOU period
 const organizeEnergyRates = (rates: any[]) => {
@@ -858,6 +914,16 @@ export function TariffSelector({
                 })()}
               </div>
             )}
+
+            <BlendedRatesCard
+              rates={mapDbRatesToTariffRates(
+                (selectedTariff as any).tariff_rates || [],
+                { legacy_charge_per_kwh: Number((selectedTariff as any).legacy_charge_per_kwh) || 0 }
+              )}
+              tariff={{ legacy_charge_per_kwh: Number((selectedTariff as any).legacy_charge_per_kwh) || 0 }}
+              selectedType={selectedBlendedRateType}
+              onTypeChange={onBlendedRateTypeChange}
+            />
           </CardContent>
         </Card>
       )}
