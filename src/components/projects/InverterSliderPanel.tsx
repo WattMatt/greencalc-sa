@@ -125,8 +125,8 @@ export function InverterSliderPanel({
               value={desiredAcCapacity}
               onChange={(e) => handleCustomSystemSize(e.target.value)}
               className="w-24 h-8 text-right text-sm font-semibold"
-              step={5}
-              min={1}
+              step="5"
+              min="1"
             />
             <span className="text-xs text-muted-foreground">kW</span>
           </div>
