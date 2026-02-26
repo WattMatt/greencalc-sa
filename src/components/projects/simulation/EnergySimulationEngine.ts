@@ -168,6 +168,9 @@ export interface EnergySimulationResults {
   
   // Revenue metrics (daily kWh that actually generate revenue)
   revenueKwh: number; // totalSolarUsed + totalBatteryDischarge + totalGridExport
+  
+  // Grid charging metrics
+  totalBatteryChargeFromGrid: number; // kWh charged from grid (must be paid for)
 }
 
 // ── Source-aware helpers ──
@@ -258,6 +261,7 @@ interface HourResult {
   solarUsed: number;
   batteryCharge: number;
   batteryDischarge: number;
+  batteryChargeFromGrid: number;
   newBatteryState: number;
 }
 
@@ -307,7 +311,7 @@ function dispatchSelfConsumption(
     gridExport = gridExportAllowed ? remainder : 0;
   }
 
-  return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, newBatteryState };
+  return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid: 0, newBatteryState };
 }
 
 function dispatchTouArbitrage(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions): HourResult {
@@ -324,6 +328,7 @@ function dispatchTouArbitrage(s: HourState, hour: number, config: DispatchConfig
   let gridExport = 0;
   let batteryCharge = 0;
   let batteryDischarge = 0;
+  let batteryChargeFromGrid = 0;
   let newBatteryState = batteryState;
 
   if (isDischargeHour) {
@@ -365,13 +370,14 @@ function dispatchTouArbitrage(s: HourState, hour: number, config: DispatchConfig
         batteryCharge += gridCharge;
         gridImport += gridCharge;
         newBatteryState += gridCharge;
+        batteryChargeFromGrid = gridCharge;
       }
     }
   } else {
     return dispatchSelfConsumption(s, permissions);
   }
 
-  return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, newBatteryState };
+  return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState };
 }
 
 function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions): HourResult {
@@ -417,6 +423,7 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig,
   }
 
   // During charge hours, also charge from grid if allowed
+  let batteryChargeFromGrid = 0;
   if (isChargeHour && gridChargeAllowed) {
     const batterySpace = Math.min(maxBatteryLevel - newBatteryState, batteryChargePower - batteryCharge);
     const gridCharge = Math.max(0, batterySpace);
@@ -424,10 +431,11 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig,
       batteryCharge += gridCharge;
       gridImport += gridCharge;
       newBatteryState += gridCharge;
+      batteryChargeFromGrid = gridCharge;
     }
   }
 
-  return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, newBatteryState };
+  return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState };
 }
 
 function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions): HourResult {
@@ -477,6 +485,7 @@ export function runEnergySimulation(
   let totalSolarUsed = 0;
   let totalBatteryCharge = 0;
   let totalBatteryDischarge = 0;
+  let totalBatteryChargeFromGrid = 0;
 
   for (let h = 0; h < 24; h++) {
     const load = loadProfile[h] || 0;
@@ -520,6 +529,7 @@ export function runEnergySimulation(
     totalSolarUsed += result.solarUsed;
     totalBatteryCharge += result.batteryCharge;
     totalBatteryDischarge += result.batteryDischarge;
+    totalBatteryChargeFromGrid += result.batteryChargeFromGrid;
 
     hourlyData.push({
       hour: `${h.toString().padStart(2, "0")}:00`,
@@ -576,6 +586,7 @@ export function runEnergySimulation(
     totalSolarUsed,
     totalBatteryCharge,
     totalBatteryDischarge,
+    totalBatteryChargeFromGrid,
     selfConsumptionRate,
     solarCoverageRate,
     peakLoad,

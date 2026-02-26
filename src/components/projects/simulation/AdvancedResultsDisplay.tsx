@@ -134,6 +134,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
       demandIncome: projections.reduce((sum, p) => sum + (p.demandIncomeR ?? 0), 0),
       totalIncome: projections.reduce((sum, p) => sum + (p.totalIncomeR ?? p.energySavings ?? 0), 0),
       insurance: projections.reduce((sum, p) => sum + (p.insuranceCostR ?? 0), 0),
+      gridChargeCost: projections.reduce((sum, p) => sum + (p.gridChargeCostR ?? 0), 0),
       oAndM: projections.reduce((sum, p) => sum + (p.maintenanceCost ?? 0), 0),
       replacements: projections.reduce((sum, p) => sum + (p.replacementCost ?? 0), 0),
       totalCost: projections.reduce((sum, p) => sum + (p.totalCostR ?? p.maintenanceCost ?? 0) + (p.replacementCost ?? 0), 0),
@@ -315,6 +316,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                       <TableHead className="text-right">Demand Income (R)</TableHead>
                       <TableHead className="text-right bg-green-500/5">Total Income</TableHead>
                       <TableHead className="text-right">Insurance</TableHead>
+                      <TableHead className="text-right">Grid Charge</TableHead>
                       <TableHead className="text-right">O&M</TableHead>
                       <TableHead className="text-right">Replacements</TableHead>
                       <TableHead className="text-right bg-amber-500/5">Total Cost</TableHead>
@@ -342,6 +344,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground bg-green-500/5">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
@@ -417,6 +420,9 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                             {proj.insuranceCostR > 0 ? `-${formatCurrency(proj.insuranceCostR)}` : "-"}
                           </TableCell>
                           <TableCell className="text-right text-amber-600">
+                            {(proj.gridChargeCostR ?? 0) > 0 ? `-${formatCurrency(proj.gridChargeCostR)}` : "-"}
+                          </TableCell>
+                          <TableCell className="text-right text-amber-600">
                             -{formatCurrency(proj.maintenanceCost)}
                           </TableCell>
                           <TableCell className="text-right text-amber-600">
@@ -458,6 +464,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                       <TableCell className="text-right font-bold text-green-600">{formatCurrency(totals.demandIncome)}</TableCell>
                       <TableCell className="text-right font-bold text-green-600 bg-green-500/10">{formatCurrency(totals.totalIncome)}</TableCell>
                       <TableCell className="text-right font-bold text-amber-600">-{formatCurrency(totals.insurance)}</TableCell>
+                      <TableCell className="text-right font-bold text-amber-600">{totals.gridChargeCost > 0 ? `-${formatCurrency(totals.gridChargeCost)}` : "-"}</TableCell>
                       <TableCell className="text-right font-bold text-amber-600">-{formatCurrency(totals.oAndM)}</TableCell>
                       <TableCell className="text-right font-bold text-amber-600">-{formatCurrency(totals.replacements)}</TableCell>
                       <TableCell className="text-right font-bold text-amber-600 bg-amber-500/10">-{formatCurrency(totals.totalCost)}</TableCell>

@@ -395,6 +395,7 @@ export interface ColumnTotals {
   totalDemandIncome: number;       // Sum of Demand Income column
   totalIncome: number;             // Sum of Total Income column
   totalInsurance: number;          // Sum of Insurance column
+  totalGridChargeCost: number;     // Sum of Grid Charge Cost column
   totalOM: number;                 // Sum of O&M column
   totalReplacements: number;       // Sum of Replacements column
   totalCosts: number;              // Sum of Total Cost column (excluding replacements)
@@ -470,7 +471,9 @@ export interface YearlyProjection {
   totalIncomeR: number; // solarDirectIncome + batteryDischargeIncome + exportIncome + demandIncome
   
   insuranceCostR: number; // Insurance with CPI escalation
-  totalCostR: number; // insurance + maintenance
+  gridChargeCostR: number; // Cost of grid-charged battery kWh
+  batteryChargeFromGridKwh: number; // kWh charged from grid
+  totalCostR: number; // insurance + maintenance + grid charge cost
   
   // Present Value calculations (for NPV transparency)
   pvReductionFactor: number; // (1 + discountRate)^-year - starts at 1/(1+r) for year 1
