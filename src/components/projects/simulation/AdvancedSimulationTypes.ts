@@ -437,11 +437,14 @@ export interface YearlyProjection {
   discountedCashFlow: number; // R (for NPV)
   
   // NEW: Income-based approach (Excel model alignment)
-  energyYield: number; // kWh (with degradation applied)
+  energyYield: number; // kWh (total solar production with degradation — for LCOE, not revenue)
   discountedEnergyYield: number; // kWh discounted by LCOE rate (for LCOE denominator)
+  revenueKwh: number; // kWh that actually earn revenue (solar-to-load + battery-to-load)
+  exportKwh: number; // kWh exported to grid (earns at export rate)
   energyRateIndex: number; // Tariff escalation factor (1.0, 1.1, 1.21...)
   energyRateR: number; // R/kWh (base rate × index) - actual tariff charged
-  energyIncomeR: number; // R = energyYield × baseRate × index
+  energyIncomeR: number; // R = revenueKwh × baseRate × index (load-displacement revenue)
+  exportIncomeR: number; // R = exportKwh × exportRate × index (grid export revenue)
   
   demandSavingKva: number; // kVA reduction from solar
   demandRateIndex: number; // Demand escalation factor

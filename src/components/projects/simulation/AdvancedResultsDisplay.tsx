@@ -294,9 +294,12 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                     <TableRow>
                       <TableHead className="w-12 text-center sticky left-0 bg-background">Year</TableHead>
                       <TableHead className="text-right">Energy Yield (kWh)</TableHead>
+                      <TableHead className="text-right">Revenue kWh</TableHead>
+                      <TableHead className="text-right">Export kWh</TableHead>
                       <TableHead className="text-right">Energy Index</TableHead>
                       <TableHead className="text-right">Energy Rate (R/kWh)</TableHead>
                       <TableHead className="text-right">Energy Income</TableHead>
+                      <TableHead className="text-right">Export Income</TableHead>
                       <TableHead className="text-right">Demand kVA</TableHead>
                       <TableHead className="text-right">Demand Index</TableHead>
                       <TableHead className="text-right">Demand Rate (R/kVA)</TableHead>
@@ -316,6 +319,9 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                     {/* Year 0 - Initial Investment */}
                     <TableRow className="bg-destructive/5">
                       <TableCell className="text-center font-medium sticky left-0 bg-destructive/5">0</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
@@ -354,6 +360,12 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                           <TableCell className="text-right">
                             {formatNumber(proj.energyYield ?? proj.solarGeneration, 0)}
                           </TableCell>
+                          <TableCell className="text-right text-blue-600">
+                            {formatNumber(proj.revenueKwh ?? 0, 0)}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatNumber(proj.exportKwh ?? 0, 0)}
+                          </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {formatNumber(proj.energyRateIndex ?? 1, 2)}
                           </TableCell>
@@ -362,6 +374,9 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                           </TableCell>
                           <TableCell className="text-right text-green-600">
                             {formatCurrency(proj.energyIncomeR ?? proj.energySavings)}
+                          </TableCell>
+                          <TableCell className="text-right text-green-600">
+                            {(proj.exportIncomeR ?? 0) > 0 ? formatCurrency(proj.exportIncomeR) : <span className="text-muted-foreground">-</span>}
                           </TableCell>
                           <TableCell className="text-right">
                             {formatNumber(proj.demandSavingKva ?? 0, 1)}
@@ -412,6 +427,9 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                     <TableRow className="bg-muted/50 font-bold border-t-2">
                       <TableCell className="text-center sticky left-0 bg-muted/50 font-bold">TOTAL</TableCell>
                       <TableCell className="text-right font-bold">{formatNumber(totals.energyYield, 0)}</TableCell>
+                      <TableCell className="text-right font-bold text-blue-600">{formatNumber(results.yearlyProjections.reduce((s, p) => s + (p.revenueKwh ?? 0), 0), 0)}</TableCell>
+                      <TableCell className="text-right font-bold">{formatNumber(results.yearlyProjections.reduce((s, p) => s + (p.exportKwh ?? 0), 0), 0)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>

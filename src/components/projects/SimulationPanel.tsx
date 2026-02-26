@@ -1822,6 +1822,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                               { label: "3-Yr O&M Total", value: `R ${Math.round(threeYearOM).toLocaleString()}` },
                               { label: "Annual Production", value: `${Math.round(annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365).toLocaleString()} kWh` },
                               { label: "Reduction Factor", value: `${(reductionFactor * 100).toFixed(0)}%` },
+                              { label: "Note", value: "Uses total production (LCOE basis). Revenue kWh shown in cashflow table." },
                             ],
                           }}
                         />

@@ -381,8 +381,17 @@ export function runAdvancedSimulation(
     const panelEfficiency = getPanelEfficiency(year, degradation);
     const batteryRemaining = getBatteryCapacityRemaining(year, degradation);
     
-    // Energy yield (kWh) with degradation
+    // Energy yield (total kWh production) with degradation — for LCOE & display, NOT revenue
     const energyYield = baseAnnualSolar * (panelEfficiency / 100);
+    
+    // Revenue-generating kWh = solar directly used by load + battery discharge to load
+    // Battery charging is intermediate storage, not revenue
+    const baseRevenueKwh = (baseEnergyResults.totalSolarUsed + baseEnergyResults.totalBatteryDischarge) * 365;
+    const baseExportKwh = baseEnergyResults.totalGridExport * 365;
+    
+    // Apply degradation proportionally to revenue kWh
+    const revenueKwh = baseRevenueKwh * (panelEfficiency / 100);
+    const exportKwh = baseExportKwh * (panelEfficiency / 100);
     
     // Calculate load with growth
     const yearlyLoad = getYearlyLoad(baseAnnualLoad, year, loadGrowth);
@@ -402,7 +411,7 @@ export function runAdvancedSimulation(
       }
     }
     
-    // ===== INCOME CALCULATIONS (Excel model approach) =====
+    // ===== INCOME CALCULATIONS (Revenue-based approach) =====
     
     // Escalation indices (compound growth from Year 1)
     const energyRateIndex = Math.pow(1 + tariffEscalation / 100, year - 1);
@@ -414,14 +423,20 @@ export function runAdvancedSimulation(
     const energyRateR = baseEnergyRate * energyRateIndex; // R/kWh
     const demandRateR = baseDemandRate * demandRateIndex; // R/kVA
     
-    // Energy Income = Energy Yield × Base Rate × Escalation Index
-    const energyIncomeR = energyYield * baseEnergyRate * energyRateIndex;
+    // Energy Income = Revenue kWh × Base Rate × Escalation Index
+    // Only kWh that displace grid (solar-to-load + battery-to-load) earn at tariff rate
+    const energyIncomeR = revenueKwh * baseEnergyRate * energyRateIndex;
+    
+    // Export Income = Export kWh × Export Rate × Escalation Index
+    // Grid export may earn at a different (feed-in) rate; for now use same tariff
+    const exportRate = baseEnergyRate; // TODO: support separate feed-in tariff
+    const exportIncomeR = exportKwh * exportRate * energyRateIndex;
     
     // Demand Income = kVA Saving × Base Demand Rate × 12 months × Escalation Index
     const demandIncomeR = demandSavingKva * baseDemandRate * 12 * demandRateIndex;
     
-    // Total Income
-    const totalIncomeR = energyIncomeR + demandIncomeR;
+    // Total Income (revenue from load displacement + export + demand savings)
+    const totalIncomeR = energyIncomeR + exportIncomeR + demandIncomeR;
     
     // ===== COST CALCULATIONS =====
     
@@ -501,12 +516,15 @@ export function runAdvancedSimulation(
       netCashFlow,
       cumulativeCashFlow,
       discountedCashFlow,
-      // NEW: Income-based fields
+      // Income-based fields (revenue accounting)
       energyYield,
       discountedEnergyYield, // For LCOE denominator
+      revenueKwh,
+      exportKwh,
       energyRateIndex,
       energyRateR,
       energyIncomeR,
+      exportIncomeR,
       demandSavingKva,
       demandRateIndex,
       demandRateR,
