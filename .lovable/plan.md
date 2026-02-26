@@ -1,40 +1,50 @@
 
 
-# Reorder Carousel Tabs and Restructure Inverter Pane
+# Redesign Inverter Sizing Logic
 
-## Changes
+## Core Concept Change
 
-### 1. Reorder carousel panes (SimulationPanel.tsx, ~line 1500)
+The **System Size (AC)** becomes the primary design input. The number of inverters is a **derived value**, not a user-controlled slider.
 
-Change the order of the `panes` array from:
-- Solar Modules, Inverters, Battery, Financial
+**New logic:**
+- User sets desired AC system size (e.g. 100 kW) via Quick Select or Custom input
+- User selects inverter size (e.g. 125 kW)
+- Number of inverters = `Math.ceil(systemSize / inverterSize)` (auto-calculated, read-only)
+- DC capacity = systemSize x DC/AC ratio
 
-To:
-- **Inverters, Solar Modules, Battery, Financial**
+**Example:** 100 kW system with 125 kW inverters = `ceil(100/125)` = 1 inverter
 
-### 2. Remove Inverter pane heading (SimulationPanel.tsx, ~lines 1628-1636)
+## Changes to `InverterSliderPanel.tsx`
 
-Remove the `CardHeader` containing "Inverter-Based Sizing" title and "Size system based on inverter capacity and grouping" description.
+### 1. Swap positions
+Move **Quick Select + Custom AC input** to the top, followed by the **Inverter Size dropdown** below it.
 
-### 3. Move Quick Select to the top (InverterSliderPanel.tsx)
+### 2. Make Number of Inverters read-only
+- Remove the slider control
+- Replace with a calculated display showing the formula result
+- Auto-compute: `Math.ceil(acCapacity / inverterSize)`
 
-Restructure the component layout from:
-1. Number of Inverters slider
-2. DC/AC Ratio slider
-3. Calculated Metrics box
-4. Quick Select buttons
-5. Validation status
+### 3. Update handlers
+- Quick Select and Custom input now set `acCapacity` directly (stored as a new concept, no longer derived from `inverterSize x inverterCount`)
+- When inverter size changes, recalculate inverter count from the current system size
+- When system size changes, recalculate inverter count from the current inverter size
+- The `inverterCount` in config is always kept in sync as a derived value
 
-To:
-1. **Quick Select buttons** (moved to top)
-2. Number of Inverters slider
-3. DC/AC Ratio slider
-4. Calculated Metrics box
-5. Validation status
+### 4. Update `acCapacity` derivation
+Currently: `acCapacity = inverterSize * inverterCount`
+New: `acCapacity` is the user's desired system size; `inverterCount = Math.ceil(acCapacity / inverterSize)`
 
----
+Since `InverterConfig` stores `inverterCount`, we will continue using `inverterSize * inverterCount` as the effective AC capacity but set `inverterCount` based on `Math.ceil(desiredAC / inverterSize)`. The custom input will allow any kW value and derive the count accordingly.
 
-### Files Modified
-1. `src/components/projects/SimulationPanel.tsx` -- Reorder panes array; remove CardHeader from inverter pane
-2. `src/components/projects/InverterSliderPanel.tsx` -- Move Quick Select section to top of component
+## Layout Order (top to bottom)
+
+1. **Quick Select System Size (AC)** buttons + Custom kW input (inline)
+2. **Inverter Size (AC)** dropdown + custom kW input
+3. **Number of Inverters** -- read-only calculated display
+4. **DC/AC Ratio** slider + input
+5. **Calculated Metrics** box
+6. **Validation Status**
+
+## Files Modified
+- `src/components/projects/InverterSliderPanel.tsx` -- All layout and logic changes
 
