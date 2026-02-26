@@ -1,70 +1,49 @@
 
+# Fix Eskom Tariff Selection to Match Standard Province Flow
 
-# Fix Missing Charges and Remove Incorrect Phase Default for Eskom Tariffs
+## Problem 1: Eskom uses a custom UI instead of the standard 4-dropdown flow
 
-## Problem 1: Three charges not being extracted
+When Eskom is selected as a province, the Year and Tariff dropdowns are hidden (lines 727, 753 in TariffSelector.tsx) and replaced by a completely separate `EskomTariffSelector` component with family tabs, transmission zone collapsibles, and voltage groupings. The user expects the same Province -> Municipality -> Year -> Tariff dropdown flow that normal provinces use.
 
-Service charge, Administration charge, and Urban low voltage subsidy are in separate lookup tables in the Eskom PDF (indexed by customer category or voltage level), NOT in the per-tariff-variant matrix. The AI extraction currently only looks at the main matrix and misses these.
+## Problem 2: Selected Eskom tariff details are empty
 
-From the PDF:
-- **Service charge** [R/POD/day]: Indexed by customer category (kVA ranges like <= 100 kVA, > 100 kVA & <= 500 kVA, etc.)
-- **Administration charge** [R/POD/day]: Same customer category index
-- **Urban low voltage subsidy** [R/kVA/m]: Indexed by voltage level (< 500V, >= 500V & < 66kV, etc.)
+The `EskomTariffSelector` component (lines 121-151) maps tariff data to a legacy interface but:
+- Sets `legacy_charge_per_kwh: null` instead of finding the legacy ancillary charge
+- Sets `generation_capacity_charge: null` instead of reading the capacity charge
+- Sets `transmission_zone: null` so all tariffs group under "No Zone"
+- Divides energy `r.amount / 100` (line 148) assuming c/kWh, but the data is already stored in R/kWh
+- Does not map network demand, subsidy, surcharge, or other unbundled charges to the rate display
 
-## Problem 2: Phase incorrectly set to "Single Phase"
+## Solution
 
-Line 1058 in the edge function has: `phase: tariff.phase_type || "Single Phase"`. Eskom tariffs do not have a phase attribute, so the AI correctly returns nothing, but the fallback hardcodes "Single Phase".
+Remove the Eskom-specific branching in `TariffSelector.tsx` so Eskom uses the exact same 4-dropdown flow as every other province. The standard flow already works because the data structure is identical (tariff_plans with tariff_rates).
 
-## Changes
+### Changes to `src/components/projects/TariffSelector.tsx`
 
-### 1. Fix phase default for Eskom tariffs
+1. **Remove the `isEskomSelected` guard on the Year dropdown** (line 727): Show the Year dropdown for Eskom too. The Eskom tariffs have `effective_from`/`effective_to` fields just like regular municipality tariffs.
 
-**File:** `supabase/functions/process-tariff-file/index.ts` (~line 1058)
+2. **Remove the `isEskomSelected` guard on the Tariff dropdown** (line 753): Show the Tariff dropdown for Eskom too.
 
-Change the phase assignment to skip the "Single Phase" default when processing an Eskom extraction:
+3. **Remove the `isEskomSelected` guard on the tariff query** (line 574): Allow the standard tariff query to run for Eskom municipalities. Currently `enabled: !!municipalityId && !isEskomSelected` blocks it.
 
-```text
-phase: isEskomExtraction ? (tariff.phase_type || null) : (tariff.phase_type || "Single Phase"),
-```
+4. **Remove the `isEskomSelected` guard on the selected tariff query** (line 658): Allow the selected tariff detail query to run for Eskom too.
 
-### 2. Update AI extraction prompt to request the three missing charges from their separate PDF tables
+5. **Remove the Eskom Matrix Selector block** (lines 776-785): Remove the `EskomTariffSelector` component rendering entirely from this file.
 
-**File:** `supabase/functions/process-tariff-file/index.ts` (Eskom extraction prompt)
+6. **Remove the `isEskomSelected` guard on the regular tariff display** (line 788): Show the standard tariff detail card for Eskom tariffs too.
 
-Add explicit instructions telling the AI to:
-- Find the "Service charge" and "Administration charge" table (indexed by customer category / kVA range) and map the correct row to each tariff variant based on its capacity
-- Find the "Urban low voltage subsidy charge" table (indexed by voltage level) and map the correct row to each tariff variant based on its voltage
+7. **Remove the auto-select "Eskom Direct" logic** (lines 459-467): This references a non-existent "Eskom Direct" municipality. The actual municipality is "Non-Local Authority" and should be selected manually like any other municipality.
 
-### 3. Fix unit descriptions in schema for service and admin charges
+8. **Remove the EskomTariffSelector import** (line 10).
 
-**File:** `supabase/functions/process-tariff-file/index.ts` (~lines 928-929)
+### Result
 
-- `service_charge_per_day`: Already correct (R/account/day)
-- `administration_charge_per_kwh`: Wrong unit -- the PDF shows R/POD/day, not c/kWh. Rename to `administration_charge_per_day` with unit R/day.
+After these changes, selecting Eskom as province will show the Municipality dropdown (with "Non-Local Authority"), then the Year dropdown (with the extraction period), then the Tariff dropdown (listing all Miniflex variants by name). Selecting a tariff will display the standard detail card with energy rates, reactive energy, and other charges -- all rendered from the `tariff_rates` rows directly, no broken mapping layer in between.
 
-### 4. Fix admin charge saving logic to use R/day instead of c/kWh conversion
-
-**File:** `supabase/functions/process-tariff-file/index.ts` (~lines 1237-1248)
-
-Currently divides by 100 (assuming c/kWh). Change to store as R/day directly (no conversion), matching the PDF's actual unit.
-
-### 5. Fix urban low voltage subsidy unit
-
-**File:** `supabase/functions/process-tariff-file/index.ts` (~line 931)
-
-The PDF shows this charge in R/kVA/month, not c/kWh. Update schema field to `urban_low_voltage_subsidy_per_kva` with description "Urban low voltage subsidy in R/kVA/month" and update the saving logic to store with unit "R/kVA" (no c/kWh division).
-
-### 6. Remove duplicate network_demand_charge_per_kva field
-
-The `network_demand_charge_per_kva` field (line 930) is redundant with the existing `network_charge_per_kva` field (line 925) -- both capture the same Transmission network charge. Remove the duplicate field and its saving block (~lines 1250-1261) to avoid double-counting.
-
-## Summary
+### Files Changed
 
 | File | Change |
 |------|--------|
-| `process-tariff-file/index.ts` (line 1058) | Use null instead of "Single Phase" for Eskom tariffs |
-| `process-tariff-file/index.ts` (prompt) | Tell AI to extract service/admin/urban LV subsidy from their separate PDF tables |
-| `process-tariff-file/index.ts` (schema) | Fix admin charge unit to R/day, urban LV subsidy to R/kVA |
-| `process-tariff-file/index.ts` (saving) | Fix unit conversions for admin and urban LV subsidy; remove duplicate network_demand |
+| `src/components/projects/TariffSelector.tsx` | Remove all `isEskomSelected` conditional branches and the EskomTariffSelector import. Eskom now follows the identical Province -> Municipality -> Year -> Tariff flow. |
 
-After deploying, re-extract the Eskom PDF to capture the corrected data. Existing tariffs will need the phase column cleared (a one-time SQL update for Eskom municipality tariffs).
+Note: The `EskomTariffSelector.tsx` file is not deleted as it may still be used by the Tariff Management dashboard. Only its usage in the project-level tariff selection is removed.
