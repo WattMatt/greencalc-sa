@@ -299,6 +299,8 @@ export function FileUploadImport() {
       if (data.skipped > 0) parts.push(`${data.skipped} skipped`);
       toast({ title: `${muni.name} Complete`, description: parts.length > 0 ? parts.join(", ") : "No changes needed" });
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+      queryClient.invalidateQueries({ queryKey: ["tariff-counts-per-municipality"] });
+      queryClient.invalidateQueries({ queryKey: ["municipalities-with-counts"] });
     } catch (err) {
       setMunicipalities(prev => prev.map((m, i) => i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m));
       toast({ title: `${muni.name} Failed`, description: err instanceof Error ? err.message : "Failed to extract tariffs", variant: "destructive" });
@@ -342,6 +344,8 @@ export function FileUploadImport() {
       setMunicipalities(prev => prev.map((m, i) => i === muniIndex ? { ...m, status: "done" as const, tariffCount: totalChanged } : m));
       toast({ title: `${muni.name} Re-extracted`, description: `Imported ${totalChanged} tariffs` });
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+      queryClient.invalidateQueries({ queryKey: ["tariff-counts-per-municipality"] });
+      queryClient.invalidateQueries({ queryKey: ["municipalities-with-counts"] });
     } catch (err) {
       setMunicipalities(prev => prev.map((m, i) => i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m));
       toast({ title: `${muni.name} Re-extraction Failed`, description: err instanceof Error ? err.message : "Failed", variant: "destructive" });
@@ -473,6 +477,8 @@ export function FileUploadImport() {
       setEditingTariffId(null);
       setEditedTariff(null);
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+      queryClient.invalidateQueries({ queryKey: ["tariff-counts-per-municipality"] });
+      queryClient.invalidateQueries({ queryKey: ["municipalities-with-counts"] });
     } catch (err) {
       toast({ title: "Save Failed", description: err instanceof Error ? err.message : "Failed to save changes", variant: "destructive" });
     } finally {

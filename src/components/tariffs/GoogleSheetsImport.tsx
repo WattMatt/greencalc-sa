@@ -88,6 +88,8 @@ export function GoogleSheetsImport() {
           queryClient.invalidateQueries({ queryKey: ["municipalities"] });
           queryClient.invalidateQueries({ queryKey: ["tariff-categories"] });
           queryClient.invalidateQueries({ queryKey: ["provinces"] });
+          queryClient.invalidateQueries({ queryKey: ["tariff-counts-per-municipality"] });
+          queryClient.invalidateQueries({ queryKey: ["municipalities-with-counts"] });
         }
       }
     } catch (err) {

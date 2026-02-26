@@ -752,6 +752,8 @@ export function ProvinceFilesManager() {
         setEskomBatchStatus(null);
         queryClient.invalidateQueries({ queryKey: ["tariffs"] });
         queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+        queryClient.invalidateQueries({ queryKey: ["tariff-counts-per-municipality"] });
+        queryClient.invalidateQueries({ queryKey: ["municipalities-with-counts"] });
         return;
       }
       
@@ -771,6 +773,8 @@ export function ProvinceFilesManager() {
 
         queryClient.invalidateQueries({ queryKey: ["tariffs"] });
         queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+        queryClient.invalidateQueries({ queryKey: ["tariff-counts-per-municipality"] });
+        queryClient.invalidateQueries({ queryKey: ["municipalities-with-counts"] });
         return;
       }
 
@@ -818,6 +822,8 @@ export function ProvinceFilesManager() {
 
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
       queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["tariff-counts-per-municipality"] });
+      queryClient.invalidateQueries({ queryKey: ["municipalities-with-counts"] });
 
       // Auto-reprise if enabled - loop until 100% confidence
       // Skip auto-reprise if no tariffs were extracted (nothing to reprise)
@@ -917,6 +923,8 @@ export function ProvinceFilesManager() {
 
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
       queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["tariff-counts-per-municipality"] });
+      queryClient.invalidateQueries({ queryKey: ["municipalities-with-counts"] });
 
       return { confidence: data.confidence ?? 100, corrections: data.corrections ?? 0 };
     } catch (err) {
@@ -978,6 +986,8 @@ export function ProvinceFilesManager() {
 
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
       queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["tariff-counts-per-municipality"] });
+      queryClient.invalidateQueries({ queryKey: ["municipalities-with-counts"] });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Reprise failed";
 
