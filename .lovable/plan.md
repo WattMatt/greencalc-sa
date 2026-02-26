@@ -1,51 +1,57 @@
 
 
-# Add Blended Rates Card to Tariff Selection Detail View
+# Add "Hourly Rates" Toggle to Simulation Tariff Rate Card
 
-## Problem
+## Overview
 
-The `BlendedRatesCard` component is fully implemented in `TariffSelector.tsx` (line 150) with All Hours / Solar Sun Hours selection, annual/high/low breakdowns, and click-to-select for simulation. However, it is **never rendered** in the selected tariff detail section. This means no blended rate selection is shown for any tariff -- Eskom or otherwise.
+Add a toggle switch labelled "Hourly Rates" to the right of the blended rate dropdown in the Simulation Tariff Rate card. When enabled, it disables the dropdown and forces the financial engine to use granular hourly TOU rates (8,760-hour cycle). When disabled, the selected blended rate from the dropdown is used instead.
 
-## Root Cause
+## Current Architecture
 
-There are two issues:
-1. The `BlendedRatesCard` render call is simply missing from the tariff detail card (lines 756-862).
-2. A **data shape mismatch** exists: the DB `tariff_rates` rows use fields `charge`, `amount`, `tou`, `season` (e.g., `charge: 'energy', tou: 'peak', season: 'high', amount: 3.50`), but the `BlendedRatesCard` and its underlying `calculateAnnualBlendedRates()` function expect the `TariffRate` interface with `rate_per_kwh`, `time_of_use`, `season` (e.g., `rate_per_kwh: 3.50, time_of_use: 'Peak', season: 'High/Winter'`).
+The hourly TOU calculation engine already exists in `AdvancedSimulationEngine.ts`:
+- `calculateAnnualHourlyIncome()` iterates 6 season x day-type combinations across 24 hours, looking up TOU-specific rates per hour
+- The decision to use hourly vs blended is currently automatic: if `tariffRates` are passed to `runAdvancedSimulation()`, it uses hourly TOU; otherwise it uses the single blended rate
+- The toggle will give the user explicit control over this behaviour
 
-## Solution
+## Changes
 
-### 1. Add a mapping function to convert DB tariff_rates to TariffRate shape
+### File: `src/pages/ProjectDetail.tsx`
 
-Add a helper function in `TariffSelector.tsx` that converts raw DB rows into the `TariffRate` interface format:
+1. Add `useHourlyTouRates` state (boolean, default `true` since hourly TOU is the more accurate mode)
+2. Persist it alongside `blendedRateType` in the project settings JSON
+3. Pass the new state and setter down to `SimulationModes`
 
-- Filter to `charge === 'energy'` rows only (the blended calc only uses energy rates)
-- Map `amount` to `rate_per_kwh`
-- Map `tou` values: `peak` -> `Peak`, `standard` -> `Standard`, `off_peak` -> `Off-Peak`, `all` -> `Any`
-- Map `season` values: `high` -> `High/Winter`, `low` -> `Low/Summer`, `all` -> `All Year`
-- Map ancillary/network/subsidy charges from other rows onto matching energy rows as `network_charge_per_kwh`, `ancillary_charge_per_kwh`, etc.
+### File: `src/components/projects/SimulationModes.tsx`
 
-### 2. Render BlendedRatesCard in the tariff detail section
+1. Accept `useHourlyTouRates` and `onUseHourlyTouRatesChange` props
+2. Forward them to `SimulationPanel`
 
-After the energy rates block (line 859), add:
+### File: `src/components/projects/SimulationPanel.tsx`
 
-```tsx
-<BlendedRatesCard
-  rates={mapDbRatesToTariffRates((selectedTariff as any).tariff_rates)}
-  tariff={{ legacy_charge_per_kwh: legacyCharge }}
-  selectedType={selectedBlendedRateType}
-  onTypeChange={onBlendedRateTypeChange}
-/>
+1. Accept `useHourlyTouRates` and `onUseHourlyTouRatesChange` props
+2. **UI**: Add a `Switch` toggle with "Hourly Rates" label to the right of the blended rate dropdown in the Simulation Tariff Rate card (line ~1742). When enabled, the `Select` dropdown gets `disabled={true}` styling
+3. **Engine wiring**: In the `runAdvancedSimulation` call (line ~1034), conditionally pass `tariffRates` only when `useHourlyTouRates` is true:
+   ```
+   tariffRates: useHourlyTouRates ? tariffRates : undefined
+   ```
+   When `undefined`, the engine falls back to the `else` branch (legacy single blended rate) at line 640
+
+### UI Layout
+
+The Simulation Tariff Rate card content row will look like:
+
+```text
+[Dropdown: Solar Hours - Annual v]  [Hourly Rates toggle]  R1.3243/kWh
 ```
 
-Where `legacyCharge` is extracted from the `ancillary` charge row (if present) in the tariff_rates.
+- When toggle is **off**: Dropdown is active, rate display shows the selected blended rate
+- When toggle is **on**: Dropdown is disabled/greyed out, rate display shows "Hourly TOU" or the derived weighted average from the hourly engine
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/projects/TariffSelector.tsx` | Add `mapDbRatesToTariffRates()` helper function. Render `BlendedRatesCard` inside the selected tariff detail card after the energy rates section. |
-
-### Result
-
-After this change, selecting any tariff (Eskom or municipal) will show the blended rate selector with All Hours (Annual/High/Low) and Solar Sun Hours (Annual/High/Low) options. Clicking a rate selects it for use in the simulation engine.
+| `src/pages/ProjectDetail.tsx` | Add `useHourlyTouRates` state, persist to settings, pass as prop |
+| `src/components/projects/SimulationModes.tsx` | Forward new props |
+| `src/components/projects/SimulationPanel.tsx` | Add Switch toggle UI, conditionally pass `tariffRates` to engine |
 
