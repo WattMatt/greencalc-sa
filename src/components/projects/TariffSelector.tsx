@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Sun, Clock, Calculator, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { EskomTariffSelector } from "./EskomTariffSelector";
+
 import {
   calculateAnnualBlendedRates,
   ANNUAL_HOURS_24H,
@@ -438,10 +438,6 @@ export function TariffSelector({
     },
   });
 
-  // Find Eskom province to check if selected
-  const eskomProvince = provinces?.find(p => p.name === "Eskom");
-  const isEskomSelected = provinceId === eskomProvince?.id;
-
   const { data: municipalities } = useQuery({
     queryKey: ["municipalities", provinceId],
     queryFn: async () => {
@@ -455,16 +451,6 @@ export function TariffSelector({
     },
     enabled: !!provinceId,
   });
-
-  // Auto-select Eskom Direct when Eskom province is selected
-  useEffect(() => {
-    if (isEskomSelected && municipalities && municipalities.length > 0) {
-      const eskomDirect = municipalities.find(m => m.name === "Eskom Direct");
-      if (eskomDirect && municipalityId !== eskomDirect.id) {
-        setMunicipalityId(eskomDirect.id);
-      }
-    }
-  }, [isEskomSelected, municipalities, municipalityId]);
 
   // Auto-select province and municipality based on project coordinates (reverse geocoding)
   // Only runs when no province is selected yet and no existing tariff to prepopulate from
@@ -571,7 +557,7 @@ export function TariffSelector({
       if (error) throw error;
       return data;
     },
-    enabled: !!municipalityId && !isEskomSelected,
+    enabled: !!municipalityId,
   });
 
   // Derive available periods from tariffs
@@ -655,7 +641,7 @@ export function TariffSelector({
       if (error) throw error;
       return data;
     },
-    enabled: !!currentTariffId && !isEskomSelected,
+    enabled: !!currentTariffId,
   });
 
   // Prepopulate province and municipality from existing selected tariff
@@ -723,69 +709,51 @@ export function TariffSelector({
           </Select>
         </div>
 
-        {/* Year period dropdown - only for non-Eskom */}
-        {!isEskomSelected && (
-          <div className="space-y-2">
-            <Label>Year</Label>
-            <Select
-              value={selectedPeriod}
-              onValueChange={setSelectedPeriod}
-              disabled={!municipalityId || availablePeriods.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select period..." />
-              </SelectTrigger>
-              <SelectContent>
-                {availablePeriods.length > 1 && (
-                  <SelectItem value="all">All Periods</SelectItem>
-                )}
-                {availablePeriods.map((p) => (
-                  <SelectItem key={p.key} value={p.key}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        <div className="space-y-2">
+          <Label>Year</Label>
+          <Select
+            value={selectedPeriod}
+            onValueChange={setSelectedPeriod}
+            disabled={!municipalityId || availablePeriods.length === 0}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select period..." />
+            </SelectTrigger>
+            <SelectContent>
+              {availablePeriods.length > 1 && (
+                <SelectItem value="all">All Periods</SelectItem>
+              )}
+              {availablePeriods.map((p) => (
+                <SelectItem key={p.key} value={p.key}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        {/* Only show regular tariff dropdown for non-Eskom */}
-        {!isEskomSelected && (
-          <div className="space-y-2">
-            <Label>Tariff</Label>
-            <Select
-              value={currentTariffId || ""}
-              onValueChange={onSelect}
-              disabled={!municipalityId}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select tariff..." />
-              </SelectTrigger>
-              <SelectContent>
-                {filteredTariffs?.map((t) => (
-                  <SelectItem key={(t as any).id} value={(t as any).id}>
-                    {(t as any).name} ({(t as any).category})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        <div className="space-y-2">
+          <Label>Tariff</Label>
+          <Select
+            value={currentTariffId || ""}
+            onValueChange={onSelect}
+            disabled={!municipalityId}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select tariff..." />
+            </SelectTrigger>
+            <SelectContent>
+              {filteredTariffs?.map((t) => (
+                <SelectItem key={(t as any).id} value={(t as any).id}>
+                  {(t as any).name} ({(t as any).category})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      {/* Eskom Matrix Selector */}
-      {isEskomSelected && municipalityId && (
-        <EskomTariffSelector
-          municipalityId={municipalityId}
-          currentTariffId={currentTariffId}
-          onSelect={onSelect}
-          selectedBlendedRateType={selectedBlendedRateType}
-          onBlendedRateTypeChange={onBlendedRateTypeChange}
-        />
-      )}
-
-      {/* Regular tariff display for non-Eskom */}
-      {!isEskomSelected && selectedTariff && (
+      {selectedTariff && (
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between">
