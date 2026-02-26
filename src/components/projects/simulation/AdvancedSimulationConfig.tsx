@@ -1339,22 +1339,25 @@ function BatteryCharacteristicsSection({
 
         {/* TOU Arbitrage: discharge period grid */}
         {batteryStrategy === 'tou-arbitrage' && (
-          <div className="rounded border bg-muted/30 px-3 py-2 space-y-2">
+           <div className="rounded border bg-muted/30 px-3 py-2 space-y-2">
             <span className="text-[10px] text-muted-foreground">Discharge during</span>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="flex divide-x divide-border">
               {/* High Demand Season */}
-              <div className="space-y-1.5">
+              <div className="flex-1 pr-3 space-y-1.5">
                 <div className="text-[10px] font-semibold text-center" style={{ color: 'hsl(230 70% 50%)' }}>High Demand</div>
-                <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-1 items-center">
-                  <div />
-                  <div className="text-[9px] text-muted-foreground text-center">Wkday</div>
-                  <div className="text-[9px] text-muted-foreground text-center">Wkend</div>
+                <div className="divide-y divide-border">
+                  {/* Header row */}
+                  <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 items-center pb-1">
+                    <div className="w-8" />
+                    <div className="text-[9px] text-muted-foreground text-center">Wkday</div>
+                    <div className="text-[9px] text-muted-foreground text-center">Wkend</div>
+                  </div>
                   {(['peak', 'standard', 'offPeak'] as const).map(period => {
                     const label = period === 'peak' ? 'Peak' : period === 'standard' ? 'Std' : 'Off-Pk';
                     const color = period === 'peak' ? 'hsl(0 72% 51%)' : period === 'standard' ? 'hsl(38 92% 50%)' : 'hsl(160 84% 39%)';
                     return (
-                      <Fragment key={period}>
-                        <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
+                      <div key={period} className="grid grid-cols-[auto_1fr_1fr] gap-x-3 items-center py-1">
+                        <span className="text-[10px] font-medium w-8" style={{ color }}>{label}</span>
                         <div className="flex justify-center">
                           <Checkbox
                             checked={dischargeTouSelection.highSeason.weekday[period]}
@@ -1381,24 +1384,27 @@ function BatteryCharacteristicsSection({
                             className="h-3 w-3"
                           />
                         </div>
-                      </Fragment>
+                      </div>
                     );
                   })}
                 </div>
               </div>
               {/* Low Demand Season */}
-              <div className="space-y-1.5">
+              <div className="flex-1 pl-3 space-y-1.5">
                 <div className="text-[10px] font-semibold text-center" style={{ color: 'hsl(270 50% 60%)' }}>Low Demand</div>
-                <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-1 items-center">
-                  <div />
-                  <div className="text-[9px] text-muted-foreground text-center">Wkday</div>
-                  <div className="text-[9px] text-muted-foreground text-center">Wkend</div>
+                <div className="divide-y divide-border">
+                  {/* Header row */}
+                  <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 items-center pb-1">
+                    <div className="w-8" />
+                    <div className="text-[9px] text-muted-foreground text-center">Wkday</div>
+                    <div className="text-[9px] text-muted-foreground text-center">Wkend</div>
+                  </div>
                   {(['peak', 'standard', 'offPeak'] as const).map(period => {
                     const label = period === 'peak' ? 'Peak' : period === 'standard' ? 'Std' : 'Off-Pk';
                     const color = period === 'peak' ? 'hsl(0 72% 51%)' : period === 'standard' ? 'hsl(38 92% 50%)' : 'hsl(160 84% 39%)';
                     return (
-                      <Fragment key={period}>
-                        <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
+                      <div key={period} className="grid grid-cols-[auto_1fr_1fr] gap-x-3 items-center py-1">
+                        <span className="text-[10px] font-medium w-8" style={{ color }}>{label}</span>
                         <div className="flex justify-center">
                           <Checkbox
                             checked={dischargeTouSelection.lowSeason.weekday[period]}
@@ -1425,7 +1431,7 @@ function BatteryCharacteristicsSection({
                             className="h-3 w-3"
                           />
                         </div>
-                      </Fragment>
+                      </div>
                     );
                   })}
                 </div>
