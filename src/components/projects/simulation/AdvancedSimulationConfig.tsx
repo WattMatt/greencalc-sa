@@ -1297,15 +1297,23 @@ function BatteryCharacteristicsSection({
             onValueChange={(v: BatteryDispatchStrategy) => {
               onBatteryStrategyChange?.(v);
               const newConfig = getDefaultDispatchConfig(v);
+              // Preserve charge strategy — discharge strategy must never influence it
+              const preservedChargeConfig = {
+                chargeSources: effectiveDispatchConfig.chargeSources,
+                chargeWindows: effectiveDispatchConfig.chargeWindows,
+                allowGridCharging: effectiveDispatchConfig.allowGridCharging,
+              };
               if (v === 'tou-arbitrage' && touPeriodToWindows) {
                 onDispatchConfigChange?.({
                   ...newConfig,
-                  allowGridCharging: effectiveDispatchConfig.allowGridCharging,
-                  chargeWindows: touPeriodToWindows(chargeTouPeriod),
+                  ...preservedChargeConfig,
                   dischargeWindows: touPeriodToWindows(dischargeTouPeriod),
                 });
               } else {
-                onDispatchConfigChange?.({ ...newConfig, allowGridCharging: effectiveDispatchConfig.allowGridCharging });
+                onDispatchConfigChange?.({
+                  ...newConfig,
+                  ...preservedChargeConfig,
+                });
               }
             }}
           >
