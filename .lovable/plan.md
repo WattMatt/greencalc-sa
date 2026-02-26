@@ -1,68 +1,73 @@
 
 
-# Fix: Battery Discharge Must Respect TOU Selection Matrix Per Hour in 8,760-Hour Simulation
+# Fix: Annual Simulation Accumulators Not Incremented + Chart TOU Context Missing
 
-## Problem
+## Two Bugs Found
 
-The user has configured TOU arbitrage to discharge the battery **only during peak hours in the high-demand season**. However, the cashflow shows a battery rate that does not match the peak rate, and battery kWh is suspiciously uniform -- indicating the battery discharges at the same clock hours every day regardless of season or day type.
+### Bug 1: Annual 8,760-hour simulation returns zeroed totals (Critical)
 
-### Root Cause
+In `runAnnualEnergySimulation` (EnergySimulationEngine.ts), the accumulator variables (`totalGridImport`, `totalGridExport`, `totalSolarUsed`, `totalBatteryCharge`, `totalBatteryDischarge`, `totalBatteryChargeFromGrid`, `totalLoad`, `totalSolar`, `peakGridImport`) are declared at lines 822-830 but **never incremented** inside the 8,760-hour loop. Only `batteryState` is updated.
 
-The `dispatchTouArbitrage` function in `EnergySimulationEngine.ts` decides whether to discharge based on **static time windows** (`config.dischargeWindows`), which are the same fixed clock hours for all 365 days. It never reads the `dischargeTouSelection` matrix (the 12-cell checkbox grid: high/low season x weekday/weekend x peak/standard/off-peak).
-
-This means:
-- If discharge windows are set to hours 7-10 and 18-20 (typical peak clock hours), the battery discharges at those hours **every single day** -- weekends, low season, etc.
-- On a **Sunday in low season**, hours 7-10 might be Off-Peak, but the battery still discharges because the static window says so
-- The result: battery kWh is evenly spread across 365 days, and the derived rate is a diluted blend of peak/standard/off-peak rates instead of pure peak
-
-## Solution
-
-Replace the static `dischargeWindows` check in `dispatchTouArbitrage` with a per-hour check against the `dischargeTouSelection` matrix, using each day's actual TOU context (season, dayType, touPeriod).
-
-### Changes to `EnergySimulationEngine.ts`
-
-**1. Add a helper function to check the discharge TOU selection matrix:**
-
+Compare with the 24-hour `runEnergySimulation` which correctly increments at lines 558-563:
 ```text
-function isDischargePermittedByTouSelection(
-  season: 'high' | 'low',
-  dayType: 'weekday' | 'saturday' | 'sunday',
-  touPeriod: 'peak' | 'standard' | 'off-peak',
-  selection?: DischargeTOUSelection
-): boolean
+totalGridImport += result.gridImport;
+totalGridExport += result.gridExport;
+totalSolarUsed += result.solarUsed;
+...
 ```
 
-Maps dayType to the matrix key (`weekday` or `weekend`), then checks `selection[season][dayTypeKey][touPeriod]`. Returns `true` if no selection matrix exists (backwards compatibility).
+The annual function is missing this entirely, so:
+- `totalAnnualSolarUsed` = 0
+- `totalAnnualGridImport` = 0
+- `totalAnnualBatteryDischarge` = 0
+- All derived rates in the financial model are broken (divide by zero or NaN)
 
-**2. Update `dispatchTouArbitrage` signature to accept TOU context:**
+**Fix:** Add accumulator increments after line 875, matching the pattern from the 24-hour simulation. Also track `peakGridImport` as the max of each hour's grid import.
 
-Add parameters for `season`, `dayType`, `touPeriod`, and `dischargeTouSelection`. Replace the `isDischargeHour = isInAnyWindow(hour, config.dischargeWindows)` check with:
+### Bug 2: 24-hour chart simulation ignores TOU selection matrix
+
+The 24-hour `runEnergySimulation` at line 543 calls `dispatchTouArbitrage(hourState, h, effectiveDispatchConfig, permissions)` without passing `touContext`. The function then falls back to static `dischargeWindows` instead of the `dischargeTouSelection` matrix. This causes the building profile chart to show battery discharge at fixed clock hours regardless of which season/day-type the user is viewing.
+
+**Fix:** The 24-hour simulation needs to receive a representative `touContext` for chart visualisation (based on the `showHighSeason` toggle state). This requires passing the TOU settings and season selection into `runEnergySimulation`, or adding a `touContext` override to the config.
+
+The simpler approach: add an optional `touSettings` and `representativeSeason` to `EnergySimulationConfig`. When present, `runEnergySimulation` resolves each hour's TOU period from the appropriate hour map and passes the `touContext` to dispatch functions.
+
+## Changes
+
+### File: `src/components/projects/simulation/EnergySimulationEngine.ts`
+
+1. **Add accumulator increments** inside `runAnnualEnergySimulation` loop (after line 875):
 
 ```text
-const isDischargeHour = isDischargePermittedByTouSelection(
-  season, dayType, touPeriod, config.dischargeTouSelection
-);
+totalGridImport += result.gridImport;
+totalGridExport += result.gridExport;
+totalSolarUsed += result.solarUsed;
+totalBatteryCharge += result.batteryCharge;
+totalBatteryDischarge += result.batteryDischarge;
+totalBatteryChargeFromGrid += result.batteryChargeFromGrid;
+totalLoad += load;
+totalSolar += solar;
+peakGridImport = Math.max(peakGridImport, result.gridImport);
 ```
 
-This means the battery only discharges when the current hour's actual TOU context (resolved from the calendar) is permitted by the user's 12-cell matrix selection.
+2. **Add optional TOU context support to `EnergySimulationConfig`**: New optional fields `touSettings` and `representativeSeason` (default `'high'`). When present, the 24-hour simulation resolves `touContext` per hour and passes it to dispatch functions.
 
-**3. Update the annual simulation loop to pass TOU context to dispatch:**
+3. **Update `runEnergySimulation`** to use `touSettings` when available: derive `dayType` from a representative day (weekday), resolve `hourMap` from the settings, and pass `touContext` to `dispatchTouArbitrage` and `dispatchScheduled`.
 
-In `runAnnualEnergySimulation`, resolve `touPeriod` before the dispatch call (move it above the switch statement) and pass `season`, `dayType`, `touPeriod`, and `dischargeTouSelection` to `dispatchTouArbitrage`.
+### File: `src/components/projects/SimulationPanel.tsx`
 
-**4. Update the 24-hour simulation loop similarly** (for chart consistency).
+4. **Pass `touSettings` and `representativeSeason` into `energyConfig`**: Use `touSettingsData` and `showHighSeason` to inform the 24-hour engine of the correct TOU context for chart display.
 
-### Expected Result
+## Impact
 
-- If the user selects only "Peak / High / Weekday" in the TOU arbitrage matrix:
-  - Battery only discharges during peak hours on high-season weekdays
-  - Battery kWh in cashflow reflects ~130 weekdays x peak hours only (not 365 days)
-  - Battery rate in cashflow matches the peak energy rate (no dilution)
-- All other hours: battery sits idle (or charges if charge windows permit)
+- Financial model receives correct annual totals instead of zeros
+- Building profile chart shows battery behaviour that matches the TOU selection matrix for the selected season
+- Battery rate in cashflow will correctly reflect peak-only discharge when configured
 
-### Files Changed
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/projects/simulation/EnergySimulationEngine.ts` | Add `isDischargePermittedByTouSelection` helper; update `dispatchTouArbitrage` to accept and use TOU context instead of static windows; update both simulation loops to pass context |
+| `src/components/projects/simulation/EnergySimulationEngine.ts` | Add missing accumulator increments in annual loop; add optional TOU context to 24-hour simulation |
+| `src/components/projects/SimulationPanel.tsx` | Pass `touSettings` and season into energy config for chart accuracy |
 
