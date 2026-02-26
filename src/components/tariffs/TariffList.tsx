@@ -818,9 +818,10 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                                       chargeItems.push({ label, value: displayAmount });
                                     }
                                     
-                                    // Always show phase and voltage
-                                    chargeItems.push({ label: 'Phase', value: tariff.phase || '-' });
-                                    chargeItems.push({ label: 'Voltage', value: tariff.voltage || '-' });
+                                    // Only show phase and voltage if they have meaningful values
+                                    if (tariff.phase) {
+                                      chargeItems.push({ label: 'Phase', value: tariff.phase });
+                                    }
                                     
                                     return (
                                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
