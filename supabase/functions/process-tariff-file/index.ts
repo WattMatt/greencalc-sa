@@ -698,37 +698,58 @@ Deno.serve(async (req) => {
       
       if (isEskomExtraction) {
         const currentBatch = eskomBatches[currentBatchIndex];
-        const batchSheets = sheetNames.filter(name => {
-          const lower = name.toLowerCase().trim();
-          return currentBatch.sheets.some(keyword => lower.includes(keyword.toLowerCase()));
-        });
         
-        if (batchSheets.length === 0) {
-          // Skip empty batch
-          await supabase.from("eskom_batch_status")
-            .update({ status: "completed", tariffs_extracted: 0, updated_at: new Date().toISOString() })
-            .eq("municipality_id", muniData.id)
-            .eq("batch_index", currentBatchIndex);
+        if (fileType === "pdf") {
+          // For PDFs: check if batch name appears in the extracted text
+          const batchNameLower = currentBatch.name.toLowerCase();
+          const textLower = (extractedText || "").toLowerCase();
+          const hasBatchContent = textLower.includes(batchNameLower);
           
-          return new Response(
-            JSON.stringify({ inserted: 0, updated: 0, skipped: 0, confidence: 100, message: `No sheets for ${currentBatch.name}` }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        
-        for (const sheetName of batchSheets.slice(0, 5)) {
-          if (sheetData[sheetName]) {
-            municipalityText += `\n=== SHEET: ${sheetName} ===\n`;
-            municipalityText += sheetData[sheetName].slice(0, 100).map(row => 
-              row.filter(cell => cell != null && cell !== "").join(" | ")
-            ).filter(row => row.trim()).join("\n");
+          if (!hasBatchContent) {
+            // This PDF doesn't contain this batch's tariff family - skip
+            await supabase.from("eskom_batch_status")
+              .update({ status: "completed", tariffs_extracted: 0, updated_at: new Date().toISOString() })
+              .eq("municipality_id", muniData.id)
+              .eq("batch_index", currentBatchIndex);
+            
+            return new Response(
+              JSON.stringify({ inserted: 0, updated: 0, skipped: 0, confidence: 100, message: `PDF does not contain ${currentBatch.name} tariffs` }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
           }
-        }
-        
-        municipalityText = `BATCH FOCUS: ${currentBatch.name}\n${currentBatch.description}\n\n${municipalityText}`;
-        
-        if (extractedText && fileType === "pdf") {
-          municipalityText = extractedText.slice(0, 12000);
+          
+          // Pass full PDF text with batch context
+          municipalityText = `BATCH FOCUS: ${currentBatch.name}\n${currentBatch.description}\n\n${extractedText.slice(0, 15000)}`;
+        } else {
+          // Excel: use sheet-matching logic
+          const batchSheets = sheetNames.filter(name => {
+            const lower = name.toLowerCase().trim();
+            return currentBatch.sheets.some(keyword => lower.includes(keyword.toLowerCase()));
+          });
+          
+          if (batchSheets.length === 0) {
+            // Skip empty batch
+            await supabase.from("eskom_batch_status")
+              .update({ status: "completed", tariffs_extracted: 0, updated_at: new Date().toISOString() })
+              .eq("municipality_id", muniData.id)
+              .eq("batch_index", currentBatchIndex);
+            
+            return new Response(
+              JSON.stringify({ inserted: 0, updated: 0, skipped: 0, confidence: 100, message: `No sheets for ${currentBatch.name}` }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          
+          for (const sheetName of batchSheets.slice(0, 5)) {
+            if (sheetData[sheetName]) {
+              municipalityText += `\n=== SHEET: ${sheetName} ===\n`;
+              municipalityText += sheetData[sheetName].slice(0, 100).map(row => 
+                row.filter(cell => cell != null && cell !== "").join(" | ")
+              ).filter(row => row.trim()).join("\n");
+            }
+          }
+          
+          municipalityText = `BATCH FOCUS: ${currentBatch.name}\n${currentBatch.description}\n\n${municipalityText}`;
         }
       } else if (fileType === "xlsx" || fileType === "xls") {
         const matchingSheet = sheetNames.find(name => 
