@@ -59,11 +59,35 @@ export function InverterSliderPanel({
 
   return (
     <div className="space-y-4">
-      {/* Quick Select Buttons */}
+      {/* Quick Select Buttons + Custom AC Input */}
       <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">
-          Quick Select System Size (AC)
-        </Label>
+        <div className="flex items-center justify-between">
+          <Label className="text-xs text-muted-foreground">
+            Quick Select System Size (AC)
+          </Label>
+          <div className="flex items-center gap-1.5">
+            <Label className="text-xs text-muted-foreground">Custom</Label>
+            <Input
+              type="number"
+              value={acCapacity}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val) && val > 0) {
+                  const newCount = Math.round(val / config.inverterSize);
+                  const clampedCount = Math.max(1, Math.min(10, newCount));
+                  onChange({ ...config, inverterCount: clampedCount });
+                  onSolarCapacityChange(config.inverterSize * clampedCount);
+                }
+              }}
+              className="w-24 h-7 text-right text-sm font-semibold"
+              step={config.inverterSize}
+              min={config.inverterSize}
+              max={config.inverterSize * 10}
+              placeholder="kW"
+            />
+            <span className="text-xs text-muted-foreground">kW</span>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-2">
           {validSizes.slice(0, 6).map((size) => (
             <Button
@@ -136,7 +160,7 @@ export function InverterSliderPanel({
                 onChange({ ...config, dcAcRatio: val });
               }
             }}
-            className="w-16 h-7 text-right text-lg font-semibold"
+            className="w-20 h-7 text-right text-sm font-semibold"
             step={0.01}
             min={1.0}
             max={1.5}
