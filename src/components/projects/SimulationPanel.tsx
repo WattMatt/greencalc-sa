@@ -1539,32 +1539,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Solar Capacity Slider */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <Label className="text-xs">Capacity</Label>
-                      <span className={`text-xs ${solarExceedsLimit ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                        {solarCapacity} kWp
-                      </span>
-                    </div>
-                    <Slider
-                      value={[solarCapacity]}
-                      onValueChange={([v]) => setSolarCapacity(v)}
-                      min={10}
-                      max={maxSolarKva ? Math.max(maxSolarKva * 1.5, 500) : 500}
-                      step={10}
-                      className={solarExceedsLimit ? "[&_[role=slider]]:border-destructive [&_[role=slider]]:bg-destructive" : ""}
-                    />
-                    {maxSolarKva && (
-                      <div className="flex justify-between text-[10px] text-muted-foreground">
-                        <span>10 kWp</span>
-                        <span className="text-warning">70% limit: {maxSolarKva.toFixed(0)}</span>
-                        <span>{Math.round(maxSolarKva * 1.5)} kWp</span>
-                      </div>
-                    )}
-                  </div>
-                  {/* Inverter Size & Module Config */}
-                  <div className="pt-2 border-t">
+                  {/* Solar Module Config (no inverter size - moved to Inverters tab) */}
+                  <div>
                     <InverterSizeModuleConfig
                       config={inverterConfig}
                       onChange={setInverterConfig}

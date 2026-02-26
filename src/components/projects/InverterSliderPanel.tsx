@@ -3,14 +3,21 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { AlertCircle, CheckCircle2, Info, Settings } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, Settings, Zap } from "lucide-react";
 import { SOLAR_MODULE_PRESETS, calculateModuleMetrics } from "./SolarModulePresets";
-import { InverterConfig, calculateValidSizes } from "./InverterSizing";
+import { InverterConfig, INVERTER_SIZES, calculateValidSizes } from "./InverterSizing";
 
 interface InverterSliderPanelProps {
   config: InverterConfig;
@@ -57,8 +64,63 @@ export function InverterSliderPanel({
 
   const isExceedingLimit = maxSolarKva && acCapacity > maxSolarKva;
 
+  const isCustomSize = !INVERTER_SIZES.some(
+    (size) => size.kw === config.inverterSize
+  );
+
+  const handleInverterSizeChange = (value: string) => {
+    if (value === "custom") return;
+    const newSize = parseInt(value);
+    onChange({ ...config, inverterSize: newSize });
+    onSolarCapacityChange(newSize * config.inverterCount);
+  };
+
+  const handleCustomInverterSize = (value: string) => {
+    const newSize = parseInt(value) || 0;
+    if (newSize > 0) {
+      onChange({ ...config, inverterSize: newSize });
+      onSolarCapacityChange(newSize * config.inverterCount);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* Inverter Size Dropdown */}
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2 text-sm font-medium">
+          <Zap className="h-4 w-4" />
+          Inverter Size (AC)
+        </Label>
+        <div className="flex gap-2">
+          <Select
+            value={isCustomSize ? "custom" : config.inverterSize.toString()}
+            onValueChange={handleInverterSizeChange}
+          >
+            <SelectTrigger className="flex-1">
+              <SelectValue placeholder="Select size" />
+            </SelectTrigger>
+            <SelectContent>
+              {INVERTER_SIZES.map((size) => (
+                <SelectItem key={size.kw} value={size.kw.toString()}>
+                  {size.label}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              value={config.inverterSize}
+              onChange={(e) => handleCustomInverterSize(e.target.value)}
+              className="w-24"
+              min={1}
+            />
+            <span className="text-sm text-muted-foreground">kW</span>
+          </div>
+        </div>
+      </div>
+
       {/* Quick Select Buttons + Custom AC Input */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -79,11 +141,10 @@ export function InverterSliderPanel({
                   onSolarCapacityChange(config.inverterSize * clampedCount);
                 }
               }}
-              className="w-24 h-7 text-right text-sm font-semibold"
+              className="w-24 h-8 text-right text-sm font-semibold"
               step={config.inverterSize}
               min={config.inverterSize}
               max={config.inverterSize * 10}
-              placeholder="kW"
             />
             <span className="text-xs text-muted-foreground">kW</span>
           </div>
