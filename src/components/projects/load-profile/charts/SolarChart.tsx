@@ -11,9 +11,11 @@ interface SolarChartProps {
   show1to1Comparison: boolean;
   unit: string;
   maxPvAcKva?: number;
+  isHighSeason?: boolean;
 }
 
-export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1Comparison, unit, maxPvAcKva }: SolarChartProps) {
+export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1Comparison, unit, maxPvAcKva, isHighSeason = false }: SolarChartProps) {
+  const representativeMonth = isHighSeason ? 5 : 0;
   const totalPv = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);
   const totalDc = chartData.reduce((sum, d) => sum + (d.pvDcOutput || 0), 0);
   const total1to1 = chartData.reduce((sum, d) => sum + (d.pv1to1Baseline || 0), 0);
@@ -159,7 +161,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
             {/* TOU Background */}
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
-                const period = getTOUPeriod(h, isWeekend);
+                const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
                 const nextHour = h + 1;
                 return (
                   <ReferenceArea
@@ -218,7 +220,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
                 const baseline = dataPoint?.pv1to1Baseline || 0;
                 const gain = dataPoint?.pvGainZone || 0;
                 const hourNum = parseInt(label?.toString() || "0");
-                const period = getTOUPeriod(hourNum, isWeekend);
+                const period = getTOUPeriod(hourNum, isWeekend, undefined, representativeMonth);
 
                 return (
                   <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg text-xs space-y-1">

@@ -301,10 +301,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const hasInitialLoadComplete = useRef(false);
   const AUTOSAVE_DEBOUNCE_MS = 1500;
 
-  // TOU toggle state for charts (with localStorage persistence)
-  const [showTOU, setShowTOU] = useState(() => {
-    const saved = localStorage.getItem('simulation_showTOU');
-    return saved !== null ? saved === 'true' : true;
+  // High/Low demand season toggle for TOU chart backgrounds (with localStorage persistence)
+  const [showHighSeason, setShowHighSeason] = useState(() => {
+    const saved = localStorage.getItem('simulation_showHighSeason');
+    return saved !== null ? saved === 'true' : false;
   });
 
   // Day-of-week selection for load profile visualization (matches Load Profile tab)
@@ -312,8 +312,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [showAnnualAverage, setShowAnnualAverage] = useState(true);
 
   useEffect(() => {
-    localStorage.setItem('simulation_showTOU', String(showTOU));
-  }, [showTOU]);
+    localStorage.setItem('simulation_showHighSeason', String(showHighSeason));
+  }, [showHighSeason]);
 
   // Day navigation helper
   const navigateDay = useCallback((direction: "prev" | "next") => {
@@ -2267,8 +2267,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     Annual Avg
                   </Label>
                   <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
-                    TOU
+                    <Switch checked={showHighSeason} onCheckedChange={setShowHighSeason} className="scale-75" />
+                    {showHighSeason ? "High Demand" : "Low Demand"}
                   </Label>
                 </div>
               </div>
@@ -2276,12 +2276,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardContent className="space-y-4">
               <BuildingProfileChart 
                 chartData={simulationChartData} 
-                showTOU={showTOU} 
+                showTOU={true} 
                 isWeekend={loadProfileIsWeekend} 
                 unit="kW"
                 includesBattery={includesBattery && batteryCapacity > 0}
+                isHighSeason={showHighSeason}
               />
-              {showTOU && <TOULegend />}
+              <TOULegend isHighSeason={showHighSeason} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -2313,8 +2314,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     Annual Avg
                   </Label>
                   <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
-                    TOU
+                    <Switch checked={showHighSeason} onCheckedChange={setShowHighSeason} className="scale-75" />
+                    {showHighSeason ? "High Demand" : "Low Demand"}
                   </Label>
                 </div>
               </div>
@@ -2322,11 +2323,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardContent className="space-y-4">
               <LoadChart 
                 chartData={simulationChartData} 
-                showTOU={showTOU} 
+                showTOU={true} 
                 isWeekend={loadProfileIsWeekend} 
-                unit="kW" 
+                unit="kW"
+                isHighSeason={showHighSeason}
               />
-              {showTOU && <TOULegend />}
+              <TOULegend isHighSeason={showHighSeason} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -2358,8 +2360,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     Annual Avg
                   </Label>
                   <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
-                    TOU
+                    <Switch checked={showHighSeason} onCheckedChange={setShowHighSeason} className="scale-75" />
+                    {showHighSeason ? "High Demand" : "Low Demand"}
                   </Label>
                 </div>
               </div>
@@ -2367,11 +2369,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardContent className="space-y-4">
               <GridFlowChart
                 chartData={simulationChartData}
-                showTOU={showTOU}
+                showTOU={true}
                 isWeekend={loadProfileIsWeekend}
                 unit="kW"
+                isHighSeason={showHighSeason}
               />
-              {showTOU && <TOULegend />}
+              <TOULegend isHighSeason={showHighSeason} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -2387,8 +2390,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 </div>
                 <div className="flex items-center gap-3">
                   <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
-                    TOU
+                    <Switch checked={showHighSeason} onCheckedChange={setShowHighSeason} className="scale-75" />
+                    {showHighSeason ? "High Demand" : "Low Demand"}
                   </Label>
                 </div>
               </div>
@@ -2396,14 +2399,15 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardContent className="space-y-4">
               <SolarChart
                 chartData={simulationChartData}
-                showTOU={showTOU}
+                showTOU={true}
                 isWeekend={false}
                 dcAcRatio={inverterConfig.dcAcRatio}
                 show1to1Comparison={inverterConfig.dcAcRatio > 1}
                 unit="kW"
                 maxPvAcKva={solarCapacity}
+                isHighSeason={showHighSeason}
               />
-              {showTOU && <TOULegend />}
+              <TOULegend isHighSeason={showHighSeason} />
             </CardContent>
           </Card>
         </TabsContent>

@@ -9,9 +9,13 @@ interface LoadChartProps {
   isWeekend: boolean;
   unit: string;
   isLoading?: boolean;
+  isHighSeason?: boolean;
 }
 
-export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading }: LoadChartProps) {
+export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, isHighSeason = false }: LoadChartProps) {
+  // Use a representative month: high season → June (5), low season → January (0)
+  const representativeMonth = isHighSeason ? 5 : 0;
+
   if (isLoading) {
     return (
       <div className="space-y-1">
@@ -38,7 +42,7 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading }: Lo
 
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
-                const period = getTOUPeriod(h, isWeekend);
+                const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
                 const nextHour = h + 1;
                 return (
                   <ReferenceArea
@@ -60,7 +64,7 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading }: Lo
                 if (!active || !payload?.length) return null;
                 const loadValue = Number(payload.find((p) => p.dataKey === "total")?.value) || 0;
                 const hourNum = parseInt(label?.toString() || "0");
-                const period = getTOUPeriod(hourNum, isWeekend);
+                const period = getTOUPeriod(hourNum, isWeekend, undefined, representativeMonth);
                 return (
                   <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
                     <div className="flex items-center gap-2 mb-1">
