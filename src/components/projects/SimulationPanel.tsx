@@ -2384,13 +2384,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardContent className="space-y-4">
               <BuildingProfileChart 
                 chartData={simulationChartData} 
-                showTOU={true} 
+                showTOU={!showAnnualAverage} 
                 isWeekend={loadProfileIsWeekend} 
                 unit="kW"
                 includesBattery={includesBattery && batteryCapacity > 0}
                 touPeriodsOverride={touPeriodsForDay}
               />
-              <TOULegend />
+              {!showAnnualAverage && <TOULegend />}
             </CardContent>
           </Card>
         </TabsContent>
@@ -2426,12 +2426,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardContent className="space-y-4">
               <LoadChart 
                 chartData={simulationChartData} 
-                showTOU={true} 
+                showTOU={!showAnnualAverage} 
                 isWeekend={loadProfileIsWeekend} 
                 unit="kW"
                 touPeriodsOverride={touPeriodsForDay}
               />
-              <TOULegend />
+              {!showAnnualAverage && <TOULegend />}
             </CardContent>
           </Card>
         </TabsContent>
@@ -2467,12 +2467,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardContent className="space-y-4">
               <GridFlowChart
                 chartData={simulationChartData}
-                showTOU={true}
+                showTOU={!showAnnualAverage}
                 isWeekend={loadProfileIsWeekend}
                 unit="kW"
                 touPeriodsOverride={touPeriodsForDay}
               />
-              <TOULegend />
+              {!showAnnualAverage && <TOULegend />}
             </CardContent>
           </Card>
         </TabsContent>
@@ -2508,7 +2508,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardContent className="space-y-4">
               <SolarChart
                 chartData={simulationChartData}
-                showTOU={true}
+                showTOU={!showAnnualAverage}
                 isWeekend={false}
                 dcAcRatio={inverterConfig.dcAcRatio}
                 show1to1Comparison={inverterConfig.dcAcRatio > 1}
@@ -2516,7 +2516,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 maxPvAcKva={solarCapacity}
                 touPeriodsOverride={touPeriodsForDay}
               />
-              <TOULegend />
+              {!showAnnualAverage && <TOULegend />}
             </CardContent>
           </Card>
         </TabsContent>
