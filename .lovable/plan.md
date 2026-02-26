@@ -1,62 +1,64 @@
 
+# Fix Eskom PDF Tariff Import (Batch Skipping Bug)
 
-# Replace TOU Toggle with High/Low Demand Season Toggle
+## Problem
 
-## What Changes
+When you upload an Eskom PDF (like the Miniflex booklet), the import AI skips all batches with "0 tariffs extracted" because the batch-matching logic is designed for Excel files only.
 
-The current "TOU" on/off toggle on each simulation chart tab will be replaced with a "High Demand" / "Low Demand" season toggle. TOU background colours will **always** be visible on the charts -- no option to hide them.
+The root cause is in `supabase/functions/process-tariff-file/index.ts`, lines 700-717. For Eskom extractions, the code filters `sheetNames` by batch keywords (e.g. `["miniflex nla", "miniflex"]`). But for PDF uploads, `sheetNames` is always an empty array -- PDFs have no sheets. So `batchSheets` is always empty, and every batch immediately returns with `{ inserted: 0 }` without ever sending the PDF text to the AI.
 
-## Changes Required
+## Solution
 
-### 1. Replace `showTOU` state with `showHighSeason` state in `SimulationPanel.tsx`
+Update the Eskom extraction path in the edge function to handle PDFs differently from Excel files:
 
-- Remove the `showTOU` boolean state and its localStorage persistence
-- Add a new `showHighSeason` boolean state (default `false` = Low Demand, `true` = High Demand), persisted to localStorage
-- Replace every `showTOU={showTOU}` prop with `showTOU={true}` (always on)
-- Replace every `isWeekend={loadProfileIsWeekend}` with logic that also passes the season context
-- Pass `showHighSeason` to chart components so they can determine the correct TOU period map
-- Remove all `{showTOU && <TOULegend />}` conditionals -- always render `<TOULegend />`
-- Replace the TOU Switch UI with a season toggle labelled "High Demand" / "Low Demand"
+1. **For PDF files**: Skip the sheet-matching logic entirely. Instead, check if the PDF text content matches the current batch by searching the extracted text for the batch name (e.g. "Miniflex"). If found, pass the full PDF text to the AI for extraction. If not found, skip that batch gracefully.
 
-### 2. Update chart component interfaces
+2. **Fix the municipalityText assembly for Eskom PDFs**: Currently at line 730-732, when it is a PDF, it overwrites `municipalityText` with just the raw text without the batch context. The fix will prepend the batch focus context so the AI knows which tariff family to extract.
 
-**Files:** `LoadChart.tsx`, `GridFlowChart.tsx`, `BuildingProfileChart.tsx`, `SolarChart.tsx`
+## Technical Changes
 
-- Add an `isHighSeason` prop (boolean) to each chart's props interface
-- Update the `getTOUPeriod()` calls inside each chart to pass a representative month based on `isHighSeason`:
-  - High season: pass a month from `touSettings.highSeasonMonths` (e.g. month index 6 for July)
-  - Low season: pass a month NOT in `highSeasonMonths` (e.g. month index 0 for January)
-- Remove dependency on the `showTOU` boolean for rendering `ReferenceArea` blocks (always render them)
+**File:** `supabase/functions/process-tariff-file/index.ts`
 
-### 3. Update `TOULegend` component
+### Change 1: PDF-aware batch matching (lines ~699-732)
 
-- Always rendered (no conditional). Optionally display the current season label ("High-Demand Season" or "Low-Demand Season") for context.
+Replace the current Eskom batch text building with:
 
-### 4. Toggle UI Design
-
-Replace:
 ```text
-[Switch] TOU
+if (isEskomExtraction) {
+  const currentBatch = eskomBatches[currentBatchIndex];
+  
+  if (fileType === "pdf") {
+    // For PDFs: check if batch name appears in the extracted text
+    const batchNameLower = currentBatch.name.toLowerCase();
+    const textLower = extractedText.toLowerCase();
+    const hasBatchContent = textLower.includes(batchNameLower);
+    
+    if (!hasBatchContent) {
+      // This PDF doesn't contain this batch's tariff family - skip
+      await supabase.from("eskom_batch_status")
+        .update({ status: "completed", tariffs_extracted: 0, ... })
+        ...
+      return ...;
+    }
+    
+    // Pass full PDF text with batch context
+    municipalityText = `BATCH FOCUS: ${currentBatch.name}\n${currentBatch.description}\n\n${extractedText.slice(0, 15000)}`;
+  } else {
+    // Existing Excel sheet-matching logic (unchanged)
+    ...
+  }
+}
 ```
 
-With:
-```text
-[Switch] High Demand / Low Demand
-```
+This ensures that:
+- When a Miniflex PDF is uploaded, the "Miniflex" batch finds the text and extracts it
+- Other batches (Megaflex, Nightsave, etc.) are correctly skipped because their names don't appear in the PDF
+- The AI receives the proper batch context prefix so it knows which tariff family to focus on
 
-The label will read the active season name. When toggled, the TOU background colours on the chart will update to reflect the selected season's TOU period map (different peak/standard/off-peak hour boundaries).
+### Change 2: Deploy edge function
+
+Redeploy `process-tariff-file` after the code change.
 
 ## Files Modified
 
-1. **`src/components/projects/SimulationPanel.tsx`** -- Replace `showTOU` with `showHighSeason`, update all chart prop passing, update toggle UI (5 tab sections)
-2. **`src/components/projects/load-profile/charts/LoadChart.tsx`** -- Add `isHighSeason` prop, always render TOU backgrounds, pass month to `getTOUPeriod`
-3. **`src/components/projects/load-profile/charts/GridFlowChart.tsx`** -- Same as above
-4. **`src/components/projects/load-profile/charts/BuildingProfileChart.tsx`** -- Same as above
-5. **`src/components/projects/load-profile/charts/SolarChart.tsx`** -- Same as above
-6. **`src/components/projects/load-profile/components/TOULegend.tsx`** -- Optionally show active season label
-
-## Backward Compatibility
-
-- No data model changes
-- No financial engine changes
-- Only visual/UI behaviour changes
+1. **`supabase/functions/process-tariff-file/index.ts`** -- Fix Eskom PDF batch matching logic
