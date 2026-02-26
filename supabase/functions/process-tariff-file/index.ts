@@ -924,14 +924,14 @@ Deno.serve(async (req) => {
                             demand_charge_per_kva: { type: "number", description: "R/kVA charge" },
                             tariff_family: { type: "string", description: "Eskom tariff family name" },
                             transmission_zone: { type: "string", description: "Transmission zone label e.g. '<= 300km', '> 300km and <= 600km'" },
-                            legacy_charge_per_kwh: { type: "number", description: "Legacy surcharge in c/kWh (will be converted to R/kWh)" },
+                            legacy_charge_per_kwh: { type: "number", description: "Legacy surcharge in c/kWh" },
                             generation_capacity_charge_per_kva: { type: "number", description: "[DISABLED - extract but do not actively use] Generation capacity charge in R/kVA/month" },
                             network_charge_per_kva: { type: "number", description: "Transmission network charge in R/kVA/month" },
                             network_demand_charge_peak_per_kwh: { type: "number", description: "Network demand charge for Peak period in c/kWh" },
                             network_demand_charge_standard_per_kwh: { type: "number", description: "Network demand charge for Standard period in c/kWh" },
                             ancillary_services_per_kwh: { type: "number", description: "Ancillary services charge in c/kWh" },
                             electrification_rural_per_kwh: { type: "number", description: "Electrification and rural network subsidy charge in c/kWh" },
-                            service_charge_per_day: { type: "number", description: "[DISABLED - extract but do not actively use] Service charge in R/account/day" },
+                            service_charge_per_day: { type: "number", description: "[DISABLED - extract but do not actively use] Service charge in R/POD/day" },
                             administration_charge_per_day: { type: "number", description: "[DISABLED - extract but do not actively use] Administration charge in R/POD/day" },
                             urban_low_voltage_subsidy_per_kva: { type: "number", description: "Urban low voltage subsidy in R/kVA/month" },
                             affordability_subsidy_per_kwh: { type: "number", description: "Affordability subsidy in c/kWh" },
@@ -1161,120 +1161,120 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Add legacy charge (c/kWh → R/kWh)
+          // Add legacy charge (c/kWh)
           if (tariff.legacy_charge_per_kwh && tariff.legacy_charge_per_kwh > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
               charge: "ancillary",
-              amount: tariff.legacy_charge_per_kwh / 100, // c/kWh to R/kWh
-              unit: "R/kWh",
+              amount: tariff.legacy_charge_per_kwh,
+              unit: "c/kWh",
               season: "all",
               tou: "all",
               notes: "Legacy charge",
             });
           }
 
-          // Add generation capacity charge
+          // Add generation capacity charge (R/kVA/month) [DISABLED]
           if (tariff.generation_capacity_charge_per_kva && tariff.generation_capacity_charge_per_kva > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
-              charge: "demand",
+              charge: "capacity",
               amount: tariff.generation_capacity_charge_per_kva,
-              unit: "R/kVA",
+              unit: "R/kVA/month",
               season: "all",
               tou: "all",
-              notes: "Generation capacity",
+              notes: "Generation capacity [DISABLED]",
             });
           }
 
-          // Add transmission network charge
+          // Add transmission network charge (R/kVA/month)
           if (tariff.network_charge_per_kva && tariff.network_charge_per_kva > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
               charge: "network_demand",
               amount: tariff.network_charge_per_kva,
-              unit: "R/kVA",
+              unit: "R/kVA/month",
               season: "all",
               tou: "all",
               notes: "Transmission network",
             });
           }
 
-          // Add network demand charge per kWh for Peak period (c/kWh → R/kWh)
+          // Add network demand charge for Peak period (c/kWh)
           if (tariff.network_demand_charge_peak_per_kwh && tariff.network_demand_charge_peak_per_kwh > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
               charge: "network_demand",
-              amount: tariff.network_demand_charge_peak_per_kwh / 100,
-              unit: "R/kWh",
+              amount: tariff.network_demand_charge_peak_per_kwh,
+              unit: "c/kWh",
               season: "all",
               tou: "peak",
               notes: "Network demand charge (Peak)",
             });
           }
 
-          // Add network demand charge per kWh for Standard period (c/kWh → R/kWh)
+          // Add network demand charge for Standard period (c/kWh)
           if (tariff.network_demand_charge_standard_per_kwh && tariff.network_demand_charge_standard_per_kwh > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
               charge: "network_demand",
-              amount: tariff.network_demand_charge_standard_per_kwh / 100,
-              unit: "R/kWh",
+              amount: tariff.network_demand_charge_standard_per_kwh,
+              unit: "c/kWh",
               season: "all",
               tou: "standard",
               notes: "Network demand charge (Standard)",
             });
           }
 
-          // Add ancillary services charge (c/kWh → R/kWh)
+          // Add ancillary services charge (c/kWh)
           if (tariff.ancillary_services_per_kwh && tariff.ancillary_services_per_kwh > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
               charge: "ancillary",
-              amount: tariff.ancillary_services_per_kwh / 100,
-              unit: "R/kWh",
+              amount: tariff.ancillary_services_per_kwh,
+              unit: "c/kWh",
               season: "all",
               tou: "all",
               notes: "Ancillary services",
             });
           }
 
-          // Add electrification & rural network subsidy charge (c/kWh → R/kWh)
+          // Add electrification & rural network subsidy charge (c/kWh)
           if (tariff.electrification_rural_per_kwh && tariff.electrification_rural_per_kwh > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
-              charge: "ancillary",
-              amount: tariff.electrification_rural_per_kwh / 100,
-              unit: "R/kWh",
+              charge: "surcharge",
+              amount: tariff.electrification_rural_per_kwh,
+              unit: "c/kWh",
               season: "all",
               tou: "all",
               notes: "Electrification & rural subsidy",
             });
           }
 
-          // Add service charge (R/account/day)
+          // Add service charge (R/POD/day) [DISABLED]
           if (tariff.service_charge_per_day && tariff.service_charge_per_day > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
               charge: "service",
               amount: tariff.service_charge_per_day,
-              unit: "R/day",
+              unit: "R/POD/day",
               season: "all",
               tou: "all",
-              notes: "Service charge",
+              notes: "Service charge [DISABLED]",
             });
           }
 
-          // Add administration charge (R/POD/day)
+          // Add administration charge (R/POD/day) [DISABLED]
           if (tariff.administration_charge_per_day && tariff.administration_charge_per_day > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
               charge: "admin",
               amount: tariff.administration_charge_per_day,
-              unit: "R/day",
+              unit: "R/POD/day",
               season: "all",
               tou: "all",
-              notes: "Administration charge",
+              notes: "Administration charge [DISABLED]",
             });
           }
 
@@ -1284,33 +1284,33 @@ Deno.serve(async (req) => {
               tariff_plan_id: tariffPlanId,
               charge: "subsidy",
               amount: tariff.urban_low_voltage_subsidy_per_kva,
-              unit: "R/kVA",
+              unit: "R/kVA/month",
               season: "all",
               tou: "all",
               notes: "Urban low voltage subsidy",
             });
           }
 
-          // Add affordability subsidy (c/kWh → R/kWh)
+          // Add affordability subsidy (c/kWh)
           if (tariff.affordability_subsidy_per_kwh && tariff.affordability_subsidy_per_kwh > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
               charge: "subsidy",
-              amount: tariff.affordability_subsidy_per_kwh / 100,
-              unit: "R/kWh",
+              amount: tariff.affordability_subsidy_per_kwh,
+              unit: "c/kWh",
               season: "all",
               tou: "all",
               notes: "Affordability subsidy",
             });
           }
 
-          // Add reactive energy charge (c/kVArh → R/kVArh)
+          // Add reactive energy charge (c/kVArh)
           if (tariff.reactive_energy_charge_per_kvarh && tariff.reactive_energy_charge_per_kvarh > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
               charge: "reactive_energy",
-              amount: tariff.reactive_energy_charge_per_kvarh / 100,
-              unit: "R/kVArh",
+              amount: tariff.reactive_energy_charge_per_kvarh,
+              unit: "c/kVArh",
               season: "all",
               tou: "all",
               notes: "Reactive energy",
