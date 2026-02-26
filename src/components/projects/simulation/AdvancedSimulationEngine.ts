@@ -9,7 +9,7 @@
  * - NPV/IRR calculations
  */
 
-import { EnergySimulationResults } from "./EnergySimulationEngine";
+import { EnergySimulationResults, HourlyEnergyData } from "./EnergySimulationEngine";
 import { TariffData, SystemCosts } from "./FinancialAnalysis";
 import {
   AdvancedSimulationConfig,
@@ -22,6 +22,172 @@ import {
   LoadGrowthConfig,
   ColumnTotals,
 } from "./AdvancedSimulationTypes";
+import { TariffRate, getCombinedRate, SEASONAL_DAYS } from "@/lib/tariffCalculations";
+import { TOUSettings, TOUHourMap } from "@/components/projects/load-profile/types";
+
+/**
+ * Result of the annual hourly TOU-weighted income calculation
+ */
+export interface AnnualHourlyIncomeResult {
+  annualSolarDirectIncome: number;
+  annualBatteryDischargeIncome: number;
+  annualExportIncome: number;
+  annualGridChargeCost: number;
+  derivedSolarDirectRate: number;
+  derivedBatteryDischargeRate: number;
+  derivedExportRate: number;
+  derivedGridChargeRate: number;
+  totalAnnualSolarDirectKwh: number;
+  totalAnnualBatteryDischargeKwh: number;
+  totalAnnualExportKwh: number;
+  totalAnnualGridChargeKwh: number;
+}
+
+/**
+ * Map TOUPeriod ('peak'|'standard'|'off-peak') to getCombinedRate format
+ */
+function touPeriodToRateLabel(period: string): 'Peak' | 'Standard' | 'Off-Peak' {
+  switch (period) {
+    case 'peak': return 'Peak';
+    case 'standard': return 'Standard';
+    case 'off-peak': return 'Off-Peak';
+    default: return 'Off-Peak';
+  }
+}
+
+/**
+ * Calculate annual income by iterating over all 8,760 hours using TOU-specific rates.
+ * 
+ * Uses the SEASONAL_DAYS distribution (6 combinations of season × dayType) and
+ * iterates over 24 hours for each, looking up the applicable TOU rate per hour.
+ * This produces exact annual totals without simulating each individual day.
+ */
+export function calculateAnnualHourlyIncome(
+  hourlyData: HourlyEnergyData[],
+  tariffRates: TariffRate[],
+  touSettings: TOUSettings,
+  tariff?: { legacy_charge_per_kwh?: number }
+): AnnualHourlyIncomeResult {
+  let totalSolarDirectIncome = 0;
+  let totalBatteryDischargeIncome = 0;
+  let totalExportIncome = 0;
+  let totalGridChargeCost = 0;
+  let totalSolarDirectKwh = 0;
+  let totalBatteryDischargeKwh = 0;
+  let totalExportKwh = 0;
+  let totalGridChargeKwh = 0;
+
+  // Define the 6 season × dayType combinations
+  const combinations: Array<{
+    season: 'high' | 'low';
+    dayType: 'weekday' | 'saturday' | 'sunday';
+    dayCount: number;
+    hourMap: TOUHourMap;
+  }> = [
+    {
+      season: 'high', dayType: 'weekday',
+      dayCount: SEASONAL_DAYS.high.weekdays,
+      hourMap: touSettings.highSeason.weekday,
+    },
+    {
+      season: 'high', dayType: 'saturday',
+      dayCount: SEASONAL_DAYS.high.saturdays,
+      hourMap: touSettings.highSeason.saturday,
+    },
+    {
+      season: 'high', dayType: 'sunday',
+      dayCount: SEASONAL_DAYS.high.sundays,
+      hourMap: touSettings.highSeason.sunday,
+    },
+    {
+      season: 'low', dayType: 'weekday',
+      dayCount: SEASONAL_DAYS.low.weekdays,
+      hourMap: touSettings.lowSeason.weekday,
+    },
+    {
+      season: 'low', dayType: 'saturday',
+      dayCount: SEASONAL_DAYS.low.saturdays,
+      hourMap: touSettings.lowSeason.saturday,
+    },
+    {
+      season: 'low', dayType: 'sunday',
+      dayCount: SEASONAL_DAYS.low.sundays,
+      hourMap: touSettings.lowSeason.sunday,
+    },
+  ];
+
+  for (const combo of combinations) {
+    for (let h = 0; h < 24; h++) {
+      if (h >= hourlyData.length) break;
+
+      const hourData = hourlyData[h];
+      const touPeriod = combo.hourMap[h] || 'off-peak';
+      const rateLabel = touPeriodToRateLabel(touPeriod);
+      const rate = getCombinedRate(tariffRates, rateLabel, combo.season, tariff);
+
+      // Solar Direct income
+      const solarKwh = hourData.solarUsed * combo.dayCount;
+      totalSolarDirectKwh += solarKwh;
+      totalSolarDirectIncome += solarKwh * rate;
+
+      // Battery Discharge income
+      const batteryKwh = hourData.batteryDischarge * combo.dayCount;
+      totalBatteryDischargeKwh += batteryKwh;
+      totalBatteryDischargeIncome += batteryKwh * rate;
+
+      // Export income
+      const exportKwh = hourData.gridExport * combo.dayCount;
+      totalExportKwh += exportKwh;
+      totalExportIncome += exportKwh * rate;
+
+      // Grid charge cost (battery charging from grid)
+      // gridImport includes both load and battery charging — we need only battery charge from grid
+      // Since HourlyEnergyData doesn't have per-hour batteryChargeFromGrid,
+      // we estimate: if there's battery charging and grid import in this hour, attribute
+      // the lesser of (batteryCharge - solarExcess, gridImport) as grid charging
+      // However, the simplest approach: total daily gridChargeFromGrid is known from results.
+      // We'll handle grid charge cost separately below using the total.
+    }
+  }
+
+  // Grid charge cost: distribute totalBatteryChargeFromGrid across charging hours
+  // Battery typically charges from grid during off-peak hours. Calculate a weighted rate
+  // for the hours where charging actually occurs (hours with batteryCharge > 0).
+  // For simplicity and accuracy, use the off-peak rate weighted across seasons.
+  let gridChargeWeightedRate = 0;
+  let gridChargeHourCount = 0;
+  for (const combo of combinations) {
+    for (let h = 0; h < 24; h++) {
+      if (h >= hourlyData.length) break;
+      // Check if this hour has battery charging (potential grid charging)
+      if (hourlyData[h].batteryCharge > 0) {
+        const touPeriod = combo.hourMap[h] || 'off-peak';
+        const rateLabel = touPeriodToRateLabel(touPeriod);
+        const rate = getCombinedRate(tariffRates, rateLabel, combo.season, tariff);
+        gridChargeWeightedRate += rate * combo.dayCount;
+        gridChargeHourCount += combo.dayCount;
+      }
+    }
+  }
+  if (gridChargeHourCount > 0) {
+    gridChargeWeightedRate /= gridChargeHourCount;
+  }
+
+  return {
+    annualSolarDirectIncome: totalSolarDirectIncome,
+    annualBatteryDischargeIncome: totalBatteryDischargeIncome,
+    annualExportIncome: totalExportIncome,
+    annualGridChargeCost: 0, // Set by caller using totalBatteryChargeFromGrid * gridChargeWeightedRate
+    derivedSolarDirectRate: totalSolarDirectKwh > 0 ? totalSolarDirectIncome / totalSolarDirectKwh : 0,
+    derivedBatteryDischargeRate: totalBatteryDischargeKwh > 0 ? totalBatteryDischargeIncome / totalBatteryDischargeKwh : 0,
+    derivedExportRate: totalExportKwh > 0 ? totalExportIncome / totalExportKwh : 0,
+    derivedGridChargeRate: gridChargeWeightedRate,
+    totalAnnualSolarDirectKwh: totalSolarDirectKwh,
+    totalAnnualBatteryDischargeKwh: totalBatteryDischargeKwh,
+    totalAnnualExportKwh: totalExportKwh,
+    totalAnnualGridChargeKwh: 0, // Set by caller
+  };
+}
 
 /**
  * Apply seasonal irradiance factor for a given month
@@ -310,7 +476,9 @@ export function runAdvancedSimulation(
   systemCosts: SystemCosts,
   solarCapacity: number,
   batteryCapacity: number,
-  advancedConfig: AdvancedSimulationConfig
+  advancedConfig: AdvancedSimulationConfig,
+  tariffRates?: TariffRate[],
+  touSettings?: TOUSettings
 ): AdvancedFinancialResults {
   const { financial, degradation, loadGrowth, gridConstraints } = advancedConfig;
   
@@ -346,6 +514,22 @@ export function runAdvancedSimulation(
   const baseEnergyRate = tariff.averageRatePerKwh;
   const baseDemandRate = tariff.demandChargePerKva ?? 0;
   const baseMaintenance = systemCosts.maintenancePerYear ?? 0;
+
+  // ===== Hourly TOU-weighted income (if tariffRates provided) =====
+  const useHourlyTOU = !!(tariffRates && tariffRates.length > 0 && touSettings);
+  let hourlyIncomeResult: AnnualHourlyIncomeResult | null = null;
+  if (useHourlyTOU) {
+    hourlyIncomeResult = calculateAnnualHourlyIncome(
+      baseEnergyResults.hourlyData,
+      tariffRates!,
+      touSettings!,
+      tariff as any
+    );
+    // Set grid charge kWh and cost using total from energy results
+    const totalGridChargeKwhAnnual = (baseEnergyResults.totalBatteryChargeFromGrid ?? 0) * 365;
+    hourlyIncomeResult.totalAnnualGridChargeKwh = totalGridChargeKwhAnnual;
+    hourlyIncomeResult.annualGridChargeCost = totalGridChargeKwhAnnual * hourlyIncomeResult.derivedGridChargeRate;
+  }
   
   // Insurance = X% of Total Capital Cost only (excluding O&M)
   // Insurance Rate produces a monthly amount - multiply by 12 for annual
@@ -422,21 +606,57 @@ export function runAdvancedSimulation(
     const costIndex = Math.pow(1 + inflationRate / 100, year - 1);
     const insuranceIndex = Math.pow(1 + insuranceEscalation / 100, year - 1);
     
-    // Actual rates per unit (for display in table)
-    const energyRateR = baseEnergyRate * energyRateIndex; // R/kWh
+    // Per-source income calculations — use TOU-weighted rates when available
+    let solarDirectRateR: number;
+    let solarDirectIncomeR: number;
+    let batteryDischargeRateR: number;
+    let batteryDischargeIncomeR: number;
+    let exportRateR: number;
+    let exportIncomeR: number;
+    let energyRateR: number;
+    let gridChargeCostR: number;
+    let batteryChargeFromGridKwh: number;
+
+    if (useHourlyTOU && hourlyIncomeResult) {
+      // TOU-weighted: base annual income from hourly calc, then apply degradation + escalation
+      solarDirectIncomeR = hourlyIncomeResult.annualSolarDirectIncome * (panelEfficiency / 100) * energyRateIndex;
+      solarDirectRateR = hourlyIncomeResult.derivedSolarDirectRate * energyRateIndex;
+
+      batteryDischargeIncomeR = hourlyIncomeResult.annualBatteryDischargeIncome * (panelEfficiency / 100) * energyRateIndex;
+      batteryDischargeRateR = hourlyIncomeResult.derivedBatteryDischargeRate * energyRateIndex;
+
+      exportIncomeR = hourlyIncomeResult.annualExportIncome * (panelEfficiency / 100) * energyRateIndex;
+      exportRateR = hourlyIncomeResult.derivedExportRate * energyRateIndex;
+
+      // Derived blended energy rate (reference only)
+      const totalBaseIncome = hourlyIncomeResult.annualSolarDirectIncome + hourlyIncomeResult.annualBatteryDischargeIncome + hourlyIncomeResult.annualExportIncome;
+      const totalBaseKwh = hourlyIncomeResult.totalAnnualSolarDirectKwh + hourlyIncomeResult.totalAnnualBatteryDischargeKwh + hourlyIncomeResult.totalAnnualExportKwh;
+      energyRateR = totalBaseKwh > 0 ? (totalBaseIncome / totalBaseKwh) * energyRateIndex : baseEnergyRate * energyRateIndex;
+
+      // Grid charge cost using TOU-weighted rate
+      const baseBatteryChargeFromGridKwh = hourlyIncomeResult.totalAnnualGridChargeKwh;
+      batteryChargeFromGridKwh = baseBatteryChargeFromGridKwh * (panelEfficiency / 100);
+      gridChargeCostR = batteryChargeFromGridKwh * hourlyIncomeResult.derivedGridChargeRate * energyRateIndex;
+    } else {
+      // Legacy: single blended rate
+      energyRateR = baseEnergyRate * energyRateIndex;
+      
+      solarDirectRateR = baseEnergyRate * energyRateIndex;
+      solarDirectIncomeR = solarDirectKwh * solarDirectRateR;
+
+      batteryDischargeRateR = baseEnergyRate * energyRateIndex;
+      batteryDischargeIncomeR = batteryDischargeKwh * batteryDischargeRateR;
+
+      const exportRate = baseEnergyRate;
+      exportRateR = exportRate * energyRateIndex;
+      exportIncomeR = exportKwh * exportRateR;
+
+      const baseBatteryChargeFromGridKwh = (baseEnergyResults.totalBatteryChargeFromGrid ?? 0) * 365;
+      batteryChargeFromGridKwh = baseBatteryChargeFromGridKwh * (panelEfficiency / 100);
+      gridChargeCostR = batteryChargeFromGridKwh * baseEnergyRate * energyRateIndex;
+    }
+
     const demandRateR = baseDemandRate * demandRateIndex; // R/kVA
-    
-    // Per-source income calculations
-    const solarDirectRateR = baseEnergyRate * energyRateIndex;
-    const solarDirectIncomeR = solarDirectKwh * solarDirectRateR;
-    
-    const batteryDischargeRateR = baseEnergyRate * energyRateIndex;
-    const batteryDischargeIncomeR = batteryDischargeKwh * batteryDischargeRateR;
-    
-    // Export Income = Export kWh × Export Rate × Escalation Index
-    const exportRate = baseEnergyRate; // TODO: support separate feed-in tariff
-    const exportRateR = exportRate * energyRateIndex;
-    const exportIncomeR = exportKwh * exportRateR;
     
     // Combined energy income (sum of three sources)
     const energyIncomeR = solarDirectIncomeR + batteryDischargeIncomeR + exportIncomeR;
@@ -454,11 +674,6 @@ export function runAdvancedSimulation(
     
     // O&M Cost = Base Maintenance × CPI Index
     const maintenanceCost = baseMaintenance * costIndex;
-    
-    // Grid Battery Charging Cost = kWh charged from grid × energy rate
-    const baseBatteryChargeFromGridKwh = (baseEnergyResults.totalBatteryChargeFromGrid ?? 0) * 365;
-    const batteryChargeFromGridKwh = baseBatteryChargeFromGridKwh * (panelEfficiency / 100);
-    const gridChargeCostR = batteryChargeFromGridKwh * baseEnergyRate * energyRateIndex;
     
     // Total Operating Costs
     const totalCostR = insuranceCostR + maintenanceCost + gridChargeCostR;

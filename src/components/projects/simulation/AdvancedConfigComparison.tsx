@@ -22,6 +22,8 @@ import {
 } from "./AdvancedSimulationTypes";
 import { runAdvancedSimulation } from "./AdvancedSimulationEngine";
 import { EnergySimulationResults, TariffData, SystemCosts } from "./index";
+import { TariffRate } from "@/lib/tariffCalculations";
+import { TOUSettings } from "@/components/projects/load-profile/types";
 
 type ScenarioKey = "A" | "B" | "C";
 
@@ -39,6 +41,8 @@ interface AdvancedConfigComparisonProps {
   solarCapacity: number;
   batteryCapacity: number;
   onApplyConfig: (config: AdvancedSimulationConfig) => void;
+  tariffRates?: TariffRate[];
+  touSettings?: TOUSettings;
 }
 
 const SCENARIO_COLORS: Record<ScenarioKey, { bg: string; text: string; border: string }> = {
@@ -81,6 +85,8 @@ export function AdvancedConfigComparison({
   solarCapacity,
   batteryCapacity,
   onApplyConfig,
+  tariffRates,
+  touSettings,
 }: AdvancedConfigComparisonProps) {
   const [scenarios, setScenarios] = useState<Record<ScenarioKey, Scenario>>({
     A: { name: DEFAULT_NAMES.A, config: currentConfig, results: null },
@@ -99,7 +105,9 @@ export function AdvancedConfigComparison({
       systemCosts,
       solarCapacity,
       batteryCapacity,
-      currentConfig
+      currentConfig,
+      tariffRates,
+      touSettings
     );
     setScenarios(prev => ({
       ...prev,
