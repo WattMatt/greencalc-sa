@@ -81,47 +81,6 @@ export function InverterSizeModuleConfig({
 
   return (
     <div className="space-y-4">
-      {/* Inverter Size Section */}
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2 text-sm font-medium">
-          <Zap className="h-4 w-4" />
-          Inverter Size (AC)
-        </Label>
-        <div className="flex gap-2">
-          <Select
-            value={isCustomSize ? "custom" : config.inverterSize.toString()}
-            onValueChange={(value) => {
-              if (value === "custom") {
-                // Keep current value but mark as custom
-              } else {
-                handleInverterSizeChange(value);
-              }
-            }}
-          >
-            <SelectTrigger className="flex-1">
-              <SelectValue placeholder="Select size" />
-            </SelectTrigger>
-            <SelectContent>
-              {INVERTER_SIZES.map((size) => (
-                <SelectItem key={size.kw} value={size.kw.toString()}>
-                  {size.label}
-                </SelectItem>
-              ))}
-              <SelectItem value="custom">Custom</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              value={config.inverterSize}
-              onChange={(e) => handleCustomInverterSize(e.target.value)}
-              className="w-24"
-              min={1}
-            />
-            <span className="text-sm text-muted-foreground">kW</span>
-          </div>
-        </div>
-      </div>
 
       {/* Solar Module Section */}
       <div className="space-y-2">
