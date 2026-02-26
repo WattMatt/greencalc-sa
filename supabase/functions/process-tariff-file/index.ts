@@ -46,11 +46,18 @@ function mapCategory(category: string): string {
 // Map Eskom tariff family to a sensible default category
 function eskomFamilyCategory(familyName: string): string {
   const lower = (familyName || "").toLowerCase();
-  if (lower.includes("home") || lower.includes("light")) return "domestic";
+  // Public lighting must be checked before generic "light" match
   if (lower.includes("public lighting")) return "public_lighting";
-  if (lower.includes("landrate")) return "agricultural";
-  if (lower.includes("munic")) return "bulk_reseller";
-  return "industrial"; // Megaflex, Miniflex, Nightsave, Businessrate, Ruraflex, WEPS, etc.
+  // Domestic families
+  if (lower.includes("home") || lower.includes("landlight")) return "domestic";
+  // Agricultural families
+  if (lower.includes("landrate") || lower.includes("ruraflex") || lower.includes("nightsave rural")) return "agricultural";
+  // Bulk reseller families
+  if (lower.includes("municflex") || lower.includes("municrate")) return "bulk_reseller";
+  // Commercial
+  if (lower.includes("businessrate")) return "commercial";
+  // Industrial: Megaflex, Megaflex Gen, Miniflex, Nightsave Urban, Generator Tariffs
+  return "industrial";
 }
 
 function mapVoltage(voltage?: string): string | null {
@@ -634,21 +641,23 @@ Deno.serve(async (req) => {
       const isEskomExtraction = municipality.toLowerCase() === "eskom direct";
       
       const eskomBatches = isEskomExtraction ? [
-        { name: "Megaflex", sheets: ["megaflex nla", "megaflex gen", "megaflex"], description: "Urban TOU for large customers >1MVA NMD." },
-        { name: "Miniflex", sheets: ["miniflex nla", "miniflex"], description: "Urban TOU for high-load factor customers 25kVA-5MVA NMD." },
-        { name: "Nightsave", sheets: ["nightsave urban", "nightsave rural", "nightsave"], description: "Urban/Rural seasonally differentiated TOU." },
-        { name: "Businessrate", sheets: ["businessrate nla", "businessrate"], description: "Urban commercial up to 100kVA NMD." },
-        { name: "Public Lighting", sheets: ["public lighting nla", "public lighting munic", "public lighting"], description: "Non-metered urban tariff." },
-        { name: "Homepower", sheets: ["homepower nla", "homepower"], description: "Standard urban residential up to 100kVA." },
-        { name: "Homeflex", sheets: ["homeflex nla", "homeflex"], description: "Residential TOU for grid-tied generation." },
-        { name: "Homelight", sheets: ["homelight nla", "homelight"], description: "Subsidized tariff for low-usage households." },
-        { name: "Ruraflex", sheets: ["ruraflex nla", "ruraflex gen", "ruraflex"], description: "Rural TOU from 16kVA NMD." },
-        { name: "Landrate", sheets: ["landrate nla", "landrate"], description: "Conventional rural tariff up to 100kVA." },
-        { name: "Municflex", sheets: ["municflex"], description: "Bulk TOU for local authorities from 16kVA NMD." },
-        { name: "Municrate", sheets: ["municrate"], description: "Bulk tariff for local authority up to 100kVA." },
-        { name: "WEPS", sheets: ["weps nla", "weps munic", "weps"], description: "Wholesale Electricity Pricing System." },
-        { name: "Generator Tariffs", sheets: ["gen-offset", "gen reconcil", "tuos nla", "duos nla"], description: "Use-of-System charges for generators." },
-        { name: "Excess NCC", sheets: ["excess ncc nla", "excess ncc munic", "excess ncc"], description: "Excess Network Capacity Charges." }
+        { name: "Megaflex", sheets: ["megaflex nla", "megaflex non-local", "megaflex"], description: "Urban TOU for large customers >1MVA NMD, Non-Local Authority." },
+        { name: "Municflex", sheets: ["municflex", "municflex la", "municflex local"], description: "Bulk TOU for local authorities >=16kVA NMD." },
+        { name: "Megaflex Gen", sheets: ["megaflex gen", "megaflex generator"], description: "Generator variant of Megaflex, Non-Local Authority." },
+        { name: "Miniflex", sheets: ["miniflex nla", "miniflex non-local", "miniflex"], description: "Urban TOU for 25kVA-5MVA NMD, Non-Local Authority." },
+        { name: "Nightsave Urban", sheets: ["nightsave urban", "nightsave urban nla"], description: "Urban seasonally differentiated TOU, Non-Local Authority." },
+        { name: "Businessrate", sheets: ["businessrate nla", "businessrate non-local", "businessrate"], description: "Urban commercial up to 100kVA NMD, Non-Local Authority." },
+        { name: "Municrate", sheets: ["municrate", "municrate la", "municrate local"], description: "Bulk tariff for local authorities up to 100kVA." },
+        { name: "Public Lighting", sheets: ["public lighting nla", "public lighting munic", "public lighting"], description: "Non-metered urban tariff, Non-LA and LA." },
+        { name: "Homepower", sheets: ["homepower nla", "homepower standard", "homepower bulk", "homepower"], description: "Standard and Bulk residential, Non-LA (up to 100kVA)." },
+        { name: "Homeflex", sheets: ["homeflex nla", "homeflex non-local", "homeflex"], description: "Residential TOU for grid-tied generation, Non-LA." },
+        { name: "Homelight", sheets: ["homelight nla", "homelight non-local", "homelight"], description: "Subsidised tariff for low-usage households, Non-LA." },
+        { name: "Ruraflex", sheets: ["ruraflex nla", "ruraflex non-local", "ruraflex"], description: "Rural TOU from 16kVA NMD, Non-Local Authority." },
+        { name: "Ruraflex Gen", sheets: ["ruraflex gen", "ruraflex generator"], description: "Generator variant of Ruraflex, Non-Local Authority." },
+        { name: "Nightsave Rural", sheets: ["nightsave rural", "nightsave rural nla"], description: "Rural seasonally differentiated TOU, Non-Local Authority." },
+        { name: "Landrate", sheets: ["landrate nla", "landrate non-local", "landrate"], description: "Conventional rural tariff up to 100kVA, Non-LA." },
+        { name: "Landlight", sheets: ["landlight nla", "landlight non-local", "landlight"], description: "Rural lighting tariff for low-usage households, Non-LA." },
+        { name: "Generator Tariffs", sheets: ["gen-offset", "gen-wheeling", "gen-purchase", "gen reconcil", "tuos nla", "duos nla", "ancillary"], description: "TUoS/DUoS network charges, ancillary services, gen-wheeling/offset/purchase." }
       ] : [];
       
       let currentBatchIndex = 0;
