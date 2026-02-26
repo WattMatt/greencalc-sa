@@ -1,5 +1,5 @@
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
-import { ChartDataPoint, getTOUPeriod, TOU_COLORS } from "../types";
+import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 import { Badge } from "@/components/ui/badge";
 
 interface BuildingProfileChartProps {
@@ -8,11 +8,10 @@ interface BuildingProfileChartProps {
   isWeekend: boolean;
   unit: string;
   includesBattery: boolean;
-  isHighSeason?: boolean;
+  touPeriodsOverride?: TOUPeriod[];
 }
 
-export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, includesBattery, isHighSeason = false }: BuildingProfileChartProps) {
-  const representativeMonth = isHighSeason ? 5 : 0;
+export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, includesBattery, touPeriodsOverride }: BuildingProfileChartProps) {
   const extendedData = [...chartData, { ...chartData[chartData.length - 1], hour: "24:00" }];
 
   const totalLoad = chartData.reduce((sum, d) => sum + (d.total || 0), 0);
@@ -22,6 +21,11 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
   const totalExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
   const totalCharge = chartData.reduce((sum, d) => sum + (d.batteryCharge || 0), 0);
   const totalDischarge = chartData.reduce((sum, d) => sum + (d.batteryDischarge || 0), 0);
+
+  const getPeriod = (h: number): TOUPeriod => {
+    if (touPeriodsOverride && touPeriodsOverride[h]) return touPeriodsOverride[h];
+    return getTOUPeriod(h, isWeekend);
+  };
 
   return (
     <div className="space-y-2">
@@ -84,7 +88,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
 
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
-                const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
+                const period = getPeriod(h);
                 return (
                   <ReferenceArea
                     key={h}
@@ -107,7 +111,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
                 const dp = chartData.find(d => d.hour === label);
                 if (!dp) return null;
                 const hourNum = parseInt(label?.toString() || "0");
-                const period = getTOUPeriod(hourNum, isWeekend, undefined, representativeMonth);
+                const period = getPeriod(hourNum);
 
                 return (
                   <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg text-xs space-y-1">
