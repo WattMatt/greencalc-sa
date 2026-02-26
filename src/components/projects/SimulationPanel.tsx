@@ -320,8 +320,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     const dayOfWeek = date.getDay(); // 0=Sun..6=Sat
     const month = date.getMonth(); // 0-indexed
     const dayLabel = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+    const dayName = date.toLocaleDateString('en-GB', { weekday: 'long' }); // Monday, Tuesday, etc.
     const dayTypeName = dayOfWeek === 0 ? 'Sunday' : dayOfWeek === 6 ? 'Saturday' : 'Weekday';
-    return { dayLabel, dayOfWeek, month, dayTypeName, dayNumber: selectedDayIndex + 1 };
+    return { dayLabel, dayName, dayOfWeek, month, dayTypeName, dayNumber: selectedDayIndex + 1 };
   }, [selectedDayIndex]);
 
   // Auto-load the last saved simulation when data arrives (only once per projectId)
@@ -2365,13 +2366,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   )}
                   <div>
                     <CardTitle className="text-base">
-                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
+                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayName}, ${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
                     </CardTitle>
-                    <CardDescription className="text-xs">
-                      {showAnnualAverage
-                        ? "Cumulative profile: load, grid, PV, and battery combined"
-                        : `${dailySlice[0]?.season === 'high' ? 'High Demand' : 'Low Demand'} · ${dayDateInfo.dayTypeName}`}
-                    </CardDescription>
                   </div>
                   {!showAnnualAverage && (
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
@@ -2412,9 +2408,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   )}
                   <div>
                     <CardTitle className="text-base">
-                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
+                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayName}, ${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
                     </CardTitle>
-                    <CardDescription className="text-xs">Tenant load and estimated downstream tenant consumption</CardDescription>
                   </div>
                   {!showAnnualAverage && (
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
@@ -2454,9 +2449,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   )}
                   <div>
                     <CardTitle className="text-base">
-                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
+                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayName}, ${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
                     </CardTitle>
-                    <CardDescription className="text-xs">kW and kWh as perceived by the network operator</CardDescription>
                   </div>
                   {!showAnnualAverage && (
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
@@ -2496,9 +2490,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   )}
                   <div>
                     <CardTitle className="text-base">
-                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
+                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayName}, ${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
                     </CardTitle>
-                    <CardDescription>PV production output</CardDescription>
                   </div>
                   {!showAnnualAverage && (
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
@@ -2542,9 +2535,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     )}
                     <div>
                       <CardTitle className="text-base">
-                        {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
+                        {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayName}, ${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
                       </CardTitle>
-                      <CardDescription className="text-xs">Charging power and discharging power</CardDescription>
                     </div>
                     {!showAnnualAverage && (
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
