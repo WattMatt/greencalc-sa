@@ -1,50 +1,31 @@
 
 
-# Redesign Inverter Sizing Logic
+# Fix: Custom kW Input Snapping to Inverter Multiples
 
-## Core Concept Change
+## Root Cause
 
-The **System Size (AC)** becomes the primary design input. The number of inverters is a **derived value**, not a user-controlled slider.
+The custom kW input IS set to `step="5"`, but a `useEffect` in **SimulationPanel.tsx** (line 443-449) overrides the solar capacity every time the inverter config changes:
 
-**New logic:**
-- User sets desired AC system size (e.g. 100 kW) via Quick Select or Custom input
-- User selects inverter size (e.g. 125 kW)
-- Number of inverters = `Math.ceil(systemSize / inverterSize)` (auto-calculated, read-only)
-- DC capacity = systemSize x DC/AC ratio
+```text
+useEffect:
+  acCapacity = inverterSize * inverterCount   // e.g. 125 * 6 = 750
+  if (acCapacity !== solarCapacity)
+    setSolarCapacity(acCapacity)              // OVERRIDES user's 630 back to 750
+```
 
-**Example:** 100 kW system with 125 kW inverters = `ceil(100/125)` = 1 inverter
+**What happens when you click the arrow:**
+1. User is at 625 kW, clicks up arrow -> input fires `onChange(630)`
+2. Handler sets `solarCapacity = 630` and `inverterCount = ceil(630/125) = 6`
+3. The `useEffect` fires: `125 * 6 = 750`, sees `750 !== 630`, resets capacity to **750**
 
-## Changes to `InverterSliderPanel.tsx`
+So it appears to jump by 125 kW, but it's actually the useEffect snapping to the nearest inverter multiple.
 
-### 1. Swap positions
-Move **Quick Select + Custom AC input** to the top, followed by the **Inverter Size dropdown** below it.
+## Fix
 
-### 2. Make Number of Inverters read-only
-- Remove the slider control
-- Replace with a calculated display showing the formula result
-- Auto-compute: `Math.ceil(acCapacity / inverterSize)`
+**Remove** or **disable** the useEffect sync on lines 443-449 of `SimulationPanel.tsx`. Under the new design, the system size (AC) is the primary input and should NOT be overridden by `inverterSize * inverterCount`. The inverter count is derived from the system size, not the other way around.
 
-### 3. Update handlers
-- Quick Select and Custom input now set `acCapacity` directly (stored as a new concept, no longer derived from `inverterSize x inverterCount`)
-- When inverter size changes, recalculate inverter count from the current system size
-- When system size changes, recalculate inverter count from the current inverter size
-- The `inverterCount` in config is always kept in sync as a derived value
+### File: `src/components/projects/SimulationPanel.tsx`
+- **Delete lines 443-449** (the `useEffect` that syncs `solarCapacity` from inverter config)
+- The `InverterSliderPanel` already keeps `inverterCount` in sync as a derived value, so this useEffect is now redundant and harmful
 
-### 4. Update `acCapacity` derivation
-Currently: `acCapacity = inverterSize * inverterCount`
-New: `acCapacity` is the user's desired system size; `inverterCount = Math.ceil(acCapacity / inverterSize)`
-
-Since `InverterConfig` stores `inverterCount`, we will continue using `inverterSize * inverterCount` as the effective AC capacity but set `inverterCount` based on `Math.ceil(desiredAC / inverterSize)`. The custom input will allow any kW value and derive the count accordingly.
-
-## Layout Order (top to bottom)
-
-1. **Quick Select System Size (AC)** buttons + Custom kW input (inline)
-2. **Inverter Size (AC)** dropdown + custom kW input
-3. **Number of Inverters** -- read-only calculated display
-4. **DC/AC Ratio** slider + input
-5. **Calculated Metrics** box
-6. **Validation Status**
-
-## Files Modified
-- `src/components/projects/InverterSliderPanel.tsx` -- All layout and logic changes
-
+No other files need changes. The `step="5"` on the input is already correct and will work once this override is removed.
