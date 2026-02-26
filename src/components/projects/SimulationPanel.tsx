@@ -1500,6 +1500,26 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       <ConfigCarousel
         panes={[
           {
+            id: 'inverters',
+            label: 'Inverters',
+            icon: <Zap className="h-4 w-4" />,
+            enabled: includesSolar,
+            disabledMessage: 'Enable Solar PV to configure inverters',
+            content: (
+              <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
+                <CardContent className="pt-4">
+                  <InverterSliderPanel
+                    config={inverterConfig}
+                    onChange={setInverterConfig}
+                    currentSolarCapacity={solarCapacity}
+                    onSolarCapacityChange={setSolarCapacity}
+                    maxSolarKva={maxSolarKva}
+                  />
+                </CardContent>
+              </Card>
+            ),
+          },
+          {
             id: 'solarPV',
             label: 'Solar Modules',
             icon: <Sun className="h-4 w-4" />,
@@ -1613,35 +1633,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       </p>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-            ),
-          },
-          {
-            id: 'inverters',
-            label: 'Inverters',
-            icon: <Zap className="h-4 w-4" />,
-            enabled: includesSolar,
-            disabledMessage: 'Enable Solar PV to configure inverters',
-            content: (
-              <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <Zap className="h-4 w-4" />
-                    Inverter-Based Sizing
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Size system based on inverter capacity and grouping
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <InverterSliderPanel
-                    config={inverterConfig}
-                    onChange={setInverterConfig}
-                    currentSolarCapacity={solarCapacity}
-                    onSolarCapacityChange={setSolarCapacity}
-                    maxSolarKva={maxSolarKva}
-                  />
                 </CardContent>
               </Card>
             ),
