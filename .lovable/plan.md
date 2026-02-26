@@ -1,67 +1,56 @@
 
 
-# Fix: Eskom Re-extraction Deletes Data But Doesn't Reset Batch State
+# Prepopulate Eskom Tariff Batch Definitions from Official 2025/2026 Booklet
 
-## Root Cause
+## What We're Fixing
 
-The extraction actually works -- 16 Miniflex tariffs were successfully inserted into the database (confirmed by logs and `extraction_runs` table). However, the data disappears because of a state management bug in the re-extraction flow:
+The current `eskomBatches` array in the extraction edge function has 15 batches, but it's missing some tariff families and incorrectly groups others. The official Eskom Tariffs & Charges Booklet 2025/2026 lists the following distinct tariff sections that need individual extraction focus.
 
-1. User clicks "Re-extract" (in `FileUploadImport.tsx`)
-2. Frontend **deletes all `tariff_plans`** for Eskom Direct (lines 323-328)
-3. Frontend calls `process-tariff-file` edge function
-4. Edge function checks `eskom_batch_status` table -- all 15 batches are still marked **"completed"** from the previous run
-5. The auto-skip loop finds no pending batches, returns `{ allComplete: true, totalTariffs: 16 }` (stale count from batch_status)
-6. Result: 0 tariffs in the database, UI shows "0 tariffs"
+## Updated Batch List (from the PDF table of contents)
 
-## Fix (Two Changes)
+The following is the complete list of Eskom tariff families, mapped to batches. Changes from the current list are marked.
 
-### Change 1: Edge function -- auto-reset stale batch statuses
+| # | Batch Name | Category | Description | Change |
+|---|-----------|----------|-------------|--------|
+| 1 | Megaflex | industrial | Urban TOU for large customers (>1MVA NMD), Non-LA | Unchanged |
+| 2 | MunicFlex | bulk_reseller | Bulk TOU for local authorities (>=16kVA NMD) | Unchanged |
+| 3 | Megaflex Gen | industrial | Generator variant of Megaflex, Non-LA | **NEW** (was grouped with Megaflex) |
+| 4 | Miniflex | industrial | Urban TOU for 25kVA-5MVA NMD, Non-LA | Unchanged |
+| 5 | Nightsave Urban | industrial | Urban seasonally differentiated TOU, Non-LA | **SPLIT** (was grouped with Rural) |
+| 6 | Businessrate | commercial | Urban commercial up to 100kVA NMD, Non-LA | Unchanged |
+| 7 | Municrate | bulk_reseller | Bulk tariff for local authorities up to 100kVA | Unchanged |
+| 8 | Public Lighting | public_lighting | Non-metered urban tariff, Non-LA and LA | Unchanged |
+| 9 | Homepower | domestic | Standard and Bulk residential, Non-LA (up to 100kVA) | Unchanged (covers Standard + Bulk variants) |
+| 10 | Homeflex | domestic | Residential TOU for grid-tied generation, Non-LA | Unchanged |
+| 11 | Homelight | domestic | Subsidised tariff for low-usage households, Non-LA | Unchanged |
+| 12 | Ruraflex | agricultural | Rural TOU from 16kVA NMD, Non-LA | Unchanged |
+| 13 | Ruraflex Gen | agricultural | Generator variant of Ruraflex, Non-LA | **NEW** (was grouped with Ruraflex) |
+| 14 | Nightsave Rural | agricultural | Rural seasonally differentiated TOU, Non-LA | **SPLIT** (was grouped with Urban) |
+| 15 | Landrate | agricultural | Conventional rural tariff up to 100kVA, Non-LA | Unchanged |
+| 16 | Landlight | domestic | Rural lighting tariff for low-usage, Non-LA | **NEW** (was missing entirely) |
+| 17 | Generator Tariffs | industrial | TUoS/DUoS network charges, ancillary services, gen-wheeling/offset/purchase | Unchanged |
 
-In `supabase/functions/process-tariff-file/index.ts`, after finding existing batch records, check if all batches are "completed" but the municipality has 0 tariff plans. If so, reset all batches to "pending" so extraction can run again.
+**Removed**: "WEPS" (Wholesale Electricity Pricing System -- not a standard retail tariff, rarely extracted from PDFs) and "Excess NCC" (not in the booklet as a standalone tariff family).
 
-```text
-// After line ~663 (existingBatches check)
-if (existingBatches && existingBatches.length > 0) {
-  const allCompleted = existingBatches.every(b => b.status === "completed");
-  
-  if (allCompleted) {
-    // Check if tariff_plans actually exist -- if not, batches are stale
-    const { count: actualTariffCount } = await supabase
-      .from("tariff_plans")
-      .select("*", { count: "exact", head: true })
-      .eq("municipality_id", muniData.id);
-    
-    if (!actualTariffCount || actualTariffCount === 0) {
-      // Stale batch state: tariffs were deleted but batches weren't reset
-      console.log("Resetting stale Eskom batch statuses -- tariffs were deleted");
-      await supabase.from("eskom_batch_status")
-        .update({ status: "pending", tariffs_extracted: 0, updated_at: new Date().toISOString() })
-        .eq("municipality_id", muniData.id);
-    }
-  }
-}
-```
+## Technical Changes
 
-This ensures that if tariffs were deleted (by re-extract or manual deletion), the batch status automatically resets so extraction can proceed.
+### File: `supabase/functions/process-tariff-file/index.ts`
 
-### Change 2: FileUploadImport -- reset batch status on re-extract
+**Lines ~636-652**: Replace the `eskomBatches` array with the updated 17-batch list derived from the official booklet. Each batch gets:
+- Accurate `name` matching the PDF heading
+- Updated `sheets` search terms for text matching
+- Correct `description` from the booklet
+- A `category` field to drive `eskomFamilyCategory()` mapping directly
 
-In `src/components/tariffs/FileUploadImport.tsx`, inside `handleReextractTariffs`, after deleting tariff plans, also delete the `eskom_batch_status` records so the edge function starts fresh:
+**Category mapping**: Update `eskomFamilyCategory()` to handle the new families (Landlight -> domestic, Megaflex Gen -> industrial, Ruraflex Gen -> agricultural, Nightsave Urban -> industrial, Nightsave Rural -> agricultural).
 
-```text
-// After line 327 (delete tariff_plans)
-if (muni.name.toLowerCase().includes("eskom")) {
-  await supabase.from("eskom_batch_status").delete().eq("municipality_id", muniData.id);
-}
-```
+### Deployment
 
-### Change 3: Deploy and reset current stale data
+Re-deploy the `process-tariff-file` edge function after the update.
 
-1. Reset the current `eskom_batch_status` records to "pending" so the user can immediately retry
-2. Deploy the updated edge function
+## Impact
 
-## Files Modified
-
-1. **`supabase/functions/process-tariff-file/index.ts`** -- Add stale batch detection and auto-reset
-2. **`src/components/tariffs/FileUploadImport.tsx`** -- Reset batch status on re-extract
-3. Deploy edge function + reset DB state
+- No database changes needed
+- No frontend changes needed
+- Existing extraction logic and batch status tracking continues to work
+- The next Eskom extraction will use the corrected 17-batch list, producing more accurate and complete tariff coverage
