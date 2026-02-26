@@ -169,7 +169,7 @@ export function InverterSliderPanel({
         </div>
       </div>
 
-      {/* 3. Number of Inverters — READ-ONLY DERIVED */}
+      {/* 3. Number of Inverters — SLIDER */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="flex items-center gap-2 text-sm font-medium">
@@ -181,7 +181,8 @@ export function InverterSliderPanel({
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
                   <p>
-                    Auto-calculated: ⌈ System Size ÷ Inverter Size ⌉ = ⌈ {desiredAcCapacity} ÷ {config.inverterSize} ⌉ = {derivedInverterCount}
+                    Drag to set inverter count. System size = count × inverter size.
+                    You can also type a custom kW value above.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -189,6 +190,19 @@ export function InverterSliderPanel({
           </Label>
           <span className="text-lg font-semibold">{derivedInverterCount}</span>
         </div>
+        <Slider
+          value={[derivedInverterCount]}
+          onValueChange={(value) => {
+            const newCount = value[0];
+            const newCapacity = newCount * config.inverterSize;
+            onChange({ ...config, inverterCount: newCount });
+            onSolarCapacityChange(newCapacity);
+          }}
+          min={1}
+          max={20}
+          step={1}
+          className="w-full"
+        />
         <p className="text-xs text-muted-foreground">
           {derivedInverterCount}× {config.inverterSize} kW = {derivedInverterCount * config.inverterSize} kW inverter capacity
         </p>
