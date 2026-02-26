@@ -1,46 +1,86 @@
 
 
-# Fix Jumping Layout in Day Navigation Header
+# Fix: Battery Not Charging During Daytime Despite User Configuration
 
 ## Problem
 
-The date label text changes width as you navigate days (e.g. "Wednesday, 1 January" vs "Monday, 5 May"), causing the left and right arrow buttons to shift position. The calendar popover also resizes with different months.
+The battery only charges during off-peak weekend hours, even though the user has configured PV charging to be allowed across all TOU periods.
 
 ## Root Cause
 
-1. The date label between the arrows has no fixed width -- it auto-sizes to its text content, pushing the right arrow around.
-2. The arrows are conditionally rendered (`{!showAnnualAverage && ...}`) separately on either side of the date label, so the left arrow position depends on nothing but the right arrow shifts with the label width.
-3. The calendar `PopoverContent` uses `w-auto`, letting it resize per month.
-
-## Fix (single file: `DayNavigationHeader.tsx`)
-
-### 1. Fixed-width date label
-
-Give the date trigger button a fixed width (e.g. `w-[280px]`) so the text area never changes size regardless of the day/month name length. The arrows stay pinned.
-
-### 2. Always render arrows (even in annual mode, just hidden)
-
-Replace the conditional rendering of arrows with `visibility: hidden` or `opacity-0 pointer-events-none` when in annual average mode. This keeps the layout stable -- the arrows always occupy space.
-
-Alternatively, since the arrows already have `shrink-0`, just fixing the centre label width is sufficient. The simpler approach: give the centre element a fixed `min-w` so it never collapses or expands.
-
-### 3. Fixed calendar popover dimensions
-
-Change `PopoverContent` from `w-auto` to a fixed width (e.g. `w-[280px]`) so it doesn't resize between months.
-
-## Technical Detail
+In `EnergySimulationEngine.ts`, the `getChargePermissions` function (line 216) uses a **hardcoded default of `['off-peak']`** for ALL charge sources when `chargeTouPeriods` is not explicitly set:
 
 ```text
-// Line 69: Add fixed width to the trigger button
-<button className="text-left cursor-pointer hover:opacity-80 transition-opacity w-[260px]">
-
-// Line 75: Fixed popover width
-<PopoverContent className="w-[280px] p-0" align="start">
+const active = isSourceActiveAtHour(hour, src.chargeTouPeriods, ['off-peak'], touPeriodToWindowsFn);
 ```
+
+The `DEFAULT_CHARGE_SOURCES` (line 33-35) do NOT set `chargeTouPeriods`:
+```text
+{ id: 'pv', enabled: true }       // No chargeTouPeriods -> defaults to ['off-peak']
+{ id: 'grid', enabled: true }     // No chargeTouPeriods -> defaults to ['off-peak']
+```
+
+This means even if the user has "PV" enabled as a charge source, the engine only allows PV charging during off-peak hours. Since off-peak on weekdays is typically late night (no solar), the battery never charges from PV on weekdays. On weekends, off-peak spans more hours, which explains the "only off-peak weekend" pattern.
+
+The default `['off-peak']` makes sense for grid charging (cheap rates), but is wrong for PV -- solar energy is free and should charge the battery whenever available by default.
+
+## Fix (single file: `EnergySimulationEngine.ts`)
+
+### 1. Use source-specific defaults in `getChargePermissions`
+
+Change the default periods to be source-aware:
+- **PV**: Default to `['off-peak', 'standard', 'peak']` (charge from solar whenever available)
+- **Grid**: Keep default at `['off-peak']` (charge from grid during cheap rates)
+
+```text
+// Line 216: Change from a single default to source-specific defaults
+for (const src of sources) {
+  if (!src.enabled) continue;
+  const defaultPeriods: ('off-peak' | 'standard' | 'peak')[] =
+    src.id === 'pv' ? ['off-peak', 'standard', 'peak'] : ['off-peak'];
+  const active = isSourceActiveAtHour(hour, src.chargeTouPeriods, defaultPeriods, touPeriodToWindowsFn);
+  ...
+}
+```
+
+### 2. Update `DEFAULT_CHARGE_SOURCES` with explicit `chargeTouPeriods`
+
+Set `chargeTouPeriods` explicitly on defaults so the UI and engine are always in sync:
+
+```text
+export const DEFAULT_CHARGE_SOURCES: ChargeSource[] = [
+  { id: 'pv', enabled: true, chargeTouPeriods: ['off-peak', 'standard', 'peak'] },
+  { id: 'grid', enabled: true, chargeTouPeriods: ['off-peak'] },
+  { id: 'generator', enabled: false },
+];
+```
+
+### 3. Update the UI default fallback in `AdvancedSimulationConfig.tsx`
+
+The `ChargeSourcesList` component (line 1012) also defaults to `['off-peak']` when rendering:
+
+```text
+const periods = source.chargeTouPeriods ?? (source.chargeTouPeriod ? [source.chargeTouPeriod] : ['off-peak']);
+```
+
+Change this to use a source-specific default:
+
+```text
+const defaultPeriods = source.id === 'pv' ? ['off-peak', 'standard', 'peak'] : ['off-peak'];
+const periods = source.chargeTouPeriods ?? (source.chargeTouPeriod ? [source.chargeTouPeriod] : defaultPeriods);
+```
+
+## Expected Result
+
+- PV will charge the battery during **all** TOU periods by default (peak, standard, off-peak)
+- Grid charging remains restricted to off-peak by default (cost-efficient)
+- Users who have already explicitly configured their TOU periods are unaffected (their saved `chargeTouPeriods` overrides defaults)
+- Battery charges from solar excess throughout the day as expected
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/projects/simulation/DayNavigationHeader.tsx` | Fixed width on date label trigger + fixed calendar popover width |
+| `src/components/projects/simulation/EnergySimulationEngine.ts` | Source-specific default TOU periods in `getChargePermissions`; explicit `chargeTouPeriods` on `DEFAULT_CHARGE_SOURCES` |
+| `src/components/projects/simulation/AdvancedSimulationConfig.tsx` | Source-specific default fallback in `ChargeSourcesList` UI |
 
