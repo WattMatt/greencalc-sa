@@ -159,6 +159,9 @@ serve(async (req) => {
       }
     }
 
+    // Extract chronological 8,760 hourly GHI values (W/m²)
+    const hourlyGhi8760 = hourlyData.map(h => h["G(h)"]);
+
     const result = {
       success: true,
       source: "pvgis",
@@ -188,6 +191,7 @@ serve(async (req) => {
         hourlyTemp,
       },
       monthly: monthlyBreakdown,
+      hourlyGhi8760,
     };
 
     console.log(`Processed TMY: Peak Sun Hours: ${peakSunHours.toFixed(2)}, Annual GHI: ${annualGhiKwh.toFixed(0)} kWh/m²`);

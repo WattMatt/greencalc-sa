@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { format, formatDistanceToNow } from "date-fns";
 import { useSolcastForecast } from "@/hooks/useSolcastForecast";
 import { usePVGISProfile, PVGISTMYResponse, PVGISMonthlyResponse } from "@/hooks/usePVGISProfile";
+import { convertTMYToSolarGeneration } from "@/utils/calculators/tmySolarConversion";
 
 import { SavedSimulations } from "./SavedSimulations";
 import {
@@ -878,10 +879,38 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   const effectiveSolarProfile = includesSolar ? chartSolarProfile : loadProfile.map(() => 0);
 
+  // Compute 8,760-hour TMY solar profile when TMY source is active and data is available
+  const tmySolarProfile8760 = useMemo(() => {
+    if (solarDataSource !== "pvgis_tmy" || !pvgisTmyData?.hourlyGhi8760 || !includesSolar) {
+      return undefined;
+    }
+    if (lossCalculationMode !== "pvsyst") {
+      return undefined; // Only supported in PVsyst mode (needs loss chain config)
+    }
+
+    const configWithModuleData: PVsystLossChainConfig = {
+      ...pvsystConfig,
+      stcEfficiency: moduleMetrics.stcEfficiency,
+      collectorAreaM2: moduleMetrics.collectorAreaM2,
+      lossesAfterInverter: {
+        ...DEFAULT_PVSYST_CONFIG.lossesAfterInverter,
+        ...pvsystConfig.lossesAfterInverter,
+      },
+    };
+
+    return convertTMYToSolarGeneration({
+      hourlyGhiWm2: pvgisTmyData.hourlyGhi8760,
+      collectorAreaM2: moduleMetrics.collectorAreaM2,
+      stcEfficiency: moduleMetrics.stcEfficiency,
+      pvsystConfig: configWithModuleData,
+      reductionFactor: 1 - (productionReductionPercent / 100),
+    });
+  }, [solarDataSource, pvgisTmyData, includesSolar, lossCalculationMode, pvsystConfig, moduleMetrics, productionReductionPercent]);
+
   // 8,760-hour annual simulation — single source of truth for all kWh and financial data
   const annualEnergyResults = useMemo(() =>
-    runAnnualEnergySimulation(loadProfile, effectiveSolarProfile, energyConfig, touSettingsData),
-    [loadProfile, effectiveSolarProfile, energyConfig, touSettingsData]
+    runAnnualEnergySimulation(loadProfile, effectiveSolarProfile, energyConfig, touSettingsData, tmySolarProfile8760),
+    [loadProfile, effectiveSolarProfile, energyConfig, touSettingsData, tmySolarProfile8760]
   );
 
   const annualEnergyResultsGeneric = useMemo(() =>
