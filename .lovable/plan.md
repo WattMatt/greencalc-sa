@@ -1,41 +1,36 @@
 
+# Replace TOU Dashed Lines with Coloured X-Axis Period Bars
 
-# Replace TOU Background Bands with Vertical Boundary Lines
-
-## Problem
-The `ReferenceArea` approach for TOU backgrounds has persistent rendering issues (SVG anti-aliasing, Recharts prop compatibility with multiple Y axes). The coloured backgrounds blend and fail across different chart configurations.
-
-## Solution
-Replace all TOU background shading with **vertical dashed lines** at each TOU period transition boundary. Each line uses the colour of the **incoming** period (the period that starts at that hour).
-
-For example, if off-peak runs 00:00-06:00 and peak starts at 06:00, a red dashed vertical line appears at 06:00.
+## Approach
+Remove all `ReferenceLine` TOU rendering. Instead, render coloured horizontal bars flush against the x-axis that span each TOU period. These bars will sit **between the axis line and the tick labels**, coloured by the TOU period (red=peak, amber=standard, teal=off-peak). Each bar stretches -0.5 to +0.5 of its hour tick (filling the full category band width with no gaps).
 
 ## Implementation
 
-### 1. Rewrite `touReferenceAreas.tsx` utility
-
-Replace `buildTOUBlocks` with `buildTOUBoundaryLines` that:
-- Iterates hours 0-23, detecting where the period changes
-- Returns an array of `{ hour: string, color: string, period: TOUPeriod }` objects for each boundary
-- Also includes hour 0 (the very first period start)
+### 1. Rewrite `touReferenceAreas.tsx`
+- Remove `buildTOUBoundaryLines` and `ShiftedReferenceLine`
+- Add a new `buildTOUPeriodBars` utility that returns contiguous period blocks: `{ startHour: number, endHour: number, color: string, period: TOUPeriod }[]`
+- Add a `TOUXAxisTick` custom tick component for Recharts XAxis:
+  - Receives standard Recharts tick props (`x`, `y`, `payload`, `visibleTicksCount`, plus injected `xAxis` metadata)
+  - Draws a coloured `<rect>` at each tick position spanning the full `bandSize` width, positioned just above the label (between axis line and tick text)
+  - Renders the normal tick label text below the rect
+  - Uses `getPeriod(hourNum)` to determine the colour
+  - Height ~6px, with slight rounding
 
 ### 2. Update all 7 chart files
+- Remove `ReferenceLine` imports and TOU boundary line `.map()` blocks
+- Remove imports of `buildTOUBoundaryLines` and `ShiftedReferenceLine`
+- On `<XAxis>`, replace the simple `tick` prop with `tick={<TOUXAxisTick getPeriod={getPeriod} showTOU={showTOU} />}`
+- Increase bottom margin slightly (e.g. `bottom: 8`) to accommodate the coloured bar between axis and labels
 
-Replace `ReferenceArea` rendering with `ReferenceLine` rendering at each boundary:
-- **Import**: Swap `ReferenceArea` for `ReferenceLine` where not already imported
-- **Rendering**: Replace the `.map()` block to render `<ReferenceLine x={line.hour} stroke={line.color} strokeDasharray="4 3" strokeWidth={1.5} />` for each boundary
-- **No more `{ hour: "24:00" }` padding** needed since we are not drawing area blocks
-
-Files to update:
-- `src/components/projects/load-profile/utils/touReferenceAreas.tsx`
-- `src/components/projects/load-profile/charts/BuildingProfileChart.tsx`
+### Files to edit
+- `src/components/projects/load-profile/utils/touReferenceAreas.tsx` -- full rewrite
 - `src/components/projects/load-profile/charts/LoadChart.tsx`
+- `src/components/projects/load-profile/charts/BuildingProfileChart.tsx`
 - `src/components/projects/load-profile/charts/SolarChart.tsx`
 - `src/components/projects/load-profile/charts/GridFlowChart.tsx`
-- `src/components/projects/load-profile/charts/BatteryChart.tsx` (needs `yAxisId="power"` on ReferenceLine)
+- `src/components/projects/load-profile/charts/BatteryChart.tsx`
 - `src/components/projects/load-profile/charts/StackedMeterChart.tsx`
 - `src/components/projects/load-profile/charts/LoadEnvelopeChart.tsx`
 
 ### Visual Result
-Clean vertical dashed lines in red, amber, or teal at each period transition -- no background fills, no anti-aliasing issues, no multi-axis compatibility problems.
-
+Solid coloured bars (red/amber/teal) running along the x-axis beneath the chart area, each spanning the full width of its period with no gaps. Labels remain visible below.
