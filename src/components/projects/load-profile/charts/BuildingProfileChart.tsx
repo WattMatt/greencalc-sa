@@ -9,9 +9,11 @@ interface BuildingProfileChartProps {
   unit: string;
   includesBattery: boolean;
   touPeriodsOverride?: TOUPeriod[];
+  month?: number;
+  dayOfWeek?: number;
 }
 
-export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, includesBattery, touPeriodsOverride }: BuildingProfileChartProps) {
+export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, includesBattery, touPeriodsOverride, month, dayOfWeek }: BuildingProfileChartProps) {
   const totalLoad = chartData.reduce((sum, d) => sum + (d.total || 0), 0);
   const totalSolarUsed = chartData.reduce((sum, d) => sum + (d.solarUsed ?? d.pvGeneration ?? 0), 0);
   const totalPvRaw = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);
@@ -22,7 +24,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
 
   const getPeriod = (h: number): TOUPeriod => {
     if (touPeriodsOverride && touPeriodsOverride[h]) return touPeriodsOverride[h];
-    return getTOUPeriod(h, isWeekend);
+    return getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek);
   };
 
   return (

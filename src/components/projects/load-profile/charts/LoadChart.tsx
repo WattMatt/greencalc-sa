@@ -10,12 +10,14 @@ interface LoadChartProps {
   unit: string;
   isLoading?: boolean;
   touPeriodsOverride?: TOUPeriod[];
+  month?: number;
+  dayOfWeek?: number;
 }
 
-export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, touPeriodsOverride }: LoadChartProps) {
+export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, touPeriodsOverride, month, dayOfWeek }: LoadChartProps) {
   const getPeriod = (h: number): TOUPeriod => {
     if (touPeriodsOverride && touPeriodsOverride[h]) return touPeriodsOverride[h];
-    return getTOUPeriod(h, isWeekend);
+    return getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek);
   };
 
   if (isLoading) {

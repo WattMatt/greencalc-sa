@@ -9,15 +9,17 @@ interface GridFlowChartProps {
   isWeekend: boolean;
   unit: string;
   touPeriodsOverride?: TOUPeriod[];
+  month?: number;
+  dayOfWeek?: number;
 }
 
-export function GridFlowChart({ chartData, showTOU, isWeekend, unit, touPeriodsOverride }: GridFlowChartProps) {
+export function GridFlowChart({ chartData, showTOU, isWeekend, unit, touPeriodsOverride, month, dayOfWeek }: GridFlowChartProps) {
   const totalImport = chartData.reduce((sum, d) => sum + (d.gridImport || 0), 0);
   const totalExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
 
   const getPeriod = (h: number): TOUPeriod => {
     if (touPeriodsOverride && touPeriodsOverride[h]) return touPeriodsOverride[h];
-    return getTOUPeriod(h, isWeekend);
+    return getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek);
   };
 
   return (

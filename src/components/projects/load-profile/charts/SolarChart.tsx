@@ -12,12 +12,14 @@ interface SolarChartProps {
   unit: string;
   maxPvAcKva?: number;
   touPeriodsOverride?: TOUPeriod[];
+  month?: number;
+  dayOfWeek?: number;
 }
 
-export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1Comparison, unit, maxPvAcKva, touPeriodsOverride }: SolarChartProps) {
+export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1Comparison, unit, maxPvAcKva, touPeriodsOverride, month, dayOfWeek }: SolarChartProps) {
   const getPeriod = (h: number): TOUPeriod => {
     if (touPeriodsOverride && touPeriodsOverride[h]) return touPeriodsOverride[h];
-    return getTOUPeriod(h, isWeekend);
+    return getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek);
   };
 
   const totalPv = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);

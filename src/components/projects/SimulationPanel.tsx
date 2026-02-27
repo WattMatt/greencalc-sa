@@ -927,17 +927,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // Build TOU periods override array (24 entries) from the current day's data
   const touPeriodsForDay = useMemo((): LoadProfileTOUPeriod[] | undefined => {
     if (showAnnualAverage) {
-      // Use low-demand weekday TOU for annual average
-      return Array.from({ length: 24 }, (_, h) => {
-        const settings = touSettingsData;
-        return settings.lowSeason.weekday[h] || 'off-peak';
-      }) as LoadProfileTOUPeriod[];
+      // Annual average spans all seasons/day-types — TOU backgrounds are hidden (showTOU=false)
+      return undefined;
     }
     if (dailySlice.length === 24) {
       return dailySlice.map(h => h.touPeriod);
     }
     return undefined;
-  }, [showAnnualAverage, dailySlice, touSettingsData]);
+  }, [showAnnualAverage, dailySlice]);
 
   // The representative day data for chart rendering
   const representativeDay = useMemo(() => {
@@ -2367,6 +2364,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 unit="kW"
                 includesBattery={includesBattery && batteryCapacity > 0}
                 touPeriodsOverride={touPeriodsForDay}
+                month={dayDateInfo.month}
+                dayOfWeek={dayDateInfo.dayOfWeek}
               />
               {!showAnnualAverage && <TOULegend />}
             </CardContent>
@@ -2393,6 +2392,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 isWeekend={loadProfileIsWeekend} 
                 unit="kW"
                 touPeriodsOverride={touPeriodsForDay}
+                month={dayDateInfo.month}
+                dayOfWeek={dayDateInfo.dayOfWeek}
               />
               {!showAnnualAverage && <TOULegend />}
             </CardContent>
@@ -2419,6 +2420,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 isWeekend={loadProfileIsWeekend}
                 unit="kW"
                 touPeriodsOverride={touPeriodsForDay}
+                month={dayDateInfo.month}
+                dayOfWeek={dayDateInfo.dayOfWeek}
               />
               {!showAnnualAverage && <TOULegend />}
             </CardContent>
@@ -2448,6 +2451,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 unit="kW"
                 maxPvAcKva={solarCapacity}
                 touPeriodsOverride={touPeriodsForDay}
+                month={dayDateInfo.month}
+                dayOfWeek={dayDateInfo.dayOfWeek}
               />
               {!showAnnualAverage && <TOULegend />}
             </CardContent>
