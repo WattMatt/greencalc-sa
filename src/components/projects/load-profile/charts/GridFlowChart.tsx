@@ -1,5 +1,5 @@
 import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { buildTOUBoundaryLines } from "../utils/touReferenceAreas";
+import { buildTOUBoundaryLines, ShiftedReferenceLine } from "../utils/touReferenceAreas";
 import { Badge } from "@/components/ui/badge";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
@@ -45,7 +45,7 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit, touPeriodsO
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={1} barCategoryGap="5%">
             {showTOU && buildTOUBoundaryLines(getPeriod).map((line) => (
-              <ReferenceLine key={`tou-${line.hour}`} x={line.hour} stroke={line.color} strokeDasharray="4 3" strokeWidth={1.5} />
+              <ReferenceLine key={`tou-${line.hourNum}`} x={line.hour} stroke={line.color} strokeDasharray="4 3" strokeWidth={1.5} shape={<ShiftedReferenceLine />} />
             ))}
 
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
