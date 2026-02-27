@@ -1,57 +1,27 @@
 
-# Fix: Battery Charging Blocked by Empty TOU Period Default
+
+# Fix: Battery Profile TOU Period Overlay
 
 ## Problem
-The battery never charges despite the user configuring PV to charge during Off-Peak and Standard periods. The chart shows 0 charge, 0 discharge, and flat SoC.
+The Battery Profile chart in daily (day-to-day) mode does not display the Time-of-Use period background colours (Peak/Standard/Off-Peak), even though other charts like Load Profile and Grid Profile do.
 
 ## Root Cause
-The `isSourceActiveAtHour` function in `EnergySimulationEngine.ts` treats `undefined` TOU periods the same as "explicitly restricted to nothing":
-
-```text
-Line 190: const periods = touPeriods ?? defaultPeriods;
-```
-
-When `touPeriods` is `undefined` (not configured) and `defaultPeriods` is `[]` (the "no defaults" change), `periods` becomes `[]`. The loop iterates over zero items and returns `false` -- charging is blocked for every hour.
-
-This breaks because:
-1. `DEFAULT_CHARGE_SOURCES` defines `{ id: 'pv', enabled: true }` with NO `chargeTouPeriods`
-2. Sources exist, so the legacy fallback (`pvChargeAllowed: true`) is skipped (line 206-208)
-3. But each source's `chargeTouPeriods` is `undefined` which maps to `[]` which means "never active"
-4. Even after the user clicks checkboxes, any config restore (cache, strategy change) can lose `chargeTouPeriods` and silently revert to blocking
+After investigation, the TOU overlay code **does exist** in `BatteryChart.tsx` and the correct props are being passed from `SimulationPanel.tsx`. However, the `fillOpacity` is set to `0.08` -- significantly lower than other charts which use `0.12`. Combined with the chart's white background and the fact that if no `touPeriodsOverride` is available, the fallback `getTOUPeriod(h, isWeekend)` is called **without** month or dayOfWeek context, meaning all hours may resolve to "off-peak" (a single uniform teal), rendering the overlay effectively invisible.
 
 ## Fix
 
-**Single change in `isSourceActiveAtHour`** (line 190-191): When `touPeriods` is `undefined` AND `defaultPeriods` is empty, treat it as "no restriction configured" and return `true` (always active). This distinguishes three states:
+### 1. Increase TOU overlay opacity in BatteryChart (match other charts)
+Change `fillOpacity` from `0.08` to `0.12` to match LoadChart, GridFlowChart, SolarChart, and BuildingProfileChart.
 
-- `undefined` + empty default = **unrestricted** (no TOU filtering configured -- always active)
-- `['off-peak', 'standard']` = **restricted** to those specific periods
-- `[]` = **fully blocked** (impossible to reach via UI since at least 1 checkbox is required)
+### 2. Pass month and dayOfWeek context to BatteryChart
+Update the `BatteryChart` props to accept `month` and `dayOfWeek` so the fallback `getTOUPeriod` call can correctly determine the season and distinguish Saturday from Sunday -- matching how other charts resolve TOU periods.
 
-```text
-// EnergySimulationEngine.ts, isSourceActiveAtHour function
-function isSourceActiveAtHour(
-  hour: number,
-  touPeriods: ('off-peak' | 'standard' | 'peak')[] | undefined,
-  defaultPeriods: ('off-peak' | 'standard' | 'peak')[],
-  touPeriodToWindowsFn?: (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[],
-): boolean {
-  // If no TOU periods configured and no defaults provided, source is unrestricted
-  if (touPeriods === undefined && defaultPeriods.length === 0) return true;
-  
-  const periods = touPeriods ?? defaultPeriods;
-  if (!touPeriodToWindowsFn) return true;
-  for (const p of periods) {
-    const windows = touPeriodToWindowsFn(p);
-    if (windows.some(w => isInWindow(hour, w))) return true;
-  }
-  return false;
-}
-```
-
-No other files need to change. This respects "no defaults" while correctly handling unconfigured sources.
+### 3. Pass month/dayOfWeek from SimulationPanel
+Use the existing `dayDateInfo` (which already contains the date for the selected day index) to derive the month and dayOfWeek values and pass them to `BatteryChart`.
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/projects/simulation/EnergySimulationEngine.ts` | Add early return in `isSourceActiveAtHour` when `touPeriods` is undefined and defaults are empty |
+| `src/components/projects/load-profile/charts/BatteryChart.tsx` | Increase `fillOpacity` to `0.12`; accept `month` and `dayOfWeek` props; pass them to `getTOUPeriod` fallback |
+| `src/components/projects/SimulationPanel.tsx` | Derive month/dayOfWeek from `dayDateInfo` and pass to `BatteryChart` |
