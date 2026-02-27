@@ -108,6 +108,7 @@ export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, ba
             <Bar
               yAxisId="power"
               dataKey="batteryCharge"
+              stackId="battery"
               fill="hsl(142 76% 36%)"
               fillOpacity={0.6}
               radius={[2, 2, 0, 0]}
@@ -115,6 +116,7 @@ export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, ba
             <Bar
               yAxisId="power"
               dataKey="batteryDischarge"
+              stackId="battery"
               fill="hsl(25 95% 53%)"
               fillOpacity={0.6}
               radius={[2, 2, 0, 0]}
