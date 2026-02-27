@@ -924,6 +924,7 @@ export function runAnnualEnergySimulation(
   solarProfile: number[],    // 24-hour representative solar profile (kWh)
   config: EnergySimulationConfig,
   touSettings: TOUSettings,
+  solarProfile8760?: number[],  // Optional: 8,760 hourly solar values (kWh) for TMY
 ): AnnualEnergySimulationResults {
   const {
     batteryCapacity,
@@ -966,7 +967,9 @@ export function runAnnualEnergySimulation(
 
     for (let h = 0; h < 24; h++) {
       const load = loadProfile[h] || 0;
-      const solar = solarProfile[h] || 0;
+      const solar = solarProfile8760
+        ? (solarProfile8760[day.dayIndex * 24 + h] || 0)
+        : (solarProfile[h] || 0);
       const netLoad = load - solar;
 
       const hourState: HourState = {

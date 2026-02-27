@@ -43,6 +43,7 @@ export interface PVGISTMYResponse {
   summary: PVGISSummary;
   typicalDay: PVGISTypicalDay;
   monthly: PVGISMonthly[];
+  hourlyGhi8760?: number[];  // 8,760 hourly GHI values in W/m² (chronological)
   error?: string;
 }
 
