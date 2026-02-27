@@ -1315,6 +1315,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     blendedRateType,
     batteryStrategy,
     JSON.stringify(dispatchConfig),
+    batteryChargeCRate,
+    batteryDischargeCRate,
+    batteryMinSoC,
+    batteryMaxSoC,
+    chargeTouPeriod,
+    JSON.stringify(dischargeTouSelection),
+    useHourlyTouRates,
   ]);
 
   // Expose autoSave method to parent
