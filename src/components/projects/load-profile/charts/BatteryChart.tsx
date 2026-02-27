@@ -1,16 +1,24 @@
-import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 import { Battery } from "lucide-react";
-import { ChartDataPoint } from "../types";
+import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 
 interface BatteryChartProps {
   chartData: ChartDataPoint[];
   batteryCapacity: number;
   batteryAcCapacity?: number;
   batteryPower: number;
+  showTOU?: boolean;
+  isWeekend?: boolean;
+  touPeriodsOverride?: TOUPeriod[];
 }
 
-export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, batteryPower }: BatteryChartProps) {
+export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, batteryPower, showTOU = false, isWeekend = false, touPeriodsOverride }: BatteryChartProps) {
   const displayCapacity = batteryAcCapacity ?? batteryCapacity;
+
+  const getPeriod = (h: number): TOUPeriod => {
+    if (touPeriodsOverride && touPeriodsOverride[h]) return touPeriodsOverride[h];
+    return getTOUPeriod(h, isWeekend);
+  };
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
@@ -36,6 +44,20 @@ export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, ba
       <div className="h-[150px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 10, right: 40, left: 0, bottom: 0 }}>
+            {showTOU &&
+              Array.from({ length: 24 }, (_, h) => {
+                const period = getPeriod(h);
+                return (
+                  <ReferenceArea
+                    key={h}
+                    x1={`${h.toString().padStart(2, "0")}:00`}
+                    x2={`${(h + 1).toString().padStart(2, "0")}:00`}
+                    fill={TOU_COLORS[period].fill}
+                    fillOpacity={0.08}
+                    stroke="none"
+                  />
+                );
+              })}
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
             <XAxis
               dataKey="hour"

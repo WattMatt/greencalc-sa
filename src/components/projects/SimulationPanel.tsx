@@ -2484,7 +2484,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   batteryCapacity={batteryCapacity}
                   batteryAcCapacity={batteryAcCapacity}
                   batteryPower={batteryChargePower}
+                  showTOU={!showAnnualAverage}
+                  isWeekend={loadProfileIsWeekend}
+                  touPeriodsOverride={touPeriodsForDay}
                 />
+                {!showAnnualAverage && <TOULegend />}
               </CardContent>
             </Card>
           </TabsContent>
