@@ -1,35 +1,54 @@
 
 
-# Restore Full TOU Arbitrage Discharge Matrix
+# Fix: Auto-save Missing Battery and PV Configuration Dependencies
 
 ## Problem
-The TOU Arbitrage discharge selection currently shows only 3 checkboxes (Peak, Standard, Off-Peak), all reading/writing to `lowSeason.weekday` only. The full `DischargeTOUSelection` data structure supports 12 independent flags across 4 groups (High-Demand Weekday, High-Demand Weekend, Low-Demand Weekday, Low-Demand Weekend), each with Peak/Standard/Off-Peak toggles. The UI needs to expose all 12 cells.
+The auto-save `useEffect` dependency array (lines 1302-1318 in `SimulationPanel.tsx`) only watches a subset of configuration values. Several battery and dispatch variables are **saved in the mutation body** but are **not listed as dependencies**, meaning changes to them never trigger an auto-save.
 
-## Solution
-Replace the simple 3-checkbox row in `AdvancedSimulationConfig.tsx` (lines 1336-1369) with a proper grid/table layout:
+### Missing from auto-save dependency array:
+- `batteryChargeCRate`
+- `batteryDischargeCRate`
+- `batteryDoD` (derived, but should still trigger)
+- `batteryMinSoC`
+- `batteryMaxSoC`
+- `chargeTouPeriod`
+- `JSON.stringify(dischargeTouSelection)`
+- `useHourlyTouRates`
 
-```text
-                    Peak    Standard   Off-Peak
-High-Demand
-  Weekday           [x]      [x]        [ ]
-  Weekend           [ ]      [ ]        [ ]
-Low-Demand
-  Weekday           [x]      [x]        [ ]
-  Weekend           [ ]      [ ]        [ ]
+The manual save (`SavedSimulations.tsx`) and the load handler both correctly handle these fields already. The only gap is the auto-save trigger.
+
+## Fix
+
+### File: `src/components/projects/SimulationPanel.tsx`
+
+**Lines 1302-1318** -- Add missing variables to the auto-save `useEffect` dependency array:
+
+```typescript
+], [
+  solarCapacity,
+  batteryCapacity,
+  batteryPower,
+  JSON.stringify(pvConfig),
+  JSON.stringify(inverterConfig),
+  JSON.stringify(pvsystConfig),
+  JSON.stringify(advancedConfig),
+  lossCalculationMode,
+  productionReductionPercent,
+  solarDataSource,
+  JSON.stringify(systemCosts),
+  blendedRateType,
+  batteryStrategy,
+  JSON.stringify(dispatchConfig),
+  // Previously missing battery characteristics
+  batteryChargeCRate,
+  batteryDischargeCRate,
+  batteryMinSoC,
+  batteryMaxSoC,
+  chargeTouPeriod,
+  JSON.stringify(dischargeTouSelection),
+  useHourlyTouRates,
+]);
 ```
 
-## File: `src/components/projects/simulation/AdvancedSimulationConfig.tsx`
-
-**Lines 1336-1369** -- Replace the simplified 3-checkbox block with a 4-row x 3-column grid:
-
-- **Header row**: Peak | Standard | Off-Peak (colour-coded per project standard: red, amber, teal)
-- **4 data rows**: High-Demand Weekday, High-Demand Weekend, Low-Demand Weekday, Low-Demand Weekend
-- Each cell is a `<Checkbox>` bound to the corresponding flag in `dischargeTouSelection`
-- Season labels ("High-Demand", "Low-Demand") styled with indigo/violet per the project colour standard
-- On change, build the full `DischargeTOUSelection` object and call `onDischargeTouSelectionChange`
-- Keep the existing guard: at least one flag must remain checked (prevent all-unchecked state)
-
-**Also update the strategy-change handler** (lines 1305-1316) to use the full selection object when computing discharge windows, not just `lowSeason.weekday`.
-
-No changes needed to the data types (`DischargeTOUSelection` in `load-profile/types.ts` already has the full structure) or to `SimulationPanel.tsx` (it already passes the full selection object).
+This is a single-line-range edit. No other files need changes -- the save payload and load handlers already include all these fields.
 
