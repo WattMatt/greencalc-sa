@@ -106,11 +106,11 @@ export interface DischargeTOUSelection {
 
 export const DEFAULT_DISCHARGE_TOU_SELECTION: DischargeTOUSelection = {
   highSeason: {
-    weekday: { peak: true, standard: false, offPeak: false },
+    weekday: { peak: false, standard: false, offPeak: false },
     weekend: { peak: false, standard: false, offPeak: false },
   },
   lowSeason: {
-    weekday: { peak: true, standard: false, offPeak: false },
+    weekday: { peak: false, standard: false, offPeak: false },
     weekend: { peak: false, standard: false, offPeak: false },
   },
 };

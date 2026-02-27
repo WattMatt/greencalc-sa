@@ -202,53 +202,55 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   
   const [solarCapacity, setSolarCapacity] = useState(() => {
     const c = getCachedSimulation();
-    return c?.sim?.solar_capacity_kwp || 100;
+    return c?.sim?.solar_capacity_kwp ?? 0;
   });
   const [batteryAcCapacity, setBatteryAcCapacity] = useState(() => {
     const c = getCachedSimulation();
     if (c) {
-      const minSoC = c.json?.batteryMinSoC ?? 10;
-      const maxSoC = c.json?.batteryMaxSoC ?? 95;
+      const minSoC = c.json?.batteryMinSoC ?? 0;
+      const maxSoC = c.json?.batteryMaxSoC ?? 0;
       const dod = maxSoC - minSoC;
-      const dcCap = includesBattery ? (c.sim.battery_capacity_kwh || 50) : 0;
+      const dcCap = includesBattery ? (c.sim.battery_capacity_kwh || 0) : 0;
       return Math.round(dcCap * dod / 100);
     }
-    return includesBattery ? 42 : 0;
+    return 0;
   });
   const [batteryChargeCRate, setBatteryChargeCRate] = useState(() => {
     const c = getCachedSimulation();
     if (c?.json?.batteryChargeCRate) return c.json.batteryChargeCRate;
     if (c?.json?.batteryCRate) return c.json.batteryCRate;
-    return 0.5;
+    return 0;
   });
   const [batteryDischargeCRate, setBatteryDischargeCRate] = useState(() => {
     const c = getCachedSimulation();
     if (c?.json?.batteryDischargeCRate) return c.json.batteryDischargeCRate;
     if (c?.json?.batteryCRate) return c.json.batteryCRate;
-    return 0.5;
+    return 0;
   });
   const [batteryMinSoC, setBatteryMinSoC] = useState(() => {
     const c = getCachedSimulation();
-    return c?.json?.batteryMinSoC ?? 10;
+    return c?.json?.batteryMinSoC ?? 0;
   });
   const [batteryMaxSoC, setBatteryMaxSoC] = useState(() => {
     const c = getCachedSimulation();
-    return c?.json?.batteryMaxSoC ?? 95;
+    return c?.json?.batteryMaxSoC ?? 0;
   });
    
    // Battery dispatch strategy
    const [batteryStrategy, setBatteryStrategy] = useState<BatteryDispatchStrategy>(() => {
      const c = getCachedSimulation();
-     return c?.json?.batteryStrategy || 'self-consumption';
+     return c?.json?.batteryStrategy ?? 'none';
    });
    const [dispatchConfig, setDispatchConfig] = useState<DispatchConfig>(() => {
      const c = getCachedSimulation();
-     const strategy = c?.json?.batteryStrategy || 'self-consumption';
-     return c?.json?.dispatchConfig ?? getDefaultDispatchConfig(strategy);
+     return c?.json?.dispatchConfig ?? getDefaultDispatchConfig('none');
    });
    
    // TOU period selections for TOU Arbitrage mode
-   const [chargeTouPeriod, setChargeTouPeriod] = useState<TOUPeriod>('off-peak');
+   const [chargeTouPeriod, setChargeTouPeriod] = useState<TOUPeriod>(() => {
+     const c = getCachedSimulation();
+     return c?.json?.chargeTouPeriod ?? 'off-peak';
+   });
    const [dischargeTouSelection, setDischargeTouSelection] = useState<DischargeTOUSelection>(() => {
      const c = getCachedSimulation();
      return c?.json?.dischargeTouSelection ?? DEFAULT_DISCHARGE_TOU_SELECTION;
