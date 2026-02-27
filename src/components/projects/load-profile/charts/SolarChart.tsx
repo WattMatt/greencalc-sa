@@ -144,34 +144,31 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
               tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} 
               tickLine={false} 
               axisLine={false} 
-              tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} 
+              tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} 
               width={45} 
               domain={yAxisMax ? [0, yAxisMax] : ["auto", "auto"]} 
             />
             
             {dcAcRatio > 1 && maxPvAcKva && (
-              <>
-                <ReferenceLine y={maxPvAcKva} stroke="hsl(var(--destructive))" strokeDasharray="6 4" strokeWidth={1.5} label={{ value: `Inverter AC Limit`, position: "insideTopRight", fontSize: 9, fill: "hsl(var(--destructive))" }} />
-                <YAxis 
-                  yAxisId="acLimit" 
-                  orientation="left" 
-                  tick={({ x, y, payload }: any) => {
-                    if (payload.value !== maxPvAcKva) return <g />;
-                    const label = maxPvAcKva >= 1000 ? `${(maxPvAcKva / 1000).toFixed(1)}k` : maxPvAcKva.toFixed(0);
-                    return (
-                      <text x={x} y={y} dy={3} textAnchor="end" fontSize={9} fontWeight={600} fill="hsl(var(--destructive))">
-                        {label}
+              <ReferenceLine 
+                y={maxPvAcKva} 
+                stroke="hsl(var(--destructive))" 
+                strokeDasharray="6 4" 
+                strokeWidth={1.5} 
+                label={({ viewBox }: any) => {
+                  const acLabel = maxPvAcKva >= 1000 ? `${(maxPvAcKva / 1000).toFixed(1)}k` : maxPvAcKva.toFixed(0);
+                  return (
+                    <g>
+                      <text x={viewBox.x - 4} y={viewBox.y - 4} textAnchor="end" fontSize={9} fontWeight={600} fill="hsl(var(--destructive))">
+                        {acLabel}
                       </text>
-                    );
-                  }}
-                  ticks={[maxPvAcKva]}
-                  tickLine={false}
-                  axisLine={false}
-                  width={45}
-                  domain={yAxisMax ? [0, yAxisMax] : ["auto", "auto"]}
-                  mirror
-                />
-              </>
+                      <text x={viewBox.x + viewBox.width - 4} y={viewBox.y - 4} textAnchor="end" fontSize={9} fill="hsl(var(--destructive))">
+                        Inverter AC Limit
+                      </text>
+                    </g>
+                  );
+                }}
+              />
             )}
             
             <Tooltip
