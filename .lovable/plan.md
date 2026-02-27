@@ -1,57 +1,36 @@
 
-# Stacked Bar Chart for Building Profile
 
-## What Changes
+# Building Profile: Load as Line + Fix Colour Blending
 
-Convert the Building Profile chart from side-by-side bars + lines into a **stacked bar chart** that clearly shows positive and negative power flows.
-
-### Data Model for Stacking
-
-The chart data needs to be transformed so that bars stack correctly. The building's energy balance at each hour is:
-
-**Positive stack (supply to load):**
-- PV to Load (solar used directly)
-- Grid Import
-- Battery Discharge (if battery present)
-
-**Negative stack (export/storage):**
-- Grid Export (shown as negative)
-- Battery Charge (shown as negative)
-
-The **Load** bar will remain as a separate unstacked bar for reference (shown behind the stacked bars).
+## Changes
 
 ### File: `src/components/projects/load-profile/charts/BuildingProfileChart.tsx`
 
-1. **Pre-process chart data** to add negative values for export and charge:
-   - Add `gridExportNeg` = `-(gridExport)` for each data point
-   - Add `batteryChargeNeg` = `-(batteryCharge)` for each data point
+**1. Import `Line` from recharts** (add to existing import on line 1).
 
-2. **Replace individual Bars with stacked Bars** using `stackId="building"`:
-   - `solarUsed` -- stackId="building", positive (amber)
-   - `gridImport` -- stackId="building", positive (red)
-   - `batteryDischarge` -- stackId="building", positive (orange), conditional on `includesBattery`
-   - `gridExportNeg` -- stackId="building", negative (green)
-   - `batteryChargeNeg` -- stackId="building", negative (green), conditional on `includesBattery`
+**2. Convert Load from Bar to Line overlay**
+- Remove `<Bar dataKey="total" ...>` (line 130)
+- Add a `<Line>` element **after** all Bar elements so it renders on top:
+  - `type="stepAfter"` for a stepped profile matching the bar edges
+  - `dataKey="total"`, stroke = `hsl(var(--primary))`, `strokeWidth={2}`, `dot={false}`
 
-3. **Keep Load as a separate unstacked Bar** (blue, lower opacity) so users can see the total demand envelope behind the stacked components.
+**3. Increase bar fillOpacity to eliminate brown blending**
+The muddy brown colour is caused by semi-transparent red (import) stacking on top of semi-transparent amber (solar). Increasing opacity to near-opaque prevents bleed-through:
+- `solarUsed`: fillOpacity 0.6 -> 0.85
+- `gridImport`: fillOpacity 0.5 -> 0.85
+- `batteryDischarge`: fillOpacity 0.6 -> 0.85
+- `gridExportNeg`: fillOpacity 0.5 -> 0.7
+- `batteryChargeNeg`: fillOpacity 0.3 -> 0.6
 
-4. **Add a ReferenceLine at y=0** to clearly separate positive (consumption) from negative (export/charge) flows.
+**4. Update Load legend indicator** from a square to a line dash to reflect it is now a line, not a bar.
 
-5. **Update legend icons** -- change the line indicators for Charge/Discharge to square indicators (since they are now bars, not lines).
-
-6. **Update tooltip** -- no changes needed, it already shows all values correctly.
-
-7. **Adjust Y-axis** to auto-scale into negative territory to accommodate export and charge values below zero.
-
-### Technical Details
-
+### Visual Result
 ```text
-Stacking order (bottom to top):
-  Positive:  [PV to Load] + [Grid Import] + [Battery Discharge]
-  Negative:  [Grid Export] + [Battery Charge]
-  Separate:  [Load] (unstacked, behind)
+Line (on top):  ---- Load (blue stepped line) ----
+Bars (stacked):  [PV to Load] + [Grid Import] + [Battery Discharge]  (positive, opaque)
+                 [Grid Export] + [Battery Charge]  (negative)
+Reference:       ---- y=0 line ----
 ```
 
-The `ComposedChart` already supports mixed stacked/unstacked bars. The key change is adding `stackId="building"` to the supply/sink bars and pre-computing negative values for export and charge so they render below the zero line.
+No other files are affected.
 
-No other chart files are affected -- this change is isolated to `BuildingProfileChart.tsx`.
