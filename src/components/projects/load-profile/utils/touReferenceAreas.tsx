@@ -53,7 +53,7 @@ export function TOUBarsLayer(props: any) {
     bars.push(
       <rect
         key={h}
-        x={cx - bandSize}
+        x={cx - bandSize / 2}
         y={barY}
         width={bandSize}
         height={barHeight}
