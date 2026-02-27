@@ -1,4 +1,5 @@
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { buildTOUReferenceAreas } from "../utils/touReferenceAreas";
 import { Battery } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 
@@ -46,20 +47,7 @@ export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, ba
       <div className="h-[150px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 40, left: 0, bottom: 0 }} barGap={1} barCategoryGap="5%">
-            {showTOU &&
-              Array.from({ length: 24 }, (_, h) => {
-                const period = getPeriod(h);
-                return (
-                  <ReferenceArea
-                    key={h}
-                    x1={`${h.toString().padStart(2, "0")}:00`}
-                    x2={`${(h + 1).toString().padStart(2, "0")}:00`}
-                    fill={TOU_COLORS[period].fill}
-                    fillOpacity={0.18}
-                    stroke="none"
-                  />
-                );
-              })}
+            {showTOU && buildTOUReferenceAreas(getPeriod)}
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
             <XAxis
               dataKey="hour"
