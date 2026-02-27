@@ -1,4 +1,4 @@
-import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 import { Badge } from "@/components/ui/badge";
 
@@ -39,7 +39,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-3 text-[10px]">
         <span className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-sm bg-primary/60" />
+          <div className="w-4 h-0.5 bg-primary" />
           Load: {totalLoad.toFixed(0)} {unit}h
         </span>
         <span className="flex items-center gap-1">
@@ -126,21 +126,21 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
               }}
             />
 
-            {/* Load as unstacked background bar */}
-            <Bar dataKey="total" fill="hsl(var(--primary))" fillOpacity={0.3} radius={[2, 2, 0, 0]} name="Load" />
-
             {/* Positive stacked bars */}
-            <Bar dataKey="solarUsed" stackId="building" fill="hsl(38 92% 50%)" fillOpacity={0.6} radius={[0, 0, 0, 0]} name="PV to Load" />
-            <Bar dataKey="gridImport" stackId="building" fill="hsl(0 72% 51%)" fillOpacity={0.5} radius={[0, 0, 0, 0]} name="Grid Import" />
+            <Bar dataKey="solarUsed" stackId="building" fill="hsl(38 92% 50%)" fillOpacity={0.85} radius={[0, 0, 0, 0]} name="PV to Load" />
+            <Bar dataKey="gridImport" stackId="building" fill="hsl(0 72% 51%)" fillOpacity={0.85} radius={[0, 0, 0, 0]} name="Grid Import" />
             {includesBattery && (
-              <Bar dataKey="batteryDischarge" stackId="building" fill="hsl(25 95% 53%)" fillOpacity={0.6} radius={[0, 0, 0, 0]} name="Battery Discharge" />
+              <Bar dataKey="batteryDischarge" stackId="building" fill="hsl(25 95% 53%)" fillOpacity={0.85} radius={[0, 0, 0, 0]} name="Battery Discharge" />
             )}
 
             {/* Negative stacked bars */}
-            <Bar dataKey="gridExportNeg" stackId="building" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[0, 0, 0, 0]} name="Grid Export" />
+            <Bar dataKey="gridExportNeg" stackId="building" fill="hsl(142 76% 36%)" fillOpacity={0.7} radius={[0, 0, 0, 0]} name="Grid Export" />
             {includesBattery && (
-              <Bar dataKey="batteryChargeNeg" stackId="building" fill="hsl(142 76% 36%)" fillOpacity={0.3} radius={[0, 0, 0, 0]} name="Battery Charge" />
+              <Bar dataKey="batteryChargeNeg" stackId="building" fill="hsl(142 76% 36%)" fillOpacity={0.6} radius={[0, 0, 0, 0]} name="Battery Charge" />
             )}
+
+            {/* Load as stepped line overlay */}
+            <Line type="stepAfter" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Load" />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
