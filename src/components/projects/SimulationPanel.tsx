@@ -880,7 +880,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const effectiveSolarProfile = includesSolar ? chartSolarProfile : loadProfile.map(() => 0);
 
   // Compute 8,760-hour TMY solar profile when TMY source is active and data is available
-  const tmySolarProfile8760 = useMemo(() => {
+  const tmyConversionResult = useMemo(() => {
     if (solarDataSource !== "pvgis_tmy" || !pvgisTmyData?.hourlyGhi8760 || !includesSolar) {
       return undefined;
     }
@@ -904,8 +904,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       stcEfficiency: moduleMetrics.stcEfficiency,
       pvsystConfig: configWithModuleData,
       reductionFactor: 1 - (productionReductionPercent / 100),
+      maxAcOutputKw: solarCapacity,
     });
-  }, [solarDataSource, pvgisTmyData, includesSolar, lossCalculationMode, pvsystConfig, moduleMetrics, productionReductionPercent]);
+  }, [solarDataSource, pvgisTmyData, includesSolar, lossCalculationMode, pvsystConfig, moduleMetrics, productionReductionPercent, solarCapacity]);
+
+  // Extract DC and AC arrays from TMY conversion result
+  const tmyDcProfile8760 = tmyConversionResult?.dcOutput;
+  const tmySolarProfile8760 = tmyConversionResult?.acOutput;
 
   // 8,760-hour annual simulation — single source of truth for all kWh and financial data
   const annualEnergyResults = useMemo(() =>
@@ -1101,9 +1106,29 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return loadProfileChartData.map((hour, i) => {
       const engineHour = representativeDay[i];
       if (!engineHour) return hour;
+
+      // Use TMY DC data for pvDcOutput and pvClipping when available
+      let pvDcOutput = hour.pvDcOutput;
+      let pvClipping = hour.pvClipping;
+      if (tmyDcProfile8760 && !showAnnualAverage) {
+        const idx = selectedDayIndex * 24 + i;
+        pvDcOutput = tmyDcProfile8760[idx] || 0;
+        pvClipping = Math.max(0, pvDcOutput - solarCapacity);
+      } else if (tmyDcProfile8760 && showAnnualAverage) {
+        // Average all 365 days for this hour
+        let sum = 0;
+        for (let d = 0; d < 365; d++) {
+          sum += tmyDcProfile8760[d * 24 + i] || 0;
+        }
+        pvDcOutput = sum / 365;
+        pvClipping = Math.max(0, pvDcOutput - solarCapacity);
+      }
+
       return {
         ...hour,
         pvGeneration: ('pvGeneration' in engineHour ? (engineHour as any).pvGeneration : (engineHour as any).solar) ?? hour.pvGeneration,
+        pvDcOutput,
+        pvClipping,
         batteryCharge: engineHour.batteryCharge,
         batteryDischarge: engineHour.batteryDischarge,
         batterySoC: (engineHour.batterySOC / 100) * batteryCapacity,
@@ -1114,7 +1139,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         solarUsed: engineHour.solarUsed,
       };
     });
-  }, [loadProfileChartData, representativeDay]);
+  }, [loadProfileChartData, representativeDay, tmyDcProfile8760, selectedDayIndex, showAnnualAverage, solarCapacity]);
 
   // Check if financial analysis is available (moved up for use in advanced simulation)
   const hasFinancialData = !!project.tariff_id;
