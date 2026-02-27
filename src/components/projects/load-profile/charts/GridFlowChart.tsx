@@ -99,8 +99,8 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit, touPeriodsO
               }}
             />
 
-            <Bar dataKey="gridImport" fill="hsl(0 72% 51%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
-            <Bar dataKey="gridExport" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
+            <Bar dataKey="gridImport" stackId="grid" fill="hsl(0 72% 51%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
+            <Bar dataKey="gridExport" stackId="grid" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
