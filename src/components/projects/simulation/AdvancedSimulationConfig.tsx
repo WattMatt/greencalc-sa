@@ -1370,13 +1370,6 @@ function BatteryCharacteristicsSection({
               },
             };
             newSel[seasonKey][dayKey][periodKey] = checked;
-            // Guard: at least one flag must remain checked
-            const allFalse = (['highSeason', 'lowSeason'] as const).every(s =>
-              (['weekday', 'weekend'] as const).every(d =>
-                !newSel[s][d].peak && !newSel[s][d].standard && !newSel[s][d].offPeak
-              )
-            );
-            if (allFalse) return;
             onDischargeTouSelectionChange?.(newSel);
           };
 
