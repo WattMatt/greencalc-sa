@@ -1,42 +1,35 @@
 
-# Replace "Loaded" Banner with Collapsible Saved Configurations Dropdown
 
-## What Changes
+# Restore Full TOU Arbitrage Discharge Matrix
 
-1. **Remove the "Loaded: Auto-saved Feb 27, 08:01" banner** from the top of the Simulation panel (lines 1481-1506 of `SimulationPanel.tsx`). This blue card with the CheckCircle2 icon is not useful as a persistent banner.
+## Problem
+The TOU Arbitrage discharge selection currently shows only 3 checkboxes (Peak, Standard, Off-Peak), all reading/writing to `lowSeason.weekday` only. The full `DischargeTOUSelection` data structure supports 12 independent flags across 4 groups (High-Demand Weekday, High-Demand Weekend, Low-Demand Weekday, Low-Demand Weekend), each with Peak/Standard/Off-Peak toggles. The UI needs to expose all 12 cells.
 
-2. **Replace it with a collapsible dropdown** that shows the saved configurations list inline. The collapsible header will display the currently loaded simulation name (e.g. "Auto-saved Feb 27, 08:01") and expand to show the full list of saved configs when clicked.
+## Solution
+Replace the simple 3-checkbox row in `AdvancedSimulationConfig.tsx` (lines 1336-1369) with a proper grid/table layout:
 
-3. **Auto-select the most recent saved configuration** when entering the tab. The existing `hasInitializedFromSaved` logic already loads the last saved simulation on mount -- this behaviour stays. The collapsible header just reflects which config is active.
-
-## Technical Details
-
-### SimulationPanel.tsx
-- **Remove** the "Loaded Simulation Indicator" Card block (lines 1481-1506)
-- **Replace** it with a `Collapsible` component that:
-  - Has a trigger showing the loaded simulation name + date (or "No configuration loaded" if none)
-  - Contains the `SavedSimulations` component inside `CollapsibleContent`
-  - Starts collapsed by default
-- Move the `SavedSimulations` rendering from its current position (line 2138) into this collapsible
-- Keep `loadedSimulationName` and `loadedSimulationDate` state for the header display
-
-### SavedSimulations.tsx
-- No structural changes needed -- it already handles loading, comparing, saving, and deleting
-- The component will simply be rendered inside the collapsible content instead of at the bottom of the panel
-
-### UI Layout
-```
-[Collapsible Trigger: "Auto-saved Feb 27, 08:01 . 27 Feb 2026 08:01" ChevronDown]
-  |-- (expanded) --|
-  | Actions bar (compare button, save count, Save button)        |
-  | Comparison table (if comparing)                               |
-  | Saved config cards (clickable to load, with checkboxes, etc.) |
-  |--------------------------------------------------------------|
+```text
+                    Peak    Standard   Off-Peak
+High-Demand
+  Weekday           [x]      [x]        [ ]
+  Weekend           [ ]      [ ]        [ ]
+Low-Demand
+  Weekday           [x]      [x]        [ ]
+  Weekend           [ ]      [ ]        [ ]
 ```
 
-### Files Changed
+## File: `src/components/projects/simulation/AdvancedSimulationConfig.tsx`
 
-| File | Change |
-|------|--------|
-| `SimulationPanel.tsx` | Remove loaded-banner card; wrap SavedSimulations in a Collapsible at the banner's former position; remove the old SavedSimulations render location |
-| `SavedSimulations.tsx` | No changes |
+**Lines 1336-1369** -- Replace the simplified 3-checkbox block with a 4-row x 3-column grid:
+
+- **Header row**: Peak | Standard | Off-Peak (colour-coded per project standard: red, amber, teal)
+- **4 data rows**: High-Demand Weekday, High-Demand Weekend, Low-Demand Weekday, Low-Demand Weekend
+- Each cell is a `<Checkbox>` bound to the corresponding flag in `dischargeTouSelection`
+- Season labels ("High-Demand", "Low-Demand") styled with indigo/violet per the project colour standard
+- On change, build the full `DischargeTOUSelection` object and call `onDischargeTouSelectionChange`
+- Keep the existing guard: at least one flag must remain checked (prevent all-unchecked state)
+
+**Also update the strategy-change handler** (lines 1305-1316) to use the full selection object when computing discharge windows, not just `lowSeason.weekday`.
+
+No changes needed to the data types (`DischargeTOUSelection` in `load-profile/types.ts` already has the full structure) or to `SimulationPanel.tsx` (it already passes the full selection object).
+
