@@ -96,6 +96,7 @@ interface UsePVGISProfileOptions {
   latitude: number | null;
   longitude: number | null;
   projectId?: string;
+  forceRefresh?: boolean;
 }
 
 interface CachedSolarData {
@@ -208,14 +209,14 @@ export function usePVGISProfile() {
 
   // Fetch TMY data
   const fetchTMY = useCallback(
-    async ({ latitude, longitude, projectId }: UsePVGISProfileOptions) => {
+    async ({ latitude, longitude, projectId, forceRefresh }: UsePVGISProfileOptions) => {
       if (!latitude || !longitude) {
         setTmyError("Location coordinates required");
         return null;
       }
 
-      // Check cache first
-      if (projectId) {
+      // Check cache first (unless forceRefresh)
+      if (projectId && !forceRefresh) {
         const cached = await checkCache(projectId, "tmy", latitude, longitude);
         if (cached) {
           setTmyData(cached as PVGISTMYResponse);
@@ -263,14 +264,14 @@ export function usePVGISProfile() {
 
   // Fetch Monthly Radiation data (2005-2023 averaged)
   const fetchMonthlyRadiation = useCallback(
-    async ({ latitude, longitude, projectId }: UsePVGISProfileOptions) => {
+    async ({ latitude, longitude, projectId, forceRefresh }: UsePVGISProfileOptions) => {
       if (!latitude || !longitude) {
         setMonthlyError("Location coordinates required");
         return null;
       }
 
-      // Check cache first
-      if (projectId) {
+      // Check cache first (unless forceRefresh)
+      if (projectId && !forceRefresh) {
         const cached = await checkCache(projectId, "monthly_radiation", latitude, longitude);
         if (cached) {
           setMonthlyData(cached as PVGISMonthlyResponse);
@@ -318,12 +319,12 @@ export function usePVGISProfile() {
 
   // Fetch both datasets in parallel
   const fetchBothDatasets = useCallback(
-    async ({ latitude, longitude, projectId }: UsePVGISProfileOptions) => {
+    async ({ latitude, longitude, projectId, forceRefresh }: UsePVGISProfileOptions) => {
       if (!latitude || !longitude) return { tmy: null, monthly: null };
 
       const [tmy, monthly] = await Promise.all([
-        fetchTMY({ latitude, longitude, projectId }),
-        fetchMonthlyRadiation({ latitude, longitude, projectId }),
+        fetchTMY({ latitude, longitude, projectId, forceRefresh }),
+        fetchMonthlyRadiation({ latitude, longitude, projectId, forceRefresh }),
       ]);
 
       return { tmy, monthly };
