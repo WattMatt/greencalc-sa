@@ -36,7 +36,7 @@ export function TOUBarsLayer(props: any) {
   if (!xAxis) return null;
 
   const { scale, bandSize } = xAxis;
-  const barY = offset.top + offset.height + 2;
+  const barY = offset.top + offset.height + 4;
   const barHeight = 5;
 
   // Build bars for hours 0-23
@@ -50,18 +50,38 @@ export function TOUBarsLayer(props: any) {
     const color = period ? TOU_COLORS[period]?.stroke : undefined;
     if (!color) continue;
 
+    // First bar: right half only (don't overflow past Y-axis)
+    const rectX = h === 0 ? cx : cx - bandSize / 2;
+    const rectW = h === 0 ? bandSize / 2 : bandSize;
+
     bars.push(
       <rect
         key={h}
-        x={cx - bandSize / 2}
+        x={rectX}
         y={barY}
-        width={bandSize}
+        width={rectW}
         height={barHeight}
         fill={color}
         opacity={0.55}
         rx={1}
       />
     );
+
+    // Last bar: add trailing half-bar to reach end of axis
+    if (h === 23) {
+      bars.push(
+        <rect
+          key="trailing"
+          x={cx + bandSize / 2}
+          y={barY}
+          width={bandSize / 2}
+          height={barHeight}
+          fill={color}
+          opacity={0.55}
+          rx={1}
+        />
+      );
+    }
   }
 
   return <g className="tou-bars-layer">{bars}</g>;
