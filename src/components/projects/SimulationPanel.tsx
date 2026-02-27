@@ -2487,6 +2487,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   showTOU={!showAnnualAverage}
                   isWeekend={loadProfileIsWeekend}
                   touPeriodsOverride={touPeriodsForDay}
+                  month={dayDateInfo.month}
+                  dayOfWeek={dayDateInfo.dayOfWeek}
                 />
                 {!showAnnualAverage && <TOULegend />}
               </CardContent>
