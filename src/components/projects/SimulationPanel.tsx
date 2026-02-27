@@ -249,9 +249,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
    });
    
    // TOU period selections for TOU Arbitrage mode
-   const [chargeTouPeriod, setChargeTouPeriod] = useState<TOUPeriod>(() => {
+   const [chargeTouPeriod, setChargeTouPeriod] = useState<TOUPeriod | undefined>(() => {
      const c = getCachedSimulation();
-     return c?.json?.chargeTouPeriod ?? 'off-peak';
+     return c?.json?.chargeTouPeriod ?? undefined;
    });
    const [dischargeTouSelection, setDischargeTouSelection] = useState<DischargeTOUSelection>(() => {
      const c = getCachedSimulation();
@@ -344,16 +344,16 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       console.log("Auto-loading saved simulation:", lastSavedSimulation.name, savedResultsJson);
       
       // Load configuration values
-      setSolarCapacity(lastSavedSimulation.solar_capacity_kwp || 100);
-      const savedMinSoC = savedResultsJson?.batteryMinSoC ?? 10;
-      const savedMaxSoC = savedResultsJson?.batteryMaxSoC ?? 95;
+      setSolarCapacity(lastSavedSimulation.solar_capacity_kwp || 0);
+      const savedMinSoC = savedResultsJson?.batteryMinSoC ?? 0;
+      const savedMaxSoC = savedResultsJson?.batteryMaxSoC ?? 0;
       const savedDoD = savedMaxSoC - savedMinSoC;
       const savedChargeCRate = savedResultsJson?.batteryChargeCRate ?? savedResultsJson?.batteryCRate;
       const savedDischargeCRate = savedResultsJson?.batteryDischargeCRate ?? savedResultsJson?.batteryCRate;
       setBatteryMinSoC(savedMinSoC);
       setBatteryMaxSoC(savedMaxSoC);
-      const savedDcCap = includesBattery ? (lastSavedSimulation.battery_capacity_kwh || 50) : 0;
-      const savedPower = includesBattery ? (lastSavedSimulation.battery_power_kw || 25) : 0;
+      const savedDcCap = includesBattery ? (lastSavedSimulation.battery_capacity_kwh || 0) : 0;
+      const savedPower = includesBattery ? (lastSavedSimulation.battery_power_kw || 0) : 0;
       const derivedAc = Math.round(savedDcCap * savedDoD / 100);
       setBatteryAcCapacity(derivedAc);
       const fallbackCRate = derivedAc > 0 ? Math.round(savedPower / derivedAc * 100) / 100 : 0.5;
