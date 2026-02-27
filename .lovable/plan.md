@@ -1,79 +1,42 @@
 
+# Replace "Loaded" Banner with Collapsible Saved Configurations Dropdown
 
-# Convert Remaining `<Input type="number">` to `<NumericInput>`
+## What Changes
 
-Replace all raw `<Input type="number">` fields with the `NumericInput` component (from `src/components/ui/numeric-input.tsx`) across the four remaining files. `NumericInput` handles focus/blur commit, min/max clamping, and prevents invalid character entry -- matching the pattern already established elsewhere in the app.
+1. **Remove the "Loaded: Auto-saved Feb 27, 08:01" banner** from the top of the Simulation panel (lines 1481-1506 of `SimulationPanel.tsx`). This blue card with the CheckCircle2 icon is not useful as a persistent banner.
 
-**Note:** Some inputs use managed string state for inline-edit patterns (e.g. `solarCostEditValue`, `solarPercentageInput`, `batteryPercentageInput`). These already implement their own commit-on-blur/keydown logic and will be left as-is since converting them would require refactoring their parent state management.
+2. **Replace it with a collapsible dropdown** that shows the saved configurations list inline. The collapsible header will display the currently loaded simulation name (e.g. "Auto-saved Feb 27, 08:01") and expand to show the full list of saved configs when clicked.
 
----
-
-## File 1: `src/components/projects/simulation/FutureEnhancementsConfig.tsx`
-
-**Import change:** Replace `Input` import with `NumericInput` import.
-
-Convert ~20 numeric inputs across the sub-sections:
-- **Feed-In Tariff:** escalationRate, minimumExportPrice, maximumExportPrice, gridConnectionFee
-- **Portfolio:** benchmarkIrr, targetPayback
-- **Carbon:** gridEmissionFactor, carbonTaxRate, transmissionLossPercent, recPricePerMwh
-- **Financing/PPA:** ppaRate, ppaEscalationRate, contractTerm (integer), performanceGuarantee
-- **Financing/Lease:** monthlyPayment, leaseTerm (integer), residualValue
-- **Financing/Loan:** interestRate, loanTerm (integer), downPayment
-
-Each converts from:
-```tsx
-<Input type="number" value={x} onChange={(e) => set(parseFloat(e.target.value) || 0)} ... />
-```
-To:
-```tsx
-<NumericInput value={x} onChange={(v) => set(v)} ... />
-```
-With `integer={true}` added for integer fields (contractTerm, leaseTerm, loanTerm).
-
----
-
-## File 2: `src/components/projects/SystemCostsManager.tsx`
-
-**Import change:** Add `NumericInput` import.
-
-Convert the following direct-onChange inputs (~15):
-- **Fixed costs:** healthAndSafetyCost, waterPointsCost, cctvCost, mvSwitchGearCost
-- **Fees:** professionalFeesPercent, projectManagementPercent, contingencyPercent
-- **Replacement:** replacementYear (integer), equipmentCostPercent, moduleSharePercent, inverterSharePercent, solarModuleReplacementPercent, inverterReplacementPercent, batteryReplacementPercent
-- **Financial:** mirrFinanceRate, mirrReinvestmentRate, insuranceRatePercent
-
-**Skip** (string-state managed): solarCostEditValue, batteryCostEditValue, solarPercentageInput, batteryPercentageInput -- these have their own blur/keydown commit handlers.
-
----
-
-## File 3: `src/components/projects/SimulationPanel.tsx`
-
-**Import change:** Add `NumericInput` import.
-
-Convert 4 editable inputs:
-- **dailyOutputOverride** -- needs special handling since value can be `null` (uses computed fallback). Will use `NumericInput` with the computed value as fallback.
-- **specificYieldOverride** -- same null pattern as above.
-- **productionReductionPercent** -- integer, min 0, max 100.
-- **batteryAcCapacity** -- integer, min 0, max 5000.
-
-**Skip** (disabled/read-only): batteryChargePower, batteryDischargePower, batteryCapacity -- these are display-only.
-
----
-
-## File 4: `src/components/projects/TenantManager.tsx`
-
-**Import change:** Add `NumericInput` import.
-
-Convert 1 input:
-- **kWh/month override** popover (line 127): Convert to `NumericInput`. Currently uses string state `value`/`setValue` -- will need to change to numeric state or adapt.
-
-**Skip** (string-state form fields): The area_sqm fields in the Add Tenant and Edit Tenant forms use string state (`newTenant.area_sqm`, `editTenant?.area_sqm`) that feeds into form validation and `parseFloat()` on submit. These are form fields where empty string is a valid intermediate state, so they remain as `<Input>`.
-
----
+3. **Auto-select the most recent saved configuration** when entering the tab. The existing `hasInitializedFromSaved` logic already loads the last saved simulation on mount -- this behaviour stays. The collapsible header just reflects which config is active.
 
 ## Technical Details
 
-- All conversions follow the same pattern: remove `type="number"`, change `value` from string to number, change `onChange` from event handler to direct value callback, add `integer={true}` where `parseInt` was used.
-- `min`, `max`, `step`, `className`, and other passthrough props remain unchanged.
-- No new dependencies required.
+### SimulationPanel.tsx
+- **Remove** the "Loaded Simulation Indicator" Card block (lines 1481-1506)
+- **Replace** it with a `Collapsible` component that:
+  - Has a trigger showing the loaded simulation name + date (or "No configuration loaded" if none)
+  - Contains the `SavedSimulations` component inside `CollapsibleContent`
+  - Starts collapsed by default
+- Move the `SavedSimulations` rendering from its current position (line 2138) into this collapsible
+- Keep `loadedSimulationName` and `loadedSimulationDate` state for the header display
 
+### SavedSimulations.tsx
+- No structural changes needed -- it already handles loading, comparing, saving, and deleting
+- The component will simply be rendered inside the collapsible content instead of at the bottom of the panel
+
+### UI Layout
+```
+[Collapsible Trigger: "Auto-saved Feb 27, 08:01 . 27 Feb 2026 08:01" ChevronDown]
+  |-- (expanded) --|
+  | Actions bar (compare button, save count, Save button)        |
+  | Comparison table (if comparing)                               |
+  | Saved config cards (clickable to load, with checkboxes, etc.) |
+  |--------------------------------------------------------------|
+```
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `SimulationPanel.tsx` | Remove loaded-banner card; wrap SavedSimulations in a Collapsible at the banner's former position; remove the old SavedSimulations render location |
+| `SavedSimulations.tsx` | No changes |
