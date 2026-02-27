@@ -24,7 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Save, Trash2, Download, BarChart3, Loader2, Sparkles } from "lucide-react";
+import { Save, Trash2, Download, BarChart3, Loader2, Sparkles, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useInfographicGeneration } from "@/hooks/useInfographicGeneration";
@@ -140,6 +140,8 @@ export function SavedSimulations({
   const [simulationName, setSimulationName] = useState("");
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   
   // Infographic generation hook
   const { generating: generatingInfographics, generateInfographics } = useInfographicGeneration();
@@ -153,6 +155,7 @@ export function SavedSimulations({
         .from("project_simulations")
         .select("*")
         .eq("project_id", projectId)
+        .order("sort_order", { ascending: true })
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as SavedSimulation[];
@@ -251,6 +254,57 @@ export function SavedSimulations({
       toast.error("Failed to delete: " + error.message);
     },
   });
+
+  // Reorder mutation
+  const reorderMutation = useMutation({
+    mutationFn: async (updates: { id: string; sort_order: number }[]) => {
+      for (const u of updates) {
+        const { error } = await supabase
+          .from("project_simulations")
+          .update({ sort_order: u.sort_order })
+          .eq("id", u.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-simulations", projectId] });
+    },
+  });
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverId(id);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedId || draggedId === targetId || !savedSimulations) return;
+
+    const items = [...savedSimulations];
+    const fromIdx = items.findIndex((s) => s.id === draggedId);
+    const toIdx = items.findIndex((s) => s.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const [moved] = items.splice(fromIdx, 1);
+    items.splice(toIdx, 0, moved);
+
+    const updates = items.map((s, i) => ({ id: s.id, sort_order: i }));
+    reorderMutation.mutate(updates);
+
+    setDraggedId(null);
+    setDragOverId(null);
+  };
 
   const handleSave = () => {
     if (!simulationName.trim()) {
@@ -491,9 +545,20 @@ export function SavedSimulations({
               {savedSimulations.map((sim) => (
                 <div
                   key={sim.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer"
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, sim.id)}
+                  onDragOver={(e) => handleDragOver(e, sim.id)}
+                  onDragEnd={handleDragEnd}
+                  onDrop={(e) => handleDrop(e, sim.id)}
+                  className={`flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer ${
+                    draggedId === sim.id ? "opacity-50" : ""
+                  } ${dragOverId === sim.id && draggedId !== sim.id ? "border-primary" : ""}`}
                   onClick={() => handleLoad(sim)}
                 >
+                  <GripVertical
+                    className="h-4 w-4 shrink-0 text-muted-foreground cursor-grab active:cursor-grabbing"
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
                   <Checkbox
                     checked={selectedForCompare.includes(sim.id)}
                     onCheckedChange={() => toggleCompare(sim.id)}
