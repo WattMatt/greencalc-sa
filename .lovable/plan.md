@@ -1,70 +1,71 @@
 
 
-# Fix: Module Count and Collector Area Not Propagating to PV Calculations
+# Fix: Solar Generation Not Reflecting Module/Inverter Configuration
 
 ## Problem
 
-When the user changes the solar module type (which changes module count, collector area, and actual DC capacity), the PV generation does not update. There are **three places** where the DC capacity is calculated using a theoretical formula that ignores the actual module selection:
+After the previous fix, the main engine path correctly uses `moduleMetrics.actualDcCapacityKwp`. However, three **simplified solar profile generators** still use `solarCapacity` (the AC system size) instead of the actual DC capacity derived from the selected module. These profiles feed into comparison engine runs and the Load Shedding Analysis panel, causing inconsistency.
 
-1. **`useLoadProfileData` stable engine call** (line 584): `dcCapacityKwp: solarCapacity * inverterConfig.dcAcRatio`
-2. **`useLoadProfileData` per-day chart call** (line 614): same formula
-3. **Annual PVsyst calculation** (line 770): `dcCapacityKwp = inverterConfig.inverterSize * inverterConfig.inverterCount * inverterConfig.dcAcRatio`
+## Affected Code Paths
 
-Meanwhile, `moduleMetrics.actualDcCapacityKwp` correctly accounts for the rounded-up module count (e.g., 640 x 545W = 348.8 kWp vs the theoretical 346.5 kWp). The TMY path already uses `moduleMetrics.collectorAreaM2` and `moduleMetrics.stcEfficiency` correctly for the conversion, but the simplified path feeding the chart ignores module selection entirely.
+All in `src/components/projects/SimulationPanel.tsx`:
+
+1. **`solarProfileSolcastSimplified`** (~line 722): `generateSolarProfile(pvConfig, solarCapacity, solcastHourlyProfile)`
+2. **`solarProfilePVGISSimplified`** (~line 728): `generateSolarProfile(pvConfig, solarCapacity, pvgisHourlyProfile)`
+3. **`solarProfileGenericSimplified`** (~line 734): `generateSolarProfile(pvConfig, solarCapacity, undefined)`
+
+These profiles are consumed by:
+- `annualEnergyResultsGeneric` and `annualEnergyResultsSolcast` (comparison engine runs)
+- `LoadSheddingAnalysisPanel` (via the `solarProfile` variable)
+- The `solarProfile` selector (lines 835-851) which picks between PVsyst and simplified modes
+
+## Root Cause
+
+`generateSolarProfile()` (in `PVSystemConfig.tsx`) expects a **DC capacity in kWp** as its second argument (`capacityKwp`), but all three calls pass `solarCapacity`, which is the **AC system size**. When a user changes the module type, `moduleMetrics.actualDcCapacityKwp` changes but `solarCapacity` stays the same, so the simplified profiles never update.
 
 ## Solution
 
-Replace all theoretical DC capacity calculations with `moduleMetrics.actualDcCapacityKwp` across three locations in `SimulationPanel.tsx`.
+Replace `solarCapacity` with `moduleMetrics.actualDcCapacityKwp` in all three simplified profile generators. Also add `moduleMetrics` to their dependency arrays.
 
-### Changes (single file: `src/components/projects/SimulationPanel.tsx`)
+### Changes (single file: `SimulationPanel.tsx`)
 
-**1. Stable engine `useLoadProfileData` call (~line 584)**
-
-Change:
-```typescript
-dcCapacityKwp: solarCapacity * inverterConfig.dcAcRatio,
+**Line 724** -- Change:
 ```
-To:
-```typescript
-dcCapacityKwp: moduleMetrics.actualDcCapacityKwp,
+generateSolarProfile(pvConfig, solarCapacity, solcastHourlyProfile)
+```
+to:
+```
+generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, solcastHourlyProfile)
 ```
 
-**2. Per-day chart `useLoadProfileData` call (~line 614)**
-
-Same change:
-```typescript
-dcCapacityKwp: solarCapacity * inverterConfig.dcAcRatio,
+**Line 730** -- Change:
 ```
-To:
-```typescript
-dcCapacityKwp: moduleMetrics.actualDcCapacityKwp,
+generateSolarProfile(pvConfig, solarCapacity, pvgisHourlyProfile)
+```
+to:
+```
+generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, pvgisHourlyProfile)
 ```
 
-**3. Annual PVsyst calculation (~line 770)**
-
-Change:
-```typescript
-const dcCapacityKwp = inverterConfig.inverterSize * inverterConfig.inverterCount * inverterConfig.dcAcRatio;
+**Line 735** -- Change:
 ```
-To:
-```typescript
-const dcCapacityKwp = moduleMetrics.actualDcCapacityKwp;
+generateSolarProfile(pvConfig, solarCapacity, undefined)
+```
+to:
+```
+generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, undefined)
 ```
 
-### Why This Works
+Update all three dependency arrays to replace `solarCapacity` with `moduleMetrics.actualDcCapacityKwp` (or `moduleMetrics`).
 
-- `moduleMetrics.actualDcCapacityKwp` = `ceil(acCapacity * dcAcRatio * 1000 / moduleWp) * moduleWp / 1000`
-- When the user picks a different module (e.g., 450W vs 545W), the rounded module count changes, which changes the actual DC capacity, collector area, and therefore PV generation
-- The TMY conversion path already correctly uses `moduleMetrics.collectorAreaM2` and `moduleMetrics.stcEfficiency` -- no changes needed there
-- The inverter AC clipping limit (`maxPvAcKva`) remains correctly derived from `inverterConfig.inverterSize * inverterConfig.inverterCount`
+### Cleanup
 
-### Ordering Note
-
-`moduleMetrics` is computed at line 671, before all three consumption points (lines 584, 614, 770). However, lines 584 and 614 appear *before* 671 in the file. Since `useMemo` hooks are evaluated during render (not at declaration order), this works correctly in React -- but the `moduleMetrics` dependency must be added to the dependency arrays of the two `useLoadProfileData` calls if not already implicitly captured via the input prop change.
+Remove the debug `console.log` statements from the `moduleMetrics` useMemo block (lines 489-495) now that the fix is verified.
 
 ### Impact
 
-- All three PV calculation paths (simplified chart, annual PVsyst, TMY 8760-hour) will now respond to module selection changes
-- Module count, collector area, and actual DC capacity are consistently derived from the selected module
-- No changes needed to `useLoadProfileData.ts`, `tmySolarConversion.ts`, or `SolarModulePresets.ts`
+- All solar profile paths (simplified, PVsyst hourly, PVsyst annual, TMY 8760-hour) will consistently use actual DC capacity derived from the selected module
+- Comparison charts (Generic vs Solcast vs PVGIS) will correctly reflect module selection
+- Load Shedding Analysis panel will use accurate solar generation
+- Financial costing continues to use `solarCapacity` (AC) for system cost, which is correct
 
