@@ -1478,32 +1478,209 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         </div>
       </div>
 
-      {/* Loaded Simulation Indicator */}
-      {isLoadingLastSaved ? (
-        <Card className="border-muted bg-muted/30">
-          <CardContent className="py-3 flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Loading last saved simulation...
-            </p>
-          </CardContent>
-        </Card>
-      ) : loadedSimulationName ? (
-        <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="py-3 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-primary" />
-            <p className="text-sm">
-              <span className="text-muted-foreground">Loaded: </span>
-              <span className="font-medium">{loadedSimulationName}</span>
-              {loadedSimulationDate && (
-                <span className="text-muted-foreground ml-2">
-                  • {format(new Date(loadedSimulationDate), "dd MMM yyyy HH:mm")}
-                </span>
+      {/* Saved Configurations Collapsible */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" className="w-full justify-between h-auto py-2.5 px-3">
+            <div className="flex items-center gap-2 text-sm">
+              {isLoadingLastSaved ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <span className="text-muted-foreground">Loading saved configurations...</span>
+                </>
+              ) : loadedSimulationName ? (
+                <>
+                  <Database className="h-4 w-4 text-primary" />
+                  <span className="font-medium">{loadedSimulationName}</span>
+                  {loadedSimulationDate && (
+                    <span className="text-muted-foreground">
+                      • {format(new Date(loadedSimulationDate), "dd MMM yyyy HH:mm")}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Saved Configurations</span>
+                </>
               )}
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
+            </div>
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2">
+          <SavedSimulations
+            projectId={projectId}
+            currentConfig={{
+              solarCapacity,
+              batteryCapacity: includesBattery ? batteryCapacity : 0,
+              batteryPower: includesBattery ? batteryPower : 0,
+              pvConfig,
+              usingSolcast: solarDataSource === "solcast",
+              solarDataSource,
+              inverterConfig,
+              systemCosts,
+              pvsystConfig,
+              advancedConfig,
+              lossCalculationMode,
+              productionReductionPercent,
+              moduleCount: moduleMetrics.moduleCount,
+            }}
+            currentResults={{
+              totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,
+              totalDailySolar: annualEnergyResults.totalAnnualSolar / 365,
+              totalGridImport: annualEnergyResults.totalAnnualGridImport / 365,
+              totalSolarUsed: annualEnergyResults.totalAnnualSolarUsed / 365,
+              annualSavings: hasFinancialData ? financialResults.annualSavings : 0,
+              systemCost: financialResults.systemCost,
+              paybackYears: hasFinancialData ? financialResults.paybackYears : 0,
+              roi: hasFinancialData ? financialResults.roi : 0,
+              peakDemand: annualEnergyResults.peakLoad,
+              newPeakDemand: annualEnergyResults.peakGridImport,
+            }}
+            onLoadSimulation={(config) => {
+              setSolarCapacity(config.solarCapacity);
+              if (includesBattery) {
+                const dcCap = config.batteryCapacity || 0;
+                const pwr = config.batteryPower || 0;
+                const dod = config.batteryDoD || batteryDoD || 85;
+                const savedChargeCRate = config.batteryChargeCRate ?? config.batteryCRate;
+                const savedDischargeCRate = config.batteryDischargeCRate ?? config.batteryCRate;
+                const loadedMinSoC = config.batteryMinSoC ?? Math.round((100 - dod) / 2);
+                const loadedMaxSoC = config.batteryMaxSoC ?? Math.round(loadedMinSoC + dod);
+                setBatteryMinSoC(loadedMinSoC);
+                setBatteryMaxSoC(loadedMaxSoC);
+                const ac = Math.round(dcCap * dod / 100);
+                setBatteryAcCapacity(ac);
+                const fallbackCRate = ac > 0 ? Math.round(pwr / ac * 100) / 100 : 0.5;
+                setBatteryChargeCRate(savedChargeCRate ?? fallbackCRate);
+                setBatteryDischargeCRate(savedDischargeCRate ?? fallbackCRate);
+                setBatteryMinSoC(config.batteryMinSoC ?? 10);
+                setBatteryMaxSoC(config.batteryMaxSoC ?? 95);
+              }
+              if (config.batteryStrategy) {
+                setBatteryStrategy(config.batteryStrategy as BatteryDispatchStrategy);
+                setDispatchConfig(config.dispatchConfig ?? getDefaultDispatchConfig(config.batteryStrategy as BatteryDispatchStrategy));
+              }
+              if (config.chargeTouPeriod) setChargeTouPeriod(config.chargeTouPeriod as TOUPeriod);
+              if (config.dischargeTouSelection) {
+                setDischargeTouSelection(config.dischargeTouSelection);
+              } else if (config.dischargeTouPeriod) {
+                const period = config.dischargeTouPeriod as TOUPeriod;
+                const flags = { peak: period === 'peak', standard: period === 'standard', offPeak: period === 'off-peak' };
+                setDischargeTouSelection({
+                  highSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
+                  lowSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
+                });
+              }
+              if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
+                setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
+              }
+              if (config.inverterConfig) {
+                setInverterConfig((prev) => ({ ...prev, ...config.inverterConfig }));
+              }
+              if (config.solarDataSource) {
+                setSolarDataSource(config.solarDataSource);
+              }
+              if (config.pvsystConfig) {
+                setPvsystConfig((prev) => ({
+                  ...DEFAULT_PVSYST_CONFIG,
+                  ...prev,
+                  ...config.pvsystConfig,
+                  irradiance: {
+                    ...DEFAULT_PVSYST_CONFIG.irradiance,
+                    ...config.pvsystConfig?.irradiance,
+                  },
+                  array: {
+                    ...DEFAULT_PVSYST_CONFIG.array,
+                    ...config.pvsystConfig?.array,
+                  },
+                  system: {
+                    ...DEFAULT_PVSYST_CONFIG.system,
+                    inverter: {
+                      ...DEFAULT_PVSYST_CONFIG.system.inverter,
+                      ...config.pvsystConfig?.system?.inverter,
+                    },
+                  },
+                  lossesAfterInverter: {
+                    ...DEFAULT_PVSYST_CONFIG.lossesAfterInverter,
+                    ...config.pvsystConfig?.lossesAfterInverter,
+                  },
+                }));
+              }
+              if (config.lossCalculationMode) {
+                setLossCalculationMode(config.lossCalculationMode);
+              }
+              if (config.productionReductionPercent !== undefined) {
+                setProductionReductionPercent(config.productionReductionPercent);
+              }
+              if (config.advancedConfig) {
+                setAdvancedConfig((prev) => ({
+                  ...DEFAULT_ADVANCED_CONFIG,
+                  ...prev,
+                  ...config.advancedConfig,
+                  seasonal: {
+                    ...DEFAULT_ADVANCED_CONFIG.seasonal,
+                    ...config.advancedConfig?.seasonal,
+                  },
+                  degradation: {
+                    ...DEFAULT_ADVANCED_CONFIG.degradation,
+                    ...config.advancedConfig?.degradation,
+                  },
+                  financial: {
+                    ...DEFAULT_ADVANCED_CONFIG.financial,
+                    ...config.advancedConfig?.financial,
+                  },
+                  gridConstraints: {
+                    ...DEFAULT_ADVANCED_CONFIG.gridConstraints,
+                    ...config.advancedConfig?.gridConstraints,
+                  },
+                  loadGrowth: {
+                    ...DEFAULT_ADVANCED_CONFIG.loadGrowth,
+                    ...config.advancedConfig?.loadGrowth,
+                  },
+                }));
+              }
+              if (config.systemCosts) {
+                const savedCosts = config.systemCosts as any;
+                onSystemCostsChange({
+                  solarCostPerKwp: savedCosts.solarCostPerKwp,
+                  batteryCostPerKwh: savedCosts.batteryCostPerKwh,
+                  solarMaintenancePercentage: savedCosts.solarMaintenancePercentage ?? savedCosts.maintenancePercentage ?? 3.5,
+                  batteryMaintenancePercentage: savedCosts.batteryMaintenancePercentage ?? 1.5,
+                  maintenancePerYear: savedCosts.maintenancePerYear ?? 0,
+                  healthAndSafetyCost: savedCosts.healthAndSafetyCost ?? 0,
+                  waterPointsCost: savedCosts.waterPointsCost ?? 0,
+                  cctvCost: savedCosts.cctvCost ?? 0,
+                  mvSwitchGearCost: savedCosts.mvSwitchGearCost ?? 0,
+                  insuranceCostPerYear: savedCosts.insuranceCostPerYear ?? 0,
+                  insuranceRatePercent: savedCosts.insuranceRatePercent ?? 1.0,
+                  professionalFeesPercent: savedCosts.professionalFeesPercent ?? 0,
+                  projectManagementPercent: savedCosts.projectManagementPercent ?? 0,
+                  contingencyPercent: savedCosts.contingencyPercent ?? 0,
+                  replacementYear: savedCosts.replacementYear ?? 10,
+                  equipmentCostPercent: savedCosts.equipmentCostPercent ?? 45,
+                  moduleSharePercent: savedCosts.moduleSharePercent ?? 70,
+                  inverterSharePercent: savedCosts.inverterSharePercent ?? 30,
+                  solarModuleReplacementPercent: savedCosts.solarModuleReplacementPercent ?? 10,
+                  inverterReplacementPercent: savedCosts.inverterReplacementPercent ?? 50,
+                  batteryReplacementPercent: savedCosts.batteryReplacementPercent ?? 30,
+                  costOfCapital: savedCosts.costOfCapital ?? 9.0,
+                  cpi: savedCosts.cpi ?? 6.0,
+                  electricityInflation: savedCosts.electricityInflation ?? 10.0,
+                  projectDurationYears: savedCosts.projectDurationYears ?? 20,
+                  lcoeDiscountRate: savedCosts.lcoeDiscountRate ?? 9.0,
+                  mirrFinanceRate: savedCosts.mirrFinanceRate ?? 9.0,
+                  mirrReinvestmentRate: savedCosts.mirrReinvestmentRate ?? 10.0,
+                });
+              }
+              setLoadedSimulationName(config.simulationName);
+              setLoadedSimulationDate(config.simulationDate);
+            }}
+            includesBattery={includesBattery}
+          />
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Connection Size Warning */}
       {!connectionSizeKva && (
@@ -2135,187 +2312,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         </Card>
       </div>
 
-      {/* Saved Simulations */}
-      <SavedSimulations
-        projectId={projectId}
-        currentConfig={{
-          solarCapacity,
-          batteryCapacity: includesBattery ? batteryCapacity : 0,
-          batteryPower: includesBattery ? batteryPower : 0,
-          pvConfig,
-          usingSolcast: solarDataSource === "solcast",
-          solarDataSource,
-          inverterConfig,
-          systemCosts,
-          pvsystConfig,
-          advancedConfig,
-          lossCalculationMode,
-          productionReductionPercent,
-          moduleCount: moduleMetrics.moduleCount,
-        }}
-        currentResults={{
-          totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,
-          totalDailySolar: annualEnergyResults.totalAnnualSolar / 365,
-          totalGridImport: annualEnergyResults.totalAnnualGridImport / 365,
-          totalSolarUsed: annualEnergyResults.totalAnnualSolarUsed / 365,
-          annualSavings: hasFinancialData ? financialResults.annualSavings : 0,
-          systemCost: financialResults.systemCost,
-          paybackYears: hasFinancialData ? financialResults.paybackYears : 0,
-          roi: hasFinancialData ? financialResults.roi : 0,
-          peakDemand: annualEnergyResults.peakLoad,
-          newPeakDemand: annualEnergyResults.peakGridImport,
-        }}
-        onLoadSimulation={(config) => {
-          setSolarCapacity(config.solarCapacity);
-          if (includesBattery) {
-            const dcCap = config.batteryCapacity || 0;
-            const pwr = config.batteryPower || 0;
-            const dod = config.batteryDoD || batteryDoD || 85;
-            const savedChargeCRate = config.batteryChargeCRate ?? config.batteryCRate;
-            const savedDischargeCRate = config.batteryDischargeCRate ?? config.batteryCRate;
-            // Derive minSoC/maxSoC from saved DoD if no explicit values
-            const loadedMinSoC = config.batteryMinSoC ?? Math.round((100 - dod) / 2);
-            const loadedMaxSoC = config.batteryMaxSoC ?? Math.round(loadedMinSoC + dod);
-            setBatteryMinSoC(loadedMinSoC);
-            setBatteryMaxSoC(loadedMaxSoC);
-            const ac = Math.round(dcCap * dod / 100);
-            setBatteryAcCapacity(ac);
-            const fallbackCRate = ac > 0 ? Math.round(pwr / ac * 100) / 100 : 0.5;
-            setBatteryChargeCRate(savedChargeCRate ?? fallbackCRate);
-            setBatteryDischargeCRate(savedDischargeCRate ?? fallbackCRate);
-            setBatteryMinSoC(config.batteryMinSoC ?? 10);
-            setBatteryMaxSoC(config.batteryMaxSoC ?? 95);
-          }
-          // Load battery dispatch strategy if present
-          if (config.batteryStrategy) {
-            setBatteryStrategy(config.batteryStrategy as BatteryDispatchStrategy);
-            setDispatchConfig(config.dispatchConfig ?? getDefaultDispatchConfig(config.batteryStrategy as BatteryDispatchStrategy));
-          }
-          if (config.chargeTouPeriod) setChargeTouPeriod(config.chargeTouPeriod as TOUPeriod);
-          if (config.dischargeTouSelection) {
-            setDischargeTouSelection(config.dischargeTouSelection);
-          } else if (config.dischargeTouPeriod) {
-            const period = config.dischargeTouPeriod as TOUPeriod;
-            const flags = { peak: period === 'peak', standard: period === 'standard', offPeak: period === 'off-peak' };
-            setDischargeTouSelection({
-              highSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
-              lowSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
-            });
-          }
-          if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
-            setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
-          }
-          // Load inverter config if present
-          if (config.inverterConfig) {
-            setInverterConfig((prev) => ({ ...prev, ...config.inverterConfig }));
-          }
-          // Load solar data source if present
-          if (config.solarDataSource) {
-            setSolarDataSource(config.solarDataSource);
-          }
-          // Load PVsyst config if present
-          if (config.pvsystConfig) {
-            setPvsystConfig((prev) => ({
-              ...DEFAULT_PVSYST_CONFIG,
-              ...prev,
-              ...config.pvsystConfig,
-              irradiance: {
-                ...DEFAULT_PVSYST_CONFIG.irradiance,
-                ...config.pvsystConfig?.irradiance,
-              },
-              array: {
-                ...DEFAULT_PVSYST_CONFIG.array,
-                ...config.pvsystConfig?.array,
-              },
-              system: {
-                ...DEFAULT_PVSYST_CONFIG.system,
-                inverter: {
-                  ...DEFAULT_PVSYST_CONFIG.system.inverter,
-                  ...config.pvsystConfig?.system?.inverter,
-                },
-              },
-              lossesAfterInverter: {
-                ...DEFAULT_PVSYST_CONFIG.lossesAfterInverter,
-                ...config.pvsystConfig?.lossesAfterInverter,
-              },
-            }));
-          }
-          // Load loss calculation mode if present
-          if (config.lossCalculationMode) {
-            setLossCalculationMode(config.lossCalculationMode);
-          }
-          // Load production reduction if present
-          if (config.productionReductionPercent !== undefined) {
-            setProductionReductionPercent(config.productionReductionPercent);
-          }
-          // Load advanced config if present
-          if (config.advancedConfig) {
-            setAdvancedConfig((prev) => ({
-              ...DEFAULT_ADVANCED_CONFIG,
-              ...prev,
-              ...config.advancedConfig,
-              seasonal: {
-                ...DEFAULT_ADVANCED_CONFIG.seasonal,
-                ...config.advancedConfig?.seasonal,
-              },
-              degradation: {
-                ...DEFAULT_ADVANCED_CONFIG.degradation,
-                ...config.advancedConfig?.degradation,
-              },
-              financial: {
-                ...DEFAULT_ADVANCED_CONFIG.financial,
-                ...config.advancedConfig?.financial,
-              },
-              gridConstraints: {
-                ...DEFAULT_ADVANCED_CONFIG.gridConstraints,
-                ...config.advancedConfig?.gridConstraints,
-              },
-              loadGrowth: {
-                ...DEFAULT_ADVANCED_CONFIG.loadGrowth,
-                ...config.advancedConfig?.loadGrowth,
-              },
-            }));
-          }
-          // Load system costs if present
-          if (config.systemCosts) {
-            const savedCosts = config.systemCosts as any;
-            onSystemCostsChange({
-              solarCostPerKwp: savedCosts.solarCostPerKwp,
-              batteryCostPerKwh: savedCosts.batteryCostPerKwh,
-              solarMaintenancePercentage: savedCosts.solarMaintenancePercentage ?? savedCosts.maintenancePercentage ?? 3.5,
-              batteryMaintenancePercentage: savedCosts.batteryMaintenancePercentage ?? 1.5,
-              maintenancePerYear: savedCosts.maintenancePerYear ?? 0,
-              healthAndSafetyCost: savedCosts.healthAndSafetyCost ?? 0,
-              waterPointsCost: savedCosts.waterPointsCost ?? 0,
-              cctvCost: savedCosts.cctvCost ?? 0,
-              mvSwitchGearCost: savedCosts.mvSwitchGearCost ?? 0,
-              insuranceCostPerYear: savedCosts.insuranceCostPerYear ?? 0,
-              insuranceRatePercent: savedCosts.insuranceRatePercent ?? 1.0,
-              professionalFeesPercent: savedCosts.professionalFeesPercent ?? 0,
-              projectManagementPercent: savedCosts.projectManagementPercent ?? 0,
-              contingencyPercent: savedCosts.contingencyPercent ?? 0,
-              replacementYear: savedCosts.replacementYear ?? 10,
-              equipmentCostPercent: savedCosts.equipmentCostPercent ?? 45,
-              moduleSharePercent: savedCosts.moduleSharePercent ?? 70,
-              inverterSharePercent: savedCosts.inverterSharePercent ?? 30,
-              solarModuleReplacementPercent: savedCosts.solarModuleReplacementPercent ?? 10,
-              inverterReplacementPercent: savedCosts.inverterReplacementPercent ?? 50,
-              batteryReplacementPercent: savedCosts.batteryReplacementPercent ?? 30,
-              costOfCapital: savedCosts.costOfCapital ?? 9.0,
-              cpi: savedCosts.cpi ?? 6.0,
-              electricityInflation: savedCosts.electricityInflation ?? 10.0,
-              projectDurationYears: savedCosts.projectDurationYears ?? 20,
-              lcoeDiscountRate: savedCosts.lcoeDiscountRate ?? 9.0,
-              mirrFinanceRate: savedCosts.mirrFinanceRate ?? 9.0,
-              mirrReinvestmentRate: savedCosts.mirrReinvestmentRate ?? 10.0,
-            });
-          }
-          // Track which simulation was loaded for UI feedback
-          setLoadedSimulationName(config.simulationName);
-          setLoadedSimulationDate(config.simulationDate);
-        }}
-        includesBattery={includesBattery}
-      />
+      {/* SavedSimulations moved to collapsible at top */}
 
       {/* Advanced Results Display */}
       {advancedResults && (
