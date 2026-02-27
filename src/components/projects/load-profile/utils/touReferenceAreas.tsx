@@ -1,60 +1,53 @@
 import { TOU_COLORS, TOUPeriod } from "../types";
 
-export interface TOUBoundaryLine {
-  hour: string;
-  color: string;
-  period: TOUPeriod;
-  /** The raw hour number (0-23) for keying */
-  hourNum: number;
-}
-
 /**
- * Detect TOU period transitions and return vertical boundary lines.
- * Each line marks where a new period begins, coloured by that incoming period.
+ * Custom XAxis tick that renders a coloured TOU period bar
+ * between the axis line and the tick label.
+ *
+ * Inject `getPeriod` and `showTOU` as props via
+ *   <XAxis tick={<TOUXAxisTick getPeriod={fn} showTOU={flag} />} />
  */
-export function buildTOUBoundaryLines(
-  getPeriod: (hour: number) => TOUPeriod
-): TOUBoundaryLine[] {
-  const lines: TOUBoundaryLine[] = [];
-  let prevPeriod: TOUPeriod | null = null;
+export function TOUXAxisTick(props: any) {
+  const { x, y, payload, visibleTicksCount, index, getPeriod, showTOU } = props;
 
-  for (let h = 0; h < 24; h++) {
-    const period = getPeriod(h);
-    if (period !== prevPeriod) {
-      lines.push({
-        hour: `${h.toString().padStart(2, "0")}:00`,
-        color: TOU_COLORS[period].stroke,
-        period,
-        hourNum: h,
-      });
-      prevPeriod = period;
-    }
-  }
+  // Parse hour number from the tick value (e.g. "06:00" → 6)
+  const hourNum = parseInt(payload?.value?.toString() || "0", 10);
 
-  return lines;
-}
+  // Estimate band width from the xAxis metadata Recharts injects
+  const bandSize: number = props.xAxis?.bandSize ?? 0;
 
-/**
- * Custom ReferenceLine shape that shifts the line right by half a bar-category gap.
- * Recharts passes segment props (x1, y1, x2, y2) plus axis metadata.
- */
-export function ShiftedReferenceLine(props: any) {
-  const { x1, y1, x2, y2, stroke, strokeDasharray, strokeWidth, offset: _offset, ...rest } = props;
-  if (x1 == null) return null;
+  const period: TOUPeriod | undefined = getPeriod?.(hourNum);
+  const color = period ? TOU_COLORS[period]?.stroke : undefined;
 
-  // xAxis.bandSize = pixel distance between adjacent category tick centres
-  const bandSize = props.xAxis?.bandSize ?? 0;
-  const shift = -(bandSize / 2);
+  const barHeight = 5;
+  const barY = y + 2; // just below the axis line
+  const labelY = barY + barHeight + 10; // label below the bar
 
   return (
-    <line
-      x1={x1 + shift}
-      y1={y1}
-      x2={x2 + shift}
-      y2={y2}
-      stroke={stroke}
-      strokeDasharray={strokeDasharray}
-      strokeWidth={strokeWidth}
-    />
+    <g>
+      {/* TOU colour bar – always rendered per tick so the strip is continuous */}
+      {showTOU && color && (
+        <rect
+          x={x - bandSize / 2}
+          y={barY}
+          width={bandSize}
+          height={barHeight}
+          fill={color}
+          opacity={0.55}
+          rx={1}
+        />
+      )}
+
+      {/* Normal tick label */}
+      <text
+        x={x}
+        y={showTOU ? labelY : y + 12}
+        textAnchor="middle"
+        fontSize={10}
+        fill="hsl(var(--muted-foreground))"
+      >
+        {payload?.value}
+      </text>
+    </g>
   );
 }

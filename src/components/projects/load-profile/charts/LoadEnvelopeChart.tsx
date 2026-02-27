@@ -1,5 +1,5 @@
-import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { buildTOUBoundaryLines, ShiftedReferenceLine } from "../utils/touReferenceAreas";
+import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { TOUXAxisTick } from "../utils/touReferenceAreas";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -173,7 +173,7 @@ export function LoadEnvelopeChart({
       ) : (
         <div className="h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync">
+            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: showTOU ? 10 : 0 }} syncId="loadProfileSync">
               <defs>
                 <linearGradient id="envelopeFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
@@ -181,14 +181,10 @@ export function LoadEnvelopeChart({
                 </linearGradient>
               </defs>
 
-              {showTOU && buildTOUBoundaryLines((h) => getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek)).map((line) => (
-                <ReferenceLine key={`tou-${line.hourNum}`} x={line.hour} stroke={line.color} strokeDasharray="4 3" strokeWidth={1.5} shape={<ShiftedReferenceLine />} />
-              ))}
-
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
               <XAxis
                 dataKey="hour"
-                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                tick={<TOUXAxisTick getPeriod={(h: number) => getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek)} showTOU={showTOU} />}
                 tickLine={false}
                 axisLine={{ stroke: "hsl(var(--border))" }}
                 interval={2}
