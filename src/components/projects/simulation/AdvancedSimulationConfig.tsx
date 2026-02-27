@@ -1374,8 +1374,9 @@ function BatteryCharacteristicsSection({
           return (
             <div className="space-y-2 p-2 rounded bg-muted/30">
               <Label className="text-xs font-medium">Discharge During</Label>
-              <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-x-2 gap-y-1 text-xs">
+              <div className="grid grid-cols-[auto_auto_1fr_1fr_1fr] gap-x-2 gap-y-1 text-xs items-center">
                 {/* Header row */}
+                <div />
                 <div />
                 {periods.map(p => (
                   <div key={p.key} className="text-center font-medium" style={{ color: p.color }}>
@@ -1383,17 +1384,16 @@ function BatteryCharacteristicsSection({
                   </div>
                 ))}
                 {/* Data rows */}
-                {rows.map((row, idx) => (
+                {rows.map((row) => (
                   <React.Fragment key={`${row.seasonKey}-${row.dayKey}`}>
-                    <div className="flex items-center gap-1 pr-1">
-                      {row.seasonLabel && (
-                        <span className="font-semibold mr-0.5" style={{ color: row.seasonColor }}>
-                          {row.seasonLabel}
-                        </span>
-                      )}
-                      {!row.seasonLabel && <span className="ml-3" />}
-                      <span className="text-muted-foreground">{row.label}</span>
-                    </div>
+                    {row.seasonLabel ? (
+                      <span className="font-semibold pr-1" style={{ color: row.seasonColor }}>
+                        {row.seasonLabel}
+                      </span>
+                    ) : (
+                      <span />
+                    )}
+                    <span className="text-muted-foreground">{row.label}</span>
                     {periods.map(p => {
                       const checked = sel[row.seasonKey][row.dayKey][p.key];
                       return (
