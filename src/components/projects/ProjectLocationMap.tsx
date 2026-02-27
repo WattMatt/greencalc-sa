@@ -462,7 +462,7 @@ export function ProjectLocationMap({
       if (dataSource === "solcast") {
         fetchForecast({ latitude: lat, longitude: lng, hours: 168 });
       } else {
-        fetchBothDatasets({ latitude: lat, longitude: lng, projectId });
+        fetchBothDatasets({ latitude: lat, longitude: lng, projectId, forceRefresh: true });
       }
     }
   };
