@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
-import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { buildTOUReferenceAreas } from "../utils/touReferenceAreas";
+import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+import { buildTOUBlocks } from "../utils/touReferenceAreas";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip as UITooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { ExternalLink } from "lucide-react";
@@ -47,7 +47,9 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, 
               ))}
             </defs>
 
-            {showTOU && buildTOUReferenceAreas((h) => getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek))}
+            {showTOU && buildTOUBlocks((h) => getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek)).map((b) => (
+              <ReferenceArea key={`tou-${b.startHour}`} x1={b.x1} x2={b.x2} fill={b.fill} fillOpacity={0.18} stroke="none" shapeRendering="crispEdges" />
+            ))}
 
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
             <XAxis
