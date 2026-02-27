@@ -1,22 +1,27 @@
 
-# Fix TOU Period Background Colours — Solid Blocks, No Gradient Effect
+# Fix Vertical Alignment of Positive/Negative Bars in Building Profile Chart
 
 ## Problem
-The TOU period background colours in the daily chart view appear as faint, gradient-like washes that blend into each other. The user wants three clearly distinct, solid colour blocks for Peak, Standard, and Off-Peak.
+Recharts' default stacking behaviour computes a cumulative sum across all bars in a stack. This means negative-valued bars (export, battery charge) start from the top of the positive stack and extend downward from there, rather than starting from the zero line. The result is misaligned columns.
 
 ## Root Cause
-The `fillOpacity` on `ReferenceArea` components is set extremely low (0.08 in some charts, 0.12 in others), making the colours almost invisible and creating the illusion of gradients where periods transition.
+The `ComposedChart` is using Recharts' default `stackOffset="none"`, which accumulates all values sequentially regardless of sign.
 
 ## Solution
-Increase the `fillOpacity` to a consistent, visible value (e.g., `0.18`) across all six chart files so the TOU period colours are clearly distinguishable as solid blocks.
+Add `stackOffset="sign"` to the `ComposedChart` component. This is a built-in Recharts feature that automatically separates positive values (stacked upward from zero) and negative values (stacked downward from zero), keeping them vertically aligned in the same column.
 
-## Files to Update
+## File to Update
 
-1. **`src/components/projects/load-profile/charts/BuildingProfileChart.tsx`** — Change `fillOpacity={0.08}` to `fillOpacity={0.18}`
-2. **`src/components/projects/load-profile/charts/LoadChart.tsx`** — Change `fillOpacity={0.12}` to `fillOpacity={0.18}`
-3. **`src/components/projects/load-profile/charts/GridFlowChart.tsx`** — Change `fillOpacity={0.08}` to `fillOpacity={0.18}`
-4. **`src/components/projects/load-profile/charts/SolarChart.tsx`** — Check and standardise `fillOpacity` to `0.18`
-5. **`src/components/projects/load-profile/charts/BatteryChart.tsx`** — Change `fillOpacity={0.12}` to `fillOpacity={0.18}`
-6. **`src/components/projects/load-profile/charts/StackedMeterChart.tsx`** — Change `fillOpacity={0.12}` to `fillOpacity={0.18}`
+**`src/components/projects/load-profile/charts/BuildingProfileChart.tsx`**
 
-Each change is a single-property update on the existing `ReferenceArea` component within the TOU rendering loop. No structural changes required.
+Single change on the `ComposedChart` element (line 76): add the `stackOffset="sign"` prop.
+
+```text
+Before:
+<ComposedChart data={...} margin={...} barGap={1} barCategoryGap="5%">
+
+After:
+<ComposedChart data={...} margin={...} barGap={1} barCategoryGap="5%" stackOffset="sign">
+```
+
+No other changes required. All bars remain on `stackId="building"`.
