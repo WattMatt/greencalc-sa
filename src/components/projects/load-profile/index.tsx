@@ -121,6 +121,17 @@ export function LoadProfileChart({
     return days.every(d => d === 0 || d === 6);
   }, [selectedDays]);
 
+  // Derive representative month and dayOfWeek for TOU period resolution
+  const representativeMonth = useMemo(() => {
+    const months = Array.from(selectedMonthsFilter);
+    return months.length > 0 ? months[0] : 0;
+  }, [selectedMonthsFilter]);
+
+  const representativeDayOfWeek = useMemo(() => {
+    const days = Array.from(selectedDays);
+    return days.length > 0 ? days[0] : 3; // default Wednesday
+  }, [selectedDays]);
+
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
   const unit = displayUnit === "kw" ? "kW" : "kVA";
 
@@ -318,6 +329,8 @@ export function LoadProfileChart({
             onNavigateToTenant={onNavigateToTenant}
             stackedMode={stackedMode}
             onStackedModeChange={setStackedMode}
+            month={representativeMonth}
+            dayOfWeek={representativeDayOfWeek}
           />
 
           {showPVProfile && maxPvAcKva && chartData && (
@@ -329,6 +342,8 @@ export function LoadProfileChart({
               show1to1Comparison={show1to1Comparison}
               unit={unit}
               maxPvAcKva={maxPvAcKva}
+              month={representativeMonth}
+              dayOfWeek={representativeDayOfWeek}
             />
           )}
 
@@ -338,6 +353,8 @@ export function LoadProfileChart({
               showTOU={showTOU}
               isWeekend={isWeekend}
               unit={unit}
+              month={representativeMonth}
+              dayOfWeek={representativeDayOfWeek}
             />
           )}
 
@@ -346,7 +363,7 @@ export function LoadProfileChart({
           )}
 
           {showBattery && showPVProfile && maxPvAcKva && chartData && (
-            <BatteryChart chartData={chartData} batteryCapacity={batteryCapacity} batteryPower={batteryPower} />
+            <BatteryChart chartData={chartData} batteryCapacity={batteryCapacity} batteryPower={batteryPower} month={representativeMonth} dayOfWeek={representativeDayOfWeek} />
           )}
 
           {showTOU && <TOULegend />}

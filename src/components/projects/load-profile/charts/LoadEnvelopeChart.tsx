@@ -29,6 +29,8 @@ interface LoadEnvelopeChartProps {
   onNavigateToTenant?: (tenantId: string) => void;
   stackedMode?: StackedMode;
   onStackedModeChange?: (mode: StackedMode) => void;
+  month?: number;
+  dayOfWeek?: number;
 }
 
 export function LoadEnvelopeChart({
@@ -50,6 +52,8 @@ export function LoadEnvelopeChart({
   onNavigateToTenant,
   stackedMode = "avg",
   onStackedModeChange,
+  month,
+  dayOfWeek,
 }: LoadEnvelopeChartProps) {
   if (isLoading) {
     return (
@@ -162,6 +166,8 @@ export function LoadEnvelopeChart({
           isWeekend={isWeekend}
           unit={unit}
           onNavigateToTenant={onNavigateToTenant}
+          month={month}
+          dayOfWeek={dayOfWeek}
         />
       ) : (
         <div className="h-[200px]">
@@ -176,7 +182,7 @@ export function LoadEnvelopeChart({
 
               {showTOU &&
                 Array.from({ length: 24 }, (_, h) => {
-                  const period = getTOUPeriod(h, isWeekend);
+                  const period = getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek);
                   const nextHour = h + 1;
                   return (
                     <ReferenceArea
@@ -211,7 +217,7 @@ export function LoadEnvelopeChart({
                   const d = payload[0]?.payload;
                   if (!d) return null;
                   const hourNum = parseInt(label?.toString() || "0");
-                  const period = getTOUPeriod(hourNum, isWeekend);
+                  const period = getTOUPeriod(hourNum, isWeekend, undefined, month, dayOfWeek);
                   return (
                     <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
                       <div className="flex items-center gap-2 mb-1">

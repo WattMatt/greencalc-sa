@@ -13,9 +13,11 @@ interface StackedMeterChartProps {
   isWeekend: boolean;
   unit: string;
   onNavigateToTenant?: (tenantId: string) => void;
+  month?: number;
+  dayOfWeek?: number;
 }
 
-export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, onNavigateToTenant }: StackedMeterChartProps) {
+export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, onNavigateToTenant, month, dayOfWeek }: StackedMeterChartProps) {
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
 
   const toggleKey = useCallback((id: string) => {
@@ -46,7 +48,7 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, 
 
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
-                const period = getTOUPeriod(h, isWeekend);
+                const period = getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek);
                 const nextHour = h + 1;
                 return (
                   <ReferenceArea
@@ -79,7 +81,7 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, 
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
                 const hourNum = parseInt(label?.toString() || "0");
-                const period = getTOUPeriod(hourNum, isWeekend);
+                const period = getTOUPeriod(hourNum, isWeekend, undefined, month, dayOfWeek);
                 // Sum all tenant values for total
                 const total = payload.reduce((s, p) => s + (Number(p.value) || 0), 0);
                 return (
