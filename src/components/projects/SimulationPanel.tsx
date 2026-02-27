@@ -918,7 +918,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         batteryDischarge: avg('batteryDischarge'),
         batterySOC: avg('batterySOC'),
         netLoad: avg('netLoad'),
-        pvGeneration: avg('pvGeneration'),
+        pvGeneration: avg('solar'),
         batteryChargeFromGrid: avg('batteryChargeFromGrid'),
         touPeriod: 'off-peak' as LoadProfileTOUPeriod, // placeholder for annual avg
       };
