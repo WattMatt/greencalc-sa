@@ -53,7 +53,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
               </span>
               <span className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-sm bg-amber-500/60" />
-                AC: {effectiveGeneration.toFixed(0)} {unit}
+                AC: {totalPv.toFixed(0)} {unit}
               </span>
               {totalClipping > 0 && (
                 <span className="text-orange-500">
@@ -65,7 +65,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
           {(!dcAcRatio || dcAcRatio <= 1) ? (
             <span className="flex items-center gap-1">
               <div className="w-2 h-2 rounded-sm bg-amber-500/60" />
-              Total: {effectiveGeneration.toFixed(0)} {unit}
+              Total: {totalPv.toFixed(0)} {unit}
             </span>
           ) : null}
           {show1to1Comparison && dcAcRatio > 1 && (
@@ -194,7 +194,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
             {dcAcRatio > 1 && (
               <Line type="monotone" dataKey="pvDcOutput" stroke="hsl(217 91% 60%)" strokeWidth={2.5} dot={false} name="DC Output" />
             )}
-            <Bar dataKey={hasSolarUsedData ? "solarUsed" : "pvGeneration"} fill="hsl(38 92% 50%)" fillOpacity={0.6} radius={[2, 2, 0, 0]} name="AC Output" />
+            <Bar dataKey="pvGeneration" fill="hsl(38 92% 50%)" fillOpacity={0.6} radius={[2, 2, 0, 0]} name="PV Generation" />
             <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={1} strokeDasharray="4 4" dot={false} opacity={0.4} name="Load" />
             <Customized component={<TOUBarsLayer getPeriod={getPeriod} showTOU={showTOU} />} />
           </ComposedChart>
