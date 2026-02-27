@@ -1,27 +1,41 @@
 
-# Fix Vertical Alignment of Positive/Negative Bars in Building Profile Chart
+
+# Fix TOU Background Bands — Merge Consecutive Same-Period Hours
 
 ## Problem
-Recharts' default stacking behaviour computes a cumulative sum across all bars in a stack. This means negative-valued bars (export, battery charge) start from the top of the positive stack and extend downward from there, rather than starting from the zero line. The result is misaligned columns.
-
-## Root Cause
-The `ComposedChart` is using Recharts' default `stackOffset="none"`, which accumulates all values sequentially regardless of sign.
+Each chart renders **24 separate semi-transparent `ReferenceArea` rectangles** (one per hour). Where two adjacent rectangles share the same TOU period and colour, SVG anti-aliasing at their shared boundary creates a visible seam — a thin line of blended colour. With 24 boundaries, these seams produce the appearance of many more than 3 colours.
 
 ## Solution
-Add `stackOffset="sign"` to the `ComposedChart` component. This is a built-in Recharts feature that automatically separates positive values (stacked upward from zero) and negative values (stacked downward from zero), keeping them vertically aligned in the same column.
+Group consecutive hours that share the same TOU period into **single contiguous `ReferenceArea` blocks**. For example, if hours 0-5 are all "off-peak", render one rectangle from `00:00` to `06:00` instead of six overlapping ones. This eliminates all internal boundaries and seams.
 
-## File to Update
+## Implementation
 
-**`src/components/projects/load-profile/charts/BuildingProfileChart.tsx`**
+### 1. New shared utility file
+**`src/components/projects/load-profile/utils/touReferenceAreas.tsx`**
 
-Single change on the `ComposedChart` element (line 76): add the `stackOffset="sign"` prop.
+A helper function that:
+- Accepts a `getPeriod(hour) => TOUPeriod` callback
+- Iterates hours 0-23, grouping consecutive hours with the same period into blocks
+- Returns an array of `<ReferenceArea>` elements (typically 3-8 instead of 24)
 
 ```text
-Before:
-<ComposedChart data={...} margin={...} barGap={1} barCategoryGap="5%">
+Example: If hours resolve to:
+  0-5: off-peak, 6-8: peak, 9-11: standard, 12-13: off-peak, 14-16: standard, 17-18: peak, 19-21: standard, 22-23: off-peak
 
-After:
-<ComposedChart data={...} margin={...} barGap={1} barCategoryGap="5%" stackOffset="sign">
+Result: 8 ReferenceArea blocks instead of 24
 ```
 
-No other changes required. All bars remain on `stackId="building"`.
+### 2. Update all 6 chart files
+
+Replace the existing `Array.from({ length: 24 }, ...)` loop in each file with a call to the new utility, passing the existing `getPeriod` function.
+
+Files to update:
+- `BuildingProfileChart.tsx`
+- `LoadChart.tsx`
+- `SolarChart.tsx`
+- `GridFlowChart.tsx`
+- `BatteryChart.tsx`
+- `StackedMeterChart.tsx`
+
+Each change replaces the ~10-line mapping block with a single function call. No changes to colours, opacity, or any other chart properties.
+
