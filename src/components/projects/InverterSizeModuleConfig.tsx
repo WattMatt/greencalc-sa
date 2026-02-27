@@ -1,5 +1,6 @@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { NumericInput } from "@/components/ui/numeric-input";
 import {
   Select,
   SelectContent,
@@ -63,14 +64,13 @@ export function InverterSizeModuleConfig({
 
   const handleCustomModuleChange = (
     field: keyof SolarModulePreset,
-    value: string
+    value: number
   ) => {
-    const numValue = parseFloat(value) || 0;
     onChange({
       ...config,
       customModule: {
         ...config.customModule!,
-        [field]: numValue,
+        [field]: value,
       },
     });
   };
@@ -126,24 +126,18 @@ export function InverterSizeModuleConfig({
             <div className="grid grid-cols-3 gap-2">
               <div>
                 <Label className="text-xs">Width (m)</Label>
-                <Input
-                  type="number"
+                <NumericInput
                   value={config.customModule.width_m}
-                  onChange={(e) =>
-                    handleCustomModuleChange("width_m", e.target.value)
-                  }
+                  onChange={(v) => handleCustomModuleChange("width_m", v)}
                   className="h-8"
                   step="0.001"
                 />
               </div>
               <div>
                 <Label className="text-xs">Length (m)</Label>
-                <Input
-                  type="number"
+                <NumericInput
                   value={config.customModule.length_m}
-                  onChange={(e) =>
-                    handleCustomModuleChange("length_m", e.target.value)
-                  }
+                  onChange={(v) => handleCustomModuleChange("length_m", v)}
                   className="h-8"
                   step="0.001"
                 />
@@ -163,23 +157,17 @@ export function InverterSizeModuleConfig({
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-xs">Power (W)</Label>
-                <Input
-                  type="number"
+                <NumericInput
                   value={config.customModule.power_wp}
-                  onChange={(e) =>
-                    handleCustomModuleChange("power_wp", e.target.value)
-                  }
+                  onChange={(v) => handleCustomModuleChange("power_wp", v)}
                   className="h-8"
                 />
               </div>
               <div>
                 <Label className="text-xs">Efficiency (%)</Label>
-                <Input
-                  type="number"
+                <NumericInput
                   value={config.customModule.efficiency}
-                  onChange={(e) =>
-                    handleCustomModuleChange("efficiency", e.target.value)
-                  }
+                  onChange={(v) => handleCustomModuleChange("efficiency", v)}
                   className="h-8"
                   step="0.1"
                 />

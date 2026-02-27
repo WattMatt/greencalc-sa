@@ -2,6 +2,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumericInput } from "@/components/ui/numeric-input";
 import {
   Select,
   SelectContent,
@@ -60,9 +61,8 @@ export function InverterSliderPanel({
     onSolarCapacityChange(acKw);
   };
 
-  const handleCustomSystemSize = (value: string) => {
-    const val = parseFloat(value);
-    if (!isNaN(val) && val > 0) {
+  const handleCustomSystemSize = (val: number) => {
+    if (val > 0) {
       const newCount = Math.max(1, Math.ceil(val / config.inverterSize));
       onChange({ ...config, inverterCount: newCount });
       onSolarCapacityChange(val);
@@ -86,8 +86,7 @@ export function InverterSliderPanel({
     onChange({ ...config, inverterSize: newSize, inverterCount: newCount });
   };
 
-  const handleCustomInverterSize = (value: string) => {
-    const newSize = parseInt(value) || 0;
+  const handleCustomInverterSize = (newSize: number) => {
     if (newSize > 0) {
       const newCount = Math.max(1, Math.ceil(desiredAcCapacity / newSize));
       onChange({ ...config, inverterSize: newSize, inverterCount: newCount });
@@ -120,10 +119,9 @@ export function InverterSliderPanel({
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <Label className="text-xs text-muted-foreground">Custom</Label>
-            <Input
-              type="number"
+            <NumericInput
               value={desiredAcCapacity}
-              onChange={(e) => handleCustomSystemSize(e.target.value)}
+              onChange={handleCustomSystemSize}
               className="w-24 h-8 text-right text-sm font-semibold"
               step="5"
               min="0"
@@ -157,10 +155,10 @@ export function InverterSliderPanel({
             </SelectContent>
           </Select>
           <div className="flex items-center gap-2">
-            <Input
-              type="number"
+            <NumericInput
               value={config.inverterSize}
-              onChange={(e) => handleCustomInverterSize(e.target.value)}
+              onChange={handleCustomInverterSize}
+              integer
               className="w-24"
               min={1}
             />
@@ -228,15 +226,10 @@ export function InverterSliderPanel({
               </Tooltip>
             </TooltipProvider>
           </Label>
-          <Input
-            type="number"
+          <NumericInput
             value={config.dcAcRatio}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              if (!isNaN(val) && val >= 1.0 && val <= 1.5) {
-                onChange({ ...config, dcAcRatio: val });
-              }
-            }}
+            onChange={(v) => onChange({ ...config, dcAcRatio: v })}
+            fallback={1.2}
             className="w-20 h-7 text-right text-sm font-semibold"
             step={0.001}
             min={1.0}

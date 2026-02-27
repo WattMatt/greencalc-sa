@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -580,10 +581,10 @@ function DegradationSection({
                     step={1}
                     className="flex-1"
                   />
-                  <Input
-                    type="number"
+                  <NumericInput
                     value={config.panelSimpleRate ?? 0.5}
-                    onChange={(e) => onChange({ ...config, panelSimpleRate: parseFloat(e.target.value) || 0.5 })}
+                    onChange={(v) => onChange({ ...config, panelSimpleRate: v })}
+                    fallback={0.5}
                     className="w-14 h-7 text-xs text-right"
                     step={0.1}
                     min={0}
@@ -598,10 +599,9 @@ function DegradationSection({
                       {panelRates.map((rate, idx) => (
                         <div key={idx} className="flex items-center gap-1">
                           <span className="text-[9px] text-muted-foreground w-5">Y{idx + 1}</span>
-                          <Input
-                            type="number"
+                          <NumericInput
                             value={rate}
-                            onChange={(e) => handlePanelYearChange(idx, parseFloat(e.target.value) || 0)}
+                            onChange={(v) => handlePanelYearChange(idx, v)}
                             className="h-6 text-[10px] text-center p-1"
                             step={0.1}
                             min={0}
@@ -613,10 +613,10 @@ function DegradationSection({
                   </ScrollArea>
                   <div className="flex items-center gap-2">
                     <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Set rate:</Label>
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={panelApplyRate}
-                      onChange={(e) => setPanelApplyRate(parseFloat(e.target.value) || 0.5)}
+                      onChange={setPanelApplyRate}
+                      fallback={0.5}
                       className="w-20 h-6 text-[10px] text-center"
                       step={0.1}
                       min={0}
@@ -667,10 +667,10 @@ function DegradationSection({
                       step={5}
                       className="flex-1"
                     />
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={config.batterySimpleRate ?? 3.0}
-                      onChange={(e) => onChange({ ...config, batterySimpleRate: parseFloat(e.target.value) || 3.0 })}
+                      onChange={(v) => onChange({ ...config, batterySimpleRate: v })}
+                      fallback={3.0}
                       className="w-14 h-7 text-xs text-right"
                       step={0.5}
                       min={0}
@@ -685,10 +685,9 @@ function DegradationSection({
                         {batteryRates.map((rate, idx) => (
                           <div key={idx} className="flex items-center gap-1">
                             <span className="text-[9px] text-muted-foreground w-5">Y{idx + 1}</span>
-                            <Input
-                              type="number"
+                            <NumericInput
                               value={rate}
-                              onChange={(e) => handleBatteryYearChange(idx, parseFloat(e.target.value) || 0)}
+                              onChange={(v) => handleBatteryYearChange(idx, v)}
                               className="h-6 text-[10px] text-center p-1"
                               step={0.5}
                               min={0}
@@ -699,10 +698,10 @@ function DegradationSection({
                       </div>
                     </ScrollArea>
                     <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
+                      <NumericInput
                         value={batteryApplyRate}
-                        onChange={(e) => setBatteryApplyRate(parseFloat(e.target.value) || 3.0)}
+                        onChange={setBatteryApplyRate}
+                        fallback={3.0}
                         className="w-14 h-6 text-[10px] text-center"
                         step={0.5}
                         min={0}
@@ -728,10 +727,11 @@ function DegradationSection({
           {includesBattery && (
             <div className="flex items-center gap-2">
               <Label className="text-xs flex-1">Battery End-of-Life Capacity</Label>
-              <Input
-                type="number"
+              <NumericInput
                 value={config.batteryEolCapacity}
-                onChange={(e) => onChange({ ...config, batteryEolCapacity: parseInt(e.target.value) || 70 })}
+                onChange={(v) => onChange({ ...config, batteryEolCapacity: v })}
+                fallback={70}
+                integer
                 className="w-16 h-7 text-xs text-right"
                 min={50}
                 max={90}
@@ -755,10 +755,9 @@ function FinancialSection({
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1">
           <Label className="text-xs">Tariff Escalation (%/yr)</Label>
-          <Input
-            type="number"
+          <NumericInput
             value={config.tariffEscalationRate}
-            onChange={(e) => onChange({ ...config, tariffEscalationRate: parseFloat(e.target.value) || 0 })}
+            onChange={(v) => onChange({ ...config, tariffEscalationRate: v })}
             min={0}
             max={25}
             step={0.5}
@@ -767,10 +766,9 @@ function FinancialSection({
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Inflation Rate (%)</Label>
-          <Input
-            type="number"
+          <NumericInput
             value={config.inflationRate}
-            onChange={(e) => onChange({ ...config, inflationRate: parseFloat(e.target.value) || 0 })}
+            onChange={(v) => onChange({ ...config, inflationRate: v })}
             min={0}
             max={15}
             step={0.5}
@@ -779,10 +777,9 @@ function FinancialSection({
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Discount Rate (%)</Label>
-          <Input
-            type="number"
+          <NumericInput
             value={config.discountRate}
-            onChange={(e) => onChange({ ...config, discountRate: parseFloat(e.target.value) || 0 })}
+            onChange={(v) => onChange({ ...config, discountRate: v })}
             min={0}
             max={20}
             step={0.5}
@@ -793,10 +790,11 @@ function FinancialSection({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label className="text-xs">Project Lifetime (years)</Label>
-          <Input
-            type="number"
+          <NumericInput
             value={config.projectLifetimeYears}
-            onChange={(e) => onChange({ ...config, projectLifetimeYears: parseInt(e.target.value) || 25 })}
+            onChange={(v) => onChange({ ...config, projectLifetimeYears: v })}
+            fallback={25}
+            integer
             min={10}
             max={30}
             className="h-8 text-xs"
@@ -849,10 +847,9 @@ function GridConstraintsSection({
       {config.exportLimitEnabled && (
         <div className="space-y-1">
           <Label className="text-xs">Max Export (kW)</Label>
-          <Input
-            type="number"
+          <NumericInput
             value={config.maxExportKw}
-            onChange={(e) => onChange({ ...config, maxExportKw: parseFloat(e.target.value) || 0 })}
+            onChange={(v) => onChange({ ...config, maxExportKw: v })}
             min={0}
             step={10}
             className="h-8 text-xs"
@@ -869,10 +866,9 @@ function GridConstraintsSection({
       {config.wheelingEnabled && (
         <div className="space-y-1">
           <Label className="text-xs">Wheeling Charge (R/kWh)</Label>
-          <Input
-            type="number"
+          <NumericInput
             value={config.wheelingChargePerKwh}
-            onChange={(e) => onChange({ ...config, wheelingChargePerKwh: parseFloat(e.target.value) || 0 })}
+            onChange={(v) => onChange({ ...config, wheelingChargePerKwh: v })}
             min={0}
             step={0.05}
             className="h-8 text-xs"
@@ -917,10 +913,11 @@ function LoadGrowthSection({
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Year Joining</Label>
-            <Input
-              type="number"
+            <NumericInput
               value={config.newTenantYear}
-              onChange={(e) => onChange({ ...config, newTenantYear: parseInt(e.target.value) || 1 })}
+              onChange={(v) => onChange({ ...config, newTenantYear: v })}
+              fallback={1}
+              integer
               min={1}
               max={25}
               className="h-8 text-xs"
@@ -928,10 +925,9 @@ function LoadGrowthSection({
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Monthly Load (kWh)</Label>
-            <Input
-              type="number"
+            <NumericInput
               value={config.newTenantLoadKwh}
-              onChange={(e) => onChange({ ...config, newTenantLoadKwh: parseFloat(e.target.value) || 0 })}
+              onChange={(v) => onChange({ ...config, newTenantLoadKwh: v })}
               min={0}
               step={500}
               className="h-8 text-xs"
@@ -1211,10 +1207,10 @@ function BatteryCharacteristicsSection({
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1">
           <Label className="text-xs">Charging C-Rate</Label>
-          <Input
-            type="number"
+          <NumericInput
             value={chargeCRate}
-            onChange={(e) => onChargeCRateChange?.(Math.max(0.01, Math.min(5, parseFloat(e.target.value) || 0.5)))}
+            onChange={(v) => onChargeCRateChange?.(Math.max(0.01, Math.min(5, v)))}
+            fallback={0.5}
             className="h-8 text-xs"
             min={0.01}
             max={5}
@@ -1223,10 +1219,10 @@ function BatteryCharacteristicsSection({
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Discharging C-Rate</Label>
-          <Input
-            type="number"
+          <NumericInput
             value={dischargeCRate}
-            onChange={(e) => onDischargeCRateChange?.(Math.max(0.01, Math.min(5, parseFloat(e.target.value) || 0.5)))}
+            onChange={(v) => onDischargeCRateChange?.(Math.max(0.01, Math.min(5, v)))}
+            fallback={0.5}
             className="h-8 text-xs"
             min={0.01}
             max={5}
@@ -1247,14 +1243,14 @@ function BatteryCharacteristicsSection({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label className="text-xs">Min SoC (%)</Label>
-          <Input
-            type="number"
+          <NumericInput
             value={minSoC}
-            onChange={(e) => {
-              const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+            onChange={(v) => {
+              const val = Math.max(0, Math.min(100, v));
               onMinSoCChange?.(val);
               if (val >= maxSoC) onMaxSoCChange?.(Math.min(100, val + 5));
             }}
+            integer
             className="h-8 text-xs"
             min={0}
             max={100}
@@ -1263,14 +1259,15 @@ function BatteryCharacteristicsSection({
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Max SoC (%)</Label>
-          <Input
-            type="number"
+          <NumericInput
             value={maxSoC}
-            onChange={(e) => {
-              const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 100));
+            onChange={(v) => {
+              const val = Math.max(0, Math.min(100, v));
               onMaxSoCChange?.(val);
               if (val <= minSoC) onMinSoCChange?.(Math.max(0, val - 5));
             }}
+            fallback={100}
+            integer
             className="h-8 text-xs"
             min={0}
             max={100}
@@ -1306,7 +1303,7 @@ function BatteryCharacteristicsSection({
                 allowGridCharging: effectiveDispatchConfig.allowGridCharging,
               };
               if (v === 'tou-arbitrage' && touPeriodToWindows) {
-                const flags = dischargeTouSelection.lowSeason.weekday;
+                const flags = dischargeTouSelection?.lowSeason.weekday ?? DEFAULT_DISCHARGE_TOU_SELECTION.lowSeason.weekday;
                 const windows: TimeWindow[] = [];
                 if (flags.peak) windows.push(...touPeriodToWindows('peak'));
                 if (flags.standard) windows.push(...touPeriodToWindows('standard'));
@@ -1329,196 +1326,44 @@ function BatteryCharacteristicsSection({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              <SelectItem value="self-consumption">Self-Consumption</SelectItem>
+              <SelectItem value="none">Self-Consumption</SelectItem>
               <SelectItem value="tou-arbitrage">TOU Arbitrage</SelectItem>
               <SelectItem value="peak-shaving">Peak Shaving</SelectItem>
-              <SelectItem value="scheduled">Scheduled</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {/* TOU Arbitrage: discharge period grid */}
+        {/* TOU Arbitrage discharge period selection */}
         {batteryStrategy === 'tou-arbitrage' && (
-           <div className="rounded border bg-muted/30 px-3 py-2 space-y-2">
-            <span className="text-[10px] text-muted-foreground">Discharge during</span>
-            <div className="flex divide-x divide-border">
-              {/* High Demand Season */}
-              <div className="flex-1 pr-3 space-y-1.5">
-                <div className="text-[10px] font-semibold text-center" style={{ color: 'hsl(230 70% 50%)' }}>High Demand</div>
-                <div className="divide-y divide-border">
-                  {/* Header row */}
-                  <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 items-center pb-1">
-                    <div className="w-8" />
-                    <div className="text-[9px] text-muted-foreground text-center">Wkday</div>
-                    <div className="text-[9px] text-muted-foreground text-center">Wkend</div>
-                  </div>
-                  {(['peak', 'standard', 'offPeak'] as const).map(period => {
-                    const label = period === 'peak' ? 'Peak' : period === 'standard' ? 'Std' : 'Off-Pk';
-                    const color = period === 'peak' ? 'hsl(0 72% 51%)' : period === 'standard' ? 'hsl(38 92% 50%)' : 'hsl(160 84% 39%)';
-                    return (
-                      <div key={period} className="grid grid-cols-[auto_1fr_1fr] gap-x-3 items-center py-1">
-                        <span className="text-[10px] font-medium w-8" style={{ color }}>{label}</span>
-                        <div className="flex justify-center">
-                          <Checkbox
-                            checked={dischargeTouSelection.highSeason.weekday[period]}
-                            onCheckedChange={(checked) => {
-                              const updated = {
-                                ...dischargeTouSelection,
-                                highSeason: { ...dischargeTouSelection.highSeason, weekday: { ...dischargeTouSelection.highSeason.weekday, [period]: !!checked } },
-                              };
-                              onDischargeTouSelectionChange?.(updated);
-                            }}
-                            className="h-3 w-3"
-                          />
-                        </div>
-                        <div className="flex justify-center">
-                          <Checkbox
-                            checked={dischargeTouSelection.highSeason.weekend[period]}
-                            onCheckedChange={(checked) => {
-                              const updated = {
-                                ...dischargeTouSelection,
-                                highSeason: { ...dischargeTouSelection.highSeason, weekend: { ...dischargeTouSelection.highSeason.weekend, [period]: !!checked } },
-                              };
-                              onDischargeTouSelectionChange?.(updated);
-                            }}
-                            className="h-3 w-3"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              {/* Low Demand Season */}
-              <div className="flex-1 pl-3 space-y-1.5">
-                <div className="text-[10px] font-semibold text-center" style={{ color: 'hsl(270 50% 60%)' }}>Low Demand</div>
-                <div className="divide-y divide-border">
-                  {/* Header row */}
-                  <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 items-center pb-1">
-                    <div className="w-8" />
-                    <div className="text-[9px] text-muted-foreground text-center">Wkday</div>
-                    <div className="text-[9px] text-muted-foreground text-center">Wkend</div>
-                  </div>
-                  {(['peak', 'standard', 'offPeak'] as const).map(period => {
-                    const label = period === 'peak' ? 'Peak' : period === 'standard' ? 'Std' : 'Off-Pk';
-                    const color = period === 'peak' ? 'hsl(0 72% 51%)' : period === 'standard' ? 'hsl(38 92% 50%)' : 'hsl(160 84% 39%)';
-                    return (
-                      <div key={period} className="grid grid-cols-[auto_1fr_1fr] gap-x-3 items-center py-1">
-                        <span className="text-[10px] font-medium w-8" style={{ color }}>{label}</span>
-                        <div className="flex justify-center">
-                          <Checkbox
-                            checked={dischargeTouSelection.lowSeason.weekday[period]}
-                            onCheckedChange={(checked) => {
-                              const updated = {
-                                ...dischargeTouSelection,
-                                lowSeason: { ...dischargeTouSelection.lowSeason, weekday: { ...dischargeTouSelection.lowSeason.weekday, [period]: !!checked } },
-                              };
-                              onDischargeTouSelectionChange?.(updated);
-                            }}
-                            className="h-3 w-3"
-                          />
-                        </div>
-                        <div className="flex justify-center">
-                          <Checkbox
-                            checked={dischargeTouSelection.lowSeason.weekend[period]}
-                            onCheckedChange={(checked) => {
-                              const updated = {
-                                ...dischargeTouSelection,
-                                lowSeason: { ...dischargeTouSelection.lowSeason, weekend: { ...dischargeTouSelection.lowSeason.weekend, [period]: !!checked } },
-                              };
-                              onDischargeTouSelectionChange?.(updated);
-                            }}
-                            className="h-3 w-3"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Scheduled: raw hour inputs (no more grid charging toggle here) */}
-        {batteryStrategy === 'scheduled' && (
-          <div className="space-y-2 text-xs">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Charge window</Label>
-                <div className="flex items-center gap-1">
-                  <Input
-                    type="number"
-                    value={effectiveDispatchConfig.chargeWindows[0]?.start ?? 22}
-                    onChange={(e) => onDispatchConfigChange?.({
-                      ...effectiveDispatchConfig,
-                      chargeWindows: [{ start: parseInt(e.target.value) || 0, end: effectiveDispatchConfig.chargeWindows[0]?.end ?? 6 }],
-                    })}
-                    className="h-7 w-14 text-xs"
-                    min={0} max={23}
-                  />
-                  <span className="text-muted-foreground">–</span>
-                  <Input
-                    type="number"
-                    value={effectiveDispatchConfig.chargeWindows[0]?.end ?? 6}
-                    onChange={(e) => onDispatchConfigChange?.({
-                      ...effectiveDispatchConfig,
-                      chargeWindows: [{ start: effectiveDispatchConfig.chargeWindows[0]?.start ?? 22, end: parseInt(e.target.value) || 0 }],
-                    })}
-                    className="h-7 w-14 text-xs"
-                    min={0} max={23}
-                  />
-                  <span className="text-[10px] text-muted-foreground">h</span>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Discharge window</Label>
-                <div className="flex items-center gap-1">
-                  <Input
-                    type="number"
-                    value={effectiveDispatchConfig.dischargeWindows[0]?.start ?? 7}
-                    onChange={(e) => onDispatchConfigChange?.({
-                      ...effectiveDispatchConfig,
-                      dischargeWindows: [{ start: parseInt(e.target.value) || 0, end: effectiveDispatchConfig.dischargeWindows[0]?.end ?? 20 }],
-                    })}
-                    className="h-7 w-14 text-xs"
-                    min={0} max={23}
-                  />
-                  <span className="text-muted-foreground">–</span>
-                  <Input
-                    type="number"
-                    value={effectiveDispatchConfig.dischargeWindows[0]?.end ?? 20}
-                    onChange={(e) => onDispatchConfigChange?.({
-                      ...effectiveDispatchConfig,
-                      dischargeWindows: [{ start: effectiveDispatchConfig.dischargeWindows[0]?.start ?? 7, end: parseInt(e.target.value) || 0 }],
-                    })}
-                    className="h-7 w-14 text-xs"
-                    min={0} max={23}
-                  />
-                  <span className="text-[10px] text-muted-foreground">h</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Peak Shaving */}
-        {batteryStrategy === 'peak-shaving' && (
-          <div className="space-y-2 text-xs">
-            <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground">Target peak (kW)</Label>
-              <Input
-                type="number"
-                value={effectiveDispatchConfig.peakShavingTarget ?? 150}
-                onChange={(e) => onDispatchConfigChange?.({
-                  ...effectiveDispatchConfig,
-                  peakShavingTarget: Math.max(0, parseFloat(e.target.value) || 0),
-                })}
-                className="h-7 text-xs"
-                min={0}
-                step={10}
-              />
+          <div className="space-y-2 p-2 rounded bg-muted/30">
+            <Label className="text-xs font-medium">Discharge During</Label>
+            <div className="flex flex-wrap gap-3">
+              {[
+                { key: 'peak' as const, label: 'Peak' },
+                { key: 'standard' as const, label: 'Standard' },
+                { key: 'offPeak' as const, label: 'Off-Peak' },
+              ].map((period) => {
+                const flags = dischargeTouSelection?.lowSeason.weekday ?? DEFAULT_DISCHARGE_TOU_SELECTION.lowSeason.weekday;
+                const checked = flags[period.key];
+                return (
+                  <label key={period.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(v) => {
+                        const newFlags = { ...flags, [period.key]: !!v };
+                        if (!newFlags.peak && !newFlags.standard && !newFlags.offPeak) return;
+                        const newSelection: DischargeTOUSelection = {
+                          highSeason: { weekday: newFlags, weekend: { peak: false, standard: false, offPeak: false } },
+                          lowSeason: { weekday: newFlags, weekend: { peak: false, standard: false, offPeak: false } },
+                        };
+                        onDischargeTouSelectionChange?.(newSelection);
+                      }}
+                      className="h-3.5 w-3.5"
+                    />
+                    {period.label}
+                  </label>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1526,5 +1371,3 @@ function BatteryCharacteristicsSection({
     </div>
   );
 }
-
-export default AdvancedSimulationConfigPanel;

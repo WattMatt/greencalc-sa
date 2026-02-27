@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { NumericInput } from '@/components/ui/numeric-input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Sun, CloudSun, Thermometer, RefreshCw, MapPin } from 'lucide-react';
 import { useSolcastForecast, SolcastDailyForecast } from '@/hooks/useSolcastForecast';
@@ -66,21 +66,19 @@ export function SolarForecastCard({
         <div className="flex items-end gap-4">
           <div className="flex-1 space-y-1">
             <Label className="text-xs">Latitude</Label>
-            <Input
-              type="number"
+            <NumericInput
               step="0.0001"
               value={latitude}
-              onChange={(e) => setLatitude(parseFloat(e.target.value) || 0)}
+              onChange={setLatitude}
               placeholder="-33.8688"
             />
           </div>
           <div className="flex-1 space-y-1">
             <Label className="text-xs">Longitude</Label>
-            <Input
-              type="number"
+            <NumericInput
               step="0.0001"
               value={longitude}
-              onChange={(e) => setLongitude(parseFloat(e.target.value) || 0)}
+              onChange={setLongitude}
               placeholder="151.2093"
             />
           </div>
