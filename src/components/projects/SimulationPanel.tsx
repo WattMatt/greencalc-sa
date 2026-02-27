@@ -1114,7 +1114,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         const idx = selectedDayIndex * 24 + i;
         pvDcOutput = tmyDcProfile8760[idx] || 0;
         pvClipping = Math.max(0, pvDcOutput * tmyInverterLossMultiplier - inverterTotalKw);
-        pv1to1Baseline = dcAcRatio > 1 ? Math.min(pvDcOutput * tmyInverterLossMultiplier, inverterTotalKw) : undefined;
+        // 1:1 baseline = DC output scaled to 1:1 ratio, then inverter losses applied (NOT clipped at inverter limit)
+        pv1to1Baseline = dcAcRatio > 1 ? (pvDcOutput / dcAcRatio) * tmyInverterLossMultiplier : undefined;
       } else if (tmyDcProfile8760 && showAnnualAverage) {
         // Average all 365 days for this hour
         let sum = 0;
@@ -1123,7 +1124,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         }
         pvDcOutput = sum / 365;
         pvClipping = Math.max(0, pvDcOutput * tmyInverterLossMultiplier - inverterTotalKw);
-        pv1to1Baseline = dcAcRatio > 1 ? Math.min(pvDcOutput * tmyInverterLossMultiplier, inverterTotalKw) : undefined;
+        // 1:1 baseline = DC output scaled to 1:1 ratio, then inverter losses applied (NOT clipped at inverter limit)
+        pv1to1Baseline = dcAcRatio > 1 ? (pvDcOutput / dcAcRatio) * tmyInverterLossMultiplier : undefined;
       }
 
       return {
