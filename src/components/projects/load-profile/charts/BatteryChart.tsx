@@ -48,7 +48,7 @@ export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, ba
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 40, left: 0, bottom: 0 }} barGap={1} barCategoryGap="5%">
             {showTOU && buildTOUBlocks(getPeriod).map((b) => (
-              <ReferenceArea key={`tou-${b.startHour}`} x1={b.x1} x2={b.x2} fill={b.fill} fillOpacity={0.18} stroke="none" shapeRendering="crispEdges" />
+              <ReferenceArea key={`tou-${b.startHour}`} x1={b.x1} x2={b.x2} fill={b.fill} fillOpacity={0.18} stroke="none" yAxisId="power" />
             ))}
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
             <XAxis
