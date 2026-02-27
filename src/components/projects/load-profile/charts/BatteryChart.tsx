@@ -10,14 +10,16 @@ interface BatteryChartProps {
   showTOU?: boolean;
   isWeekend?: boolean;
   touPeriodsOverride?: TOUPeriod[];
+  month?: number;
+  dayOfWeek?: number;
 }
 
-export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, batteryPower, showTOU = false, isWeekend = false, touPeriodsOverride }: BatteryChartProps) {
+export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, batteryPower, showTOU = false, isWeekend = false, touPeriodsOverride, month, dayOfWeek }: BatteryChartProps) {
   const displayCapacity = batteryAcCapacity ?? batteryCapacity;
 
   const getPeriod = (h: number): TOUPeriod => {
     if (touPeriodsOverride && touPeriodsOverride[h]) return touPeriodsOverride[h];
-    return getTOUPeriod(h, isWeekend);
+    return getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek);
   };
   return (
     <div className="space-y-1">
@@ -53,7 +55,7 @@ export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, ba
                     x1={`${h.toString().padStart(2, "0")}:00`}
                     x2={`${(h + 1).toString().padStart(2, "0")}:00`}
                     fill={TOU_COLORS[period].fill}
-                    fillOpacity={0.08}
+                    fillOpacity={0.12}
                     stroke="none"
                   />
                 );
