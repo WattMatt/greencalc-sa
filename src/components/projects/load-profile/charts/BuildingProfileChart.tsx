@@ -83,7 +83,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
                     x1={`${h.toString().padStart(2, "0")}:00`}
                     x2={`${(h + 1).toString().padStart(2, "0")}:00`}
                     fill={TOU_COLORS[period].fill}
-                    fillOpacity={0.08}
+                    fillOpacity={0.18}
                     stroke="none"
                   />
                 );

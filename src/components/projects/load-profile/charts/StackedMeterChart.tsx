@@ -56,7 +56,7 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, 
                     x1={`${h.toString().padStart(2, "0")}:00`}
                     x2={`${nextHour.toString().padStart(2, "0")}:00`}
                     fill={TOU_COLORS[period].fill}
-                    fillOpacity={0.12}
+                    fillOpacity={0.18}
                     stroke="none"
                   />
                 );
