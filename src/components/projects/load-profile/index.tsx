@@ -363,7 +363,7 @@ export function LoadProfileChart({
           )}
 
           {showBattery && showPVProfile && maxPvAcKva && chartData && (
-            <BatteryChart chartData={chartData} batteryCapacity={batteryCapacity} batteryPower={batteryPower} month={representativeMonth} dayOfWeek={representativeDayOfWeek} />
+            <BatteryChart chartData={chartData} batteryCapacity={batteryCapacity} batteryPower={batteryPower} showTOU={showTOU} isWeekend={isWeekend} month={representativeMonth} dayOfWeek={representativeDayOfWeek} />
           )}
 
           {showTOU && <TOULegend />}
