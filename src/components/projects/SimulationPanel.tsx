@@ -474,6 +474,29 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
 
 
+  // Calculate module metrics for PVsyst calculations (needed before solar profile generation)
+  const moduleMetrics = useMemo(() => {
+    const selectedModule = inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule
+      ? inverterConfig.customModule
+      : getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
+    
+    const currentAcCapacity = inverterConfig.inverterSize * inverterConfig.inverterCount;
+    const metrics = {
+      ...calculateModuleMetrics(currentAcCapacity, inverterConfig.dcAcRatio, selectedModule),
+      moduleName: selectedModule.name,
+    };
+    
+    // Debug logging for module metrics
+    console.log("=== Module Metrics ===");
+    console.log("Selected Module:", selectedModule.name, selectedModule.power_wp + "W");
+    console.log("Module Dimensions:", selectedModule.width_m, "x", selectedModule.length_m, "m");
+    console.log("Module Count:", metrics.moduleCount);
+    console.log("Collector Area (m²):", metrics.collectorAreaM2.toFixed(2));
+    console.log("STC Efficiency:", metrics.stcEfficiency);
+    
+    return metrics;
+  }, [inverterConfig]);
+
 
   // Sync CPI from systemCosts to advancedConfig for O&M escalation
   useEffect(() => {
@@ -581,7 +604,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     powerFactor: 0.9,
     showPVProfile: includesSolar && solarCapacity > 0,
     maxPvAcKva: inverterConfig.inverterSize * inverterConfig.inverterCount,
-    dcCapacityKwp: solarCapacity * inverterConfig.dcAcRatio,
+    dcCapacityKwp: moduleMetrics.actualDcCapacityKwp,
     dcAcRatio: inverterConfig.dcAcRatio,
     showBattery: includesBattery && batteryCapacity > 0,
     batteryCapacity,
@@ -611,7 +634,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     powerFactor: 0.9,
     showPVProfile: includesSolar && solarCapacity > 0,
     maxPvAcKva: inverterConfig.inverterSize * inverterConfig.inverterCount,
-    dcCapacityKwp: solarCapacity * inverterConfig.dcAcRatio,
+    dcCapacityKwp: moduleMetrics.actualDcCapacityKwp,
     dcAcRatio: inverterConfig.dcAcRatio,
     showBattery: includesBattery && batteryCapacity > 0,
     batteryCapacity,
@@ -667,28 +690,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     enabled: !!project.tariff_id,
   });
 
-  // Calculate module metrics for PVsyst calculations (needed before solar profile generation)
-  const moduleMetrics = useMemo(() => {
-    const selectedModule = inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule
-      ? inverterConfig.customModule
-      : getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
-    
-    const currentAcCapacity = inverterConfig.inverterSize * inverterConfig.inverterCount;
-    const metrics = {
-      ...calculateModuleMetrics(currentAcCapacity, inverterConfig.dcAcRatio, selectedModule),
-      moduleName: selectedModule.name,
-    };
-    
-    // Debug logging for module metrics
-    console.log("=== Module Metrics ===");
-    console.log("Selected Module:", selectedModule.name, selectedModule.power_wp + "W");
-    console.log("Module Dimensions:", selectedModule.width_m, "x", selectedModule.length_m, "m");
-    console.log("Module Count:", metrics.moduleCount);
-    console.log("Collector Area (m²):", metrics.collectorAreaM2.toFixed(2));
-    console.log("STC Efficiency:", metrics.stcEfficiency);
-    
-    return metrics;
-  }, [inverterConfig]);
+
 
   // Calculate 3-Year O&M with CPI escalation for financial metrics
   const threeYearOM = useMemo(() => {
@@ -767,7 +769,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     }
     
     // DC capacity for specific yield calculation
-    const dcCapacityKwp = inverterConfig.inverterSize * inverterConfig.inverterCount * inverterConfig.dcAcRatio;
+    const dcCapacityKwp = moduleMetrics.actualDcCapacityKwp;
     
     // Create config with actual module-derived values - explicitly include lossesAfterInverter
     const configWithModuleData: PVsystLossChainConfig = {
