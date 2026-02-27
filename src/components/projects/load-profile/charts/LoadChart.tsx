@@ -1,4 +1,4 @@
-import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
@@ -34,14 +34,7 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, touP
       <p className="text-xs font-medium text-muted-foreground">Load Profile</p>
       <div className="h-[200px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={[...chartData, { ...chartData[chartData.length - 1], hour: "24:00" }]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync">
-            <defs>
-              <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
-              </linearGradient>
-            </defs>
-
+          <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync">
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getPeriod(h);
@@ -80,7 +73,7 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, touP
                 );
               }}
             />
-            <Area type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#totalGradient)" dot={false} activeDot={{ r: 5, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }} />
+            <Bar dataKey="total" fill="hsl(var(--primary))" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
