@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -91,16 +92,15 @@ function KwhOverrideCell({
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(
-    tenant.monthly_kwh_override?.toString() || Math.round(calculatedKwh).toString()
+    tenant.monthly_kwh_override ?? Math.round(calculatedKwh)
   );
 
   const displayKwh = tenant.monthly_kwh_override ?? calculatedKwh;
   const isOverridden = tenant.monthly_kwh_override !== null;
 
   const handleSave = () => {
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue) && numValue > 0) {
-      onUpdate(numValue);
+    if (value > 0) {
+      onUpdate(value);
     }
     setOpen(false);
   };
@@ -124,12 +124,11 @@ function KwhOverrideCell({
         <div className="space-y-3">
           <div className="space-y-1">
             <Label className="text-xs">kWh/month override</Label>
-            <Input
-              type="number"
+            <NumericInput
               value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="Enter kWh"
+              onChange={(v) => setValue(v)}
               className="h-8"
+              min={0}
             />
           </div>
           <p className="text-xs text-muted-foreground">

@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
@@ -291,10 +292,9 @@ function FeedInTariffSection({
             
             <div className="space-y-1">
               <Label className="text-xs">Escalation Rate (%/yr)</Label>
-              <Input
-                type="number"
+              <NumericInput
                 value={config.escalationRate}
-                onChange={(e) => onChange({ ...config, escalationRate: parseFloat(e.target.value) || 0 })}
+                onChange={(v) => onChange({ ...config, escalationRate: v })}
                 className="h-8 text-xs"
               />
             </div>
@@ -303,30 +303,27 @@ function FeedInTariffSection({
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Min Export (R/kWh)</Label>
-              <Input
-                type="number"
-                step="0.01"
+              <NumericInput
+                step={0.01}
                 value={config.minimumExportPrice}
-                onChange={(e) => onChange({ ...config, minimumExportPrice: parseFloat(e.target.value) || 0 })}
+                onChange={(v) => onChange({ ...config, minimumExportPrice: v })}
                 className="h-8 text-xs"
               />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Max Export (R/kWh)</Label>
-              <Input
-                type="number"
-                step="0.01"
+              <NumericInput
+                step={0.01}
                 value={config.maximumExportPrice}
-                onChange={(e) => onChange({ ...config, maximumExportPrice: parseFloat(e.target.value) || 0 })}
+                onChange={(v) => onChange({ ...config, maximumExportPrice: v })}
                 className="h-8 text-xs"
               />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Connection Fee (R/mo)</Label>
-              <Input
-                type="number"
+              <NumericInput
                 value={config.gridConnectionFee}
-                onChange={(e) => onChange({ ...config, gridConnectionFee: parseFloat(e.target.value) || 0 })}
+                onChange={(v) => onChange({ ...config, gridConnectionFee: v })}
                 className="h-8 text-xs"
               />
             </div>
@@ -403,19 +400,17 @@ function PortfolioSection({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Benchmark IRR (%)</Label>
-              <Input
-                type="number"
+              <NumericInput
                 value={config.benchmarkIrr}
-                onChange={(e) => onChange({ ...config, benchmarkIrr: parseFloat(e.target.value) || 0 })}
+                onChange={(v) => onChange({ ...config, benchmarkIrr: v })}
                 className="h-8 text-xs"
               />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Target Payback (years)</Label>
-              <Input
-                type="number"
+              <NumericInput
                 value={config.targetPayback}
-                onChange={(e) => onChange({ ...config, targetPayback: parseFloat(e.target.value) || 0 })}
+                onChange={(v) => onChange({ ...config, targetPayback: v })}
                 className="h-8 text-xs"
               />
             </div>
@@ -459,20 +454,18 @@ function CarbonSection({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Grid Emission Factor (kg CO₂/kWh)</Label>
-              <Input
-                type="number"
-                step="0.01"
+              <NumericInput
+                step={0.01}
                 value={config.gridEmissionFactor}
-                onChange={(e) => onChange({ ...config, gridEmissionFactor: parseFloat(e.target.value) || 0 })}
+                onChange={(v) => onChange({ ...config, gridEmissionFactor: v })}
                 className="h-8 text-xs"
               />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Carbon Tax (R/ton CO₂)</Label>
-              <Input
-                type="number"
+              <NumericInput
                 value={config.carbonTaxRate}
-                onChange={(e) => onChange({ ...config, carbonTaxRate: parseFloat(e.target.value) || 0 })}
+                onChange={(v) => onChange({ ...config, carbonTaxRate: v })}
                 className="h-8 text-xs"
               />
             </div>
@@ -489,10 +482,9 @@ function CarbonSection({
             {config.includeTransmissionLosses && (
               <div className="space-y-1">
                 <Label className="text-xs">Loss %</Label>
-                <Input
-                  type="number"
+                <NumericInput
                   value={config.transmissionLossPercent}
-                  onChange={(e) => onChange({ ...config, transmissionLossPercent: parseFloat(e.target.value) || 0 })}
+                  onChange={(v) => onChange({ ...config, transmissionLossPercent: v })}
                   className="h-8 text-xs"
                 />
               </div>
@@ -510,10 +502,9 @@ function CarbonSection({
             {config.recTrackingEnabled && (
               <div className="space-y-1">
                 <Label className="text-xs">REC Price (R/MWh)</Label>
-                <Input
-                  type="number"
+                <NumericInput
                   value={config.recPricePerMwh}
-                  onChange={(e) => onChange({ ...config, recPricePerMwh: parseFloat(e.target.value) || 0 })}
+                  onChange={(v) => onChange({ ...config, recPricePerMwh: v })}
                   className="h-8 text-xs"
                 />
               </div>
@@ -580,38 +571,35 @@ function FinancingSection({
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">PPA Rate (R/kWh)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
+                  <NumericInput
+                    step={0.01}
                     value={config.ppa.ppaRate}
-                    onChange={(e) => onChange({ ...config, ppa: { ...config.ppa, ppaRate: parseFloat(e.target.value) || 0 } })}
+                    onChange={(v) => onChange({ ...config, ppa: { ...config.ppa, ppaRate: v } })}
                     className="h-7 text-xs"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Escalation (%/yr)</Label>
-                  <Input
-                    type="number"
+                  <NumericInput
                     value={config.ppa.ppaEscalationRate}
-                    onChange={(e) => onChange({ ...config, ppa: { ...config.ppa, ppaEscalationRate: parseFloat(e.target.value) || 0 } })}
+                    onChange={(v) => onChange({ ...config, ppa: { ...config.ppa, ppaEscalationRate: v } })}
                     className="h-7 text-xs"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Contract Term (years)</Label>
-                  <Input
-                    type="number"
+                  <NumericInput
+                    integer
                     value={config.ppa.contractTerm}
-                    onChange={(e) => onChange({ ...config, ppa: { ...config.ppa, contractTerm: parseInt(e.target.value) || 0 } })}
+                    onChange={(v) => onChange({ ...config, ppa: { ...config.ppa, contractTerm: v } })}
                     className="h-7 text-xs"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Performance Guarantee (%)</Label>
-                  <Input
-                    type="number"
+                  <NumericInput
                     value={config.ppa.performanceGuarantee}
-                    onChange={(e) => onChange({ ...config, ppa: { ...config.ppa, performanceGuarantee: parseFloat(e.target.value) || 0 } })}
+                    onChange={(v) => onChange({ ...config, ppa: { ...config.ppa, performanceGuarantee: v } })}
                     className="h-7 text-xs"
                   />
                 </div>
@@ -625,28 +613,26 @@ function FinancingSection({
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Monthly Payment (R)</Label>
-                  <Input
-                    type="number"
+                  <NumericInput
                     value={config.lease.monthlyPayment}
-                    onChange={(e) => onChange({ ...config, lease: { ...config.lease, monthlyPayment: parseFloat(e.target.value) || 0 } })}
+                    onChange={(v) => onChange({ ...config, lease: { ...config.lease, monthlyPayment: v } })}
                     className="h-7 text-xs"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Lease Term (months)</Label>
-                  <Input
-                    type="number"
+                  <NumericInput
+                    integer
                     value={config.lease.leaseTerm}
-                    onChange={(e) => onChange({ ...config, lease: { ...config.lease, leaseTerm: parseInt(e.target.value) || 0 } })}
+                    onChange={(v) => onChange({ ...config, lease: { ...config.lease, leaseTerm: v } })}
                     className="h-7 text-xs"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Residual Value (%)</Label>
-                  <Input
-                    type="number"
+                  <NumericInput
                     value={config.lease.residualValue}
-                    onChange={(e) => onChange({ ...config, lease: { ...config.lease, residualValue: parseFloat(e.target.value) || 0 } })}
+                    onChange={(v) => onChange({ ...config, lease: { ...config.lease, residualValue: v } })}
                     className="h-7 text-xs"
                   />
                 </div>
@@ -667,29 +653,27 @@ function FinancingSection({
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Interest Rate (%)</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
+                  <NumericInput
+                    step={0.1}
                     value={config.loan.interestRate}
-                    onChange={(e) => onChange({ ...config, loan: { ...config.loan, interestRate: parseFloat(e.target.value) || 0 } })}
+                    onChange={(v) => onChange({ ...config, loan: { ...config.loan, interestRate: v } })}
                     className="h-7 text-xs"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Loan Term (years)</Label>
-                  <Input
-                    type="number"
+                  <NumericInput
+                    integer
                     value={config.loan.loanTerm}
-                    onChange={(e) => onChange({ ...config, loan: { ...config.loan, loanTerm: parseInt(e.target.value) || 0 } })}
+                    onChange={(v) => onChange({ ...config, loan: { ...config.loan, loanTerm: v } })}
                     className="h-7 text-xs"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Down Payment (%)</Label>
-                  <Input
-                    type="number"
+                  <NumericInput
                     value={config.loan.downPayment}
-                    onChange={(e) => onChange({ ...config, loan: { ...config.loan, downPayment: parseFloat(e.target.value) || 0 } })}
+                    onChange={(v) => onChange({ ...config, loan: { ...config.loan, downPayment: v } })}
                     className="h-7 text-xs"
                   />
                 </div>
