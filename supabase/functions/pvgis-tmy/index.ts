@@ -93,10 +93,6 @@ serve(async (req) => {
 
     console.log(`Received ${hourlyData.length} hourly records`);
 
-    // Build the full 8,760-hour arrays (chronological order)
-    const hourly8760Ghi: number[] = [];
-    const hourly8760Temp: number[] = [];
-
     // Process hourly data into typical day profile (24-hour averages)
     const typicalDayProfile = Array(24).fill(null).map(() => ({
       ghi: 0,
@@ -113,10 +109,6 @@ serve(async (req) => {
     for (const hour of hourlyData) {
       const hourOfDay = parseInt(hour["time(UTC)"].substring(9, 11));
       
-      // Append to 8,760 arrays
-      hourly8760Ghi.push(hour["G(h)"]);
-      hourly8760Temp.push(hour.T2m);
-
       typicalDayProfile[hourOfDay].ghi += hour["G(h)"];
       typicalDayProfile[hourOfDay].dni += hour["Gb(n)"];
       typicalDayProfile[hourOfDay].dhi += hour["Gd(h)"];
@@ -196,8 +188,6 @@ serve(async (req) => {
         hourlyTemp,
       },
       monthly: monthlyBreakdown,
-      hourly8760Ghi,
-      hourly8760Temp,
     };
 
     console.log(`Processed TMY: Peak Sun Hours: ${peakSunHours.toFixed(2)}, Annual GHI: ${annualGhiKwh.toFixed(0)} kWh/m²`);
