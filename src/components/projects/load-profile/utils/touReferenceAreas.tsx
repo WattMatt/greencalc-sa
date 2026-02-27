@@ -44,7 +44,7 @@ export function ShiftedReferenceLine(props: any) {
 
   // xAxis.bandSize = pixel distance between adjacent category tick centres
   const bandSize = props.xAxis?.bandSize ?? 0;
-  const shift = bandSize / 2;
+  const shift = -(bandSize / 2);
 
   return (
     <line
