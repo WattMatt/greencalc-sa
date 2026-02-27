@@ -55,7 +55,7 @@ export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, ba
                     x1={`${h.toString().padStart(2, "0")}:00`}
                     x2={`${(h + 1).toString().padStart(2, "0")}:00`}
                     fill={TOU_COLORS[period].fill}
-                    fillOpacity={0.12}
+                    fillOpacity={0.18}
                     stroke="none"
                   />
                 );
