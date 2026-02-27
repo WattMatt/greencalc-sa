@@ -1,4 +1,5 @@
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { buildTOUReferenceAreas } from "../utils/touReferenceAreas";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 import { Badge } from "@/components/ui/badge";
 
@@ -74,20 +75,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
       <div className="h-[220px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={[...stackedData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={1} barCategoryGap="5%" stackOffset="sign">
-            {showTOU &&
-              Array.from({ length: 24 }, (_, h) => {
-                const period = getPeriod(h);
-                return (
-                  <ReferenceArea
-                    key={h}
-                    x1={`${h.toString().padStart(2, "0")}:00`}
-                    x2={`${(h + 1).toString().padStart(2, "0")}:00`}
-                    fill={TOU_COLORS[period].fill}
-                    fillOpacity={0.18}
-                    stroke="none"
-                  />
-                );
-              })}
+            {showTOU && buildTOUReferenceAreas(getPeriod)}
 
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
             <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} interval={2} />
