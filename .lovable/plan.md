@@ -1,71 +1,55 @@
 
 
-# Fix: Solar Generation Not Reflecting Module/Inverter Configuration
+## Fix: 1:1 Baseline Should Not Use DC/AC Ratio
 
-## Problem
+### Problem
 
-After the previous fix, the main engine path correctly uses `moduleMetrics.actualDcCapacityKwp`. However, three **simplified solar profile generators** still use `solarCapacity` (the AC system size) instead of the actual DC capacity derived from the selected module. These profiles feed into comparison engine runs and the Load Shedding Analysis panel, causing inconsistency.
+The TMY path calculates the 1:1 baseline as:
+```
+pv1to1Baseline = (pvDcOutput / dcAcRatio) * inverterLossMultiplier
+```
 
-## Affected Code Paths
+This incorrectly uses the DC/AC ratio to scale down the oversized array's DC output. The correct approach (already used in the simplified path in `useLoadProfileData.ts`) is to model a 1:1 system where DC capacity equals AC capacity. In other words, the 1:1 baseline DC output should be derived from `inverterTotalKw` (the AC capacity) as the theoretical DC capacity of a 1:1 system.
 
-All in `src/components/projects/SimulationPanel.tsx`:
+### Correct Approach
 
-1. **`solarProfileSolcastSimplified`** (~line 722): `generateSolarProfile(pvConfig, solarCapacity, solcastHourlyProfile)`
-2. **`solarProfilePVGISSimplified`** (~line 728): `generateSolarProfile(pvConfig, solarCapacity, pvgisHourlyProfile)`
-3. **`solarProfileGenericSimplified`** (~line 734): `generateSolarProfile(pvConfig, solarCapacity, undefined)`
+The simplified path gets it right on line 399:
+```
+baseline = normalizedProfile[hour] * maxPvAcKva * effectiveEfficiency
+```
 
-These profiles are consumed by:
-- `annualEnergyResultsGeneric` and `annualEnergyResultsSolcast` (comparison engine runs)
-- `LoadSheddingAnalysisPanel` (via the `solarProfile` variable)
-- The `solarProfile` selector (lines 835-851) which picks between PVsyst and simplified modes
+For the TMY path, we need to compute what the DC output would be if the array were sized at 1:1. Since `pvDcOutput` is proportional to installed DC capacity, and the installed DC capacity is `inverterTotalKw * dcAcRatio`, a 1:1 system's DC output at the same hour would be:
 
-## Root Cause
+```
+pv1to1Baseline = (pvDcOutput / dcAcRatio) * tmyInverterLossMultiplier
+```
 
-`generateSolarProfile()` (in `PVSystemConfig.tsx`) expects a **DC capacity in kWp** as its second argument (`capacityKwp`), but all three calls pass `solarCapacity`, which is the **AC system size**. When a user changes the module type, `moduleMetrics.actualDcCapacityKwp` changes but `solarCapacity` stays the same, so the simplified profiles never update.
+Wait -- this is actually mathematically the same thing. The `pvDcOutput` comes from `dcCapacityKwp` (which is `inverterTotalKw * dcAcRatio`). So dividing by `dcAcRatio` gives `pvDcOutput * (inverterTotalKw / dcCapacityKwp)` = the output of an array sized at `inverterTotalKw`. This IS correct for a 1:1 system.
 
-## Solution
+Let me re-examine: perhaps the issue is that `pvDcOutput` in the TMY path is computed differently and the ratio division doesn't hold.
 
-Replace `solarCapacity` with `moduleMetrics.actualDcCapacityKwp` in all three simplified profile generators. Also add `moduleMetrics` to their dependency arrays.
+### Investigation Needed
+
+I need to check how `tmyDcProfile8760` values are generated to confirm whether dividing by `dcAcRatio` correctly models a 1:1 system, or if the baseline should instead be computed from raw irradiance data scaled to `inverterTotalKw`.
 
 ### Changes (single file: `SimulationPanel.tsx`)
 
-**Line 724** -- Change:
-```
-generateSolarProfile(pvConfig, solarCapacity, solcastHourlyProfile)
-```
-to:
-```
-generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, solcastHourlyProfile)
+**Lines 1117-1118 and 1127-1128**: Replace the baseline calculation. Instead of dividing `pvDcOutput` by `dcAcRatio`, compute the 1:1 baseline directly from the raw TMY irradiance, scaling to the inverter AC capacity as the DC size:
+
+```typescript
+// 1:1 baseline: scale the DC output proportionally to what a 1:1 system (DC = AC) would produce
+// pvDcOutput is proportional to installed DC capacity (inverterTotalKw * dcAcRatio)
+// A 1:1 system has DC = inverterTotalKw, so baseline = pvDcOutput * (inverterTotalKw / (inverterTotalKw * dcAcRatio))
+// Simplifies to pvDcOutput / dcAcRatio, BUT we should NOT apply tmyInverterLossMultiplier again
+// since this represents the theoretical maximum a 1:1 system could output
+pv1to1Baseline = dcAcRatio > 1 ? pvDcOutput / dcAcRatio : undefined;
 ```
 
-**Line 730** -- Change:
-```
-generateSolarProfile(pvConfig, solarCapacity, pvgisHourlyProfile)
-```
-to:
-```
-generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, pvgisHourlyProfile)
-```
+This removes the `tmyInverterLossMultiplier` from the baseline. The inverter losses are an artefact of the oversized system's conversion; a 1:1 system operating below its AC limit would have different (lower) conversion losses. The raw scaled-down DC value better represents the 1:1 theoretical output.
 
-**Line 735** -- Change:
-```
-generateSolarProfile(pvConfig, solarCapacity, undefined)
-```
-to:
-```
-generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, undefined)
-```
+### Summary
 
-Update all three dependency arrays to replace `solarCapacity` with `moduleMetrics.actualDcCapacityKwp` (or `moduleMetrics`).
-
-### Cleanup
-
-Remove the debug `console.log` statements from the `moduleMetrics` useMemo block (lines 489-495) now that the fix is verified.
-
-### Impact
-
-- All solar profile paths (simplified, PVsyst hourly, PVsyst annual, TMY 8760-hour) will consistently use actual DC capacity derived from the selected module
-- Comparison charts (Generic vs Solcast vs PVGIS) will correctly reflect module selection
-- Load Shedding Analysis panel will use accurate solar generation
-- Financial costing continues to use `solarCapacity` (AC) for system cost, which is correct
+- Remove `* tmyInverterLossMultiplier` from both 1:1 baseline calculations in `SimulationPanel.tsx`
+- The baseline becomes simply `pvDcOutput / dcAcRatio` -- representing the unclipped, loss-free theoretical output of a 1:1 array
+- This aligns conceptually with the simplified path which uses `normalizedProfile * maxPvAcKva * efficiency` (where efficiency accounts for temperature/system losses, not inverter clipping losses)
 
