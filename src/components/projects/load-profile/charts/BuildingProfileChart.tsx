@@ -1,4 +1,4 @@
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 import { Badge } from "@/components/ui/badge";
 
@@ -21,6 +21,13 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
   const totalExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
   const totalCharge = chartData.reduce((sum, d) => sum + (d.batteryCharge || 0), 0);
   const totalDischarge = chartData.reduce((sum, d) => sum + (d.batteryDischarge || 0), 0);
+
+  // Pre-process data: add negative values for stacking below zero
+  const stackedData = chartData.map(d => ({
+    ...d,
+    gridExportNeg: -(d.gridExport || 0),
+    batteryChargeNeg: -(d.batteryCharge || 0),
+  }));
 
   const getPeriod = (h: number): TOUPeriod => {
     if (touPeriodsOverride && touPeriodsOverride[h]) return touPeriodsOverride[h];
@@ -53,11 +60,11 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
         {includesBattery && (
           <>
             <span className="flex items-center gap-1">
-              <div className="w-3 h-0.5" style={{ backgroundColor: "hsl(142 76% 36%)" }} />
+              <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: "hsl(142 76% 36%)", opacity: 0.5 }} />
               Charge: {totalCharge.toFixed(0)} {unit}h
             </span>
             <span className="flex items-center gap-1">
-              <div className="w-3 h-0.5" style={{ backgroundColor: "hsl(25 95% 53%)" }} />
+              <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: "hsl(25 95% 53%)", opacity: 0.7 }} />
               Discharge: {totalDischarge.toFixed(0)} {unit}h
             </span>
           </>
@@ -66,7 +73,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
 
       <div className="h-[220px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={1} barCategoryGap="1%">
+          <ComposedChart data={[...stackedData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={1} barCategoryGap="1%">
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getPeriod(h);
@@ -84,7 +91,9 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
 
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
             <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} interval={2} />
-            <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} width={45} />
+            <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v <= -1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} width={45} />
+
+            <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1} />
 
             <Tooltip
               content={({ active, payload, label }) => {
@@ -117,16 +126,20 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
               }}
             />
 
-            <Bar dataKey="total" fill="hsl(var(--primary))" fillOpacity={0.5} radius={[2, 2, 0, 0]} name="Load" />
-            <Bar dataKey="solarUsed" fill="hsl(38 92% 50%)" fillOpacity={0.6} radius={[2, 2, 0, 0]} name="PV to Load" />
-            <Bar dataKey="gridImport" fill="hsl(0 72% 51%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} name="Grid Import" />
-            <Bar dataKey="gridExport" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} name="Grid Export" />
+            {/* Load as unstacked background bar */}
+            <Bar dataKey="total" fill="hsl(var(--primary))" fillOpacity={0.3} radius={[2, 2, 0, 0]} name="Load" />
 
+            {/* Positive stacked bars */}
+            <Bar dataKey="solarUsed" stackId="building" fill="hsl(38 92% 50%)" fillOpacity={0.6} radius={[0, 0, 0, 0]} name="PV to Load" />
+            <Bar dataKey="gridImport" stackId="building" fill="hsl(0 72% 51%)" fillOpacity={0.5} radius={[0, 0, 0, 0]} name="Grid Import" />
             {includesBattery && (
-              <Line type="monotone" dataKey="batteryCharge" stroke="hsl(142 76% 36%)" strokeWidth={2} dot={false} name="Battery Charge" />
+              <Bar dataKey="batteryDischarge" stackId="building" fill="hsl(25 95% 53%)" fillOpacity={0.6} radius={[0, 0, 0, 0]} name="Battery Discharge" />
             )}
+
+            {/* Negative stacked bars */}
+            <Bar dataKey="gridExportNeg" stackId="building" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[0, 0, 0, 0]} name="Grid Export" />
             {includesBattery && (
-              <Line type="monotone" dataKey="batteryDischarge" stroke="hsl(25 95% 53%)" strokeWidth={2} dot={false} name="Battery Discharge" />
+              <Bar dataKey="batteryChargeNeg" stackId="building" fill="hsl(142 76% 36%)" fillOpacity={0.3} radius={[0, 0, 0, 0]} name="Battery Charge" />
             )}
           </ComposedChart>
         </ResponsiveContainer>
