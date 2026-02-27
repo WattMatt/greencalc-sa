@@ -1,4 +1,4 @@
-import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 import { Battery } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 
@@ -103,25 +103,19 @@ export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, ba
               }}
             />
 
-            <Area
+            <Bar
               yAxisId="power"
-              type="monotone"
               dataKey="batteryCharge"
-              stroke="hsl(142 76% 36%)"
-              strokeWidth={1.5}
               fill="hsl(142 76% 36%)"
-              fillOpacity={0.4}
-              dot={false}
+              fillOpacity={0.6}
+              radius={[2, 2, 0, 0]}
             />
-            <Area
+            <Bar
               yAxisId="power"
-              type="monotone"
               dataKey="batteryDischarge"
-              stroke="hsl(25 95% 53%)"
-              strokeWidth={1.5}
               fill="hsl(25 95% 53%)"
-              fillOpacity={0.4}
-              dot={false}
+              fillOpacity={0.6}
+              radius={[2, 2, 0, 0]}
             />
             <Line yAxisId="soc" type="monotone" dataKey="batterySoC" stroke="hsl(217 91% 60%)" strokeWidth={2} dot={false} />
           </ComposedChart>
