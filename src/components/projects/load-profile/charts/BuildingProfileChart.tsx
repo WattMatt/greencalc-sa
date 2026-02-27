@@ -127,16 +127,16 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
             />
 
             {/* Positive stacked bars */}
-            <Bar dataKey="solarUsed" stackId="positive" fill="hsl(38 92% 50%)" fillOpacity={0.6} radius={[0, 0, 0, 0]} name="PV to Load" />
-            <Bar dataKey="gridImport" stackId="positive" fill="hsl(0 72% 51%)" fillOpacity={0.5} radius={[0, 0, 0, 0]} name="Grid Import" />
+            <Bar dataKey="solarUsed" stackId="building" fill="hsl(38 92% 50%)" fillOpacity={0.6} radius={[0, 0, 0, 0]} name="PV to Load" />
+            <Bar dataKey="gridImport" stackId="building" fill="hsl(0 72% 51%)" fillOpacity={0.5} radius={[0, 0, 0, 0]} name="Grid Import" />
             {includesBattery && (
-              <Bar dataKey="batteryDischarge" stackId="positive" fill="hsl(25 95% 53%)" fillOpacity={0.6} radius={[0, 0, 0, 0]} name="Battery Discharge" />
+              <Bar dataKey="batteryDischarge" stackId="building" fill="hsl(25 95% 53%)" fillOpacity={0.6} radius={[0, 0, 0, 0]} name="Battery Discharge" />
             )}
 
             {/* Negative stacked bars (below zero) */}
-            <Bar dataKey="gridExportNeg" stackId="negative" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[0, 0, 0, 0]} name="Grid Export" />
+            <Bar dataKey="gridExportNeg" stackId="building" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[0, 0, 0, 0]} name="Grid Export" />
             {includesBattery && (
-              <Bar dataKey="batteryChargeNeg" stackId="negative" fill="hsl(142 76% 36%)" fillOpacity={0.3} radius={[0, 0, 0, 0]} name="Battery Charge" />
+              <Bar dataKey="batteryChargeNeg" stackId="building" fill="hsl(142 76% 36%)" fillOpacity={0.3} radius={[0, 0, 0, 0]} name="Battery Charge" />
             )}
 
             {/* Load as stepped line overlay */}
