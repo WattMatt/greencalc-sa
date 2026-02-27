@@ -196,9 +196,6 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
                       <p className="text-blue-500 font-medium">DC Panel Output: {dcOutput.toFixed(1)} {unit}</p>
                     )}
                     <p className="text-amber-600 font-medium">AC Inverter Output: {pv.toFixed(1)} {unit}</p>
-                    {hasSolarUsedData && dataPoint?.solarUsed != null && dataPoint.solarUsed !== pv && (
-                      <p className="text-amber-500">To Load: {dataPoint.solarUsed.toFixed(1)} {unit}</p>
-                    )}
                     {dcAcRatio > 1 && clipping > 0 && (
                       <p className="text-orange-500">Clipping Loss: {clipping.toFixed(1)} {unit}</p>
                     )}
