@@ -1,5 +1,5 @@
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { TOUXAxisTick } from "../utils/touReferenceAreas";
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Customized } from "recharts";
+import { TOUXAxisTick, TOUBarsLayer } from "../utils/touReferenceAreas";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 import { Badge } from "@/components/ui/badge";
 
@@ -127,6 +127,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
 
             {/* Load as stepped line overlay */}
             <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Load" />
+            <Customized component={<TOUBarsLayer getPeriod={getPeriod} showTOU={showTOU} />} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

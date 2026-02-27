@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
-import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { TOUXAxisTick } from "../utils/touReferenceAreas";
+import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Customized } from "recharts";
+import { TOUXAxisTick, TOUBarsLayer } from "../utils/touReferenceAreas";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip as UITooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { ExternalLink } from "lucide-react";
@@ -117,6 +117,7 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, 
                 activeDot={false}
               />
             ))}
+            <Customized component={<TOUBarsLayer getPeriod={(h: number) => getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek)} showTOU={showTOU} />} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
