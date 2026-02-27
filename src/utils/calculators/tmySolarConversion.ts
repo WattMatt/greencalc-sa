@@ -16,6 +16,12 @@ export interface TMYConversionParams {
   stcEfficiency: number;          // Module STC efficiency (e.g. 0.2149)
   pvsystConfig: PVsystLossChainConfig;
   reductionFactor: number;        // Production reduction (e.g. 0.85 for 15% reduction)
+  maxAcOutputKw?: number;         // Inverter AC limit for clipping (kW)
+}
+
+export interface TMYConversionResult {
+  dcOutput: number[];             // 8,760 hourly DC values (pre-clipping, kWh)
+  acOutput: number[];             // 8,760 hourly AC values (post-clipping, kWh)
 }
 
 /**
@@ -72,21 +78,33 @@ function calculateCombinedLossMultiplier(config: PVsystLossChainConfig): number 
  *   4. × combined PVsyst loss multiplier
  *   5. × production reduction factor
  */
-export function convertTMYToSolarGeneration(params: TMYConversionParams): number[] {
+export function convertTMYToSolarGeneration(params: TMYConversionParams): TMYConversionResult {
   const {
     hourlyGhiWm2,
     collectorAreaM2,
     stcEfficiency,
     pvsystConfig,
     reductionFactor,
+    maxAcOutputKw,
   } = params;
 
   const lossMultiplier = calculateCombinedLossMultiplier(pvsystConfig);
   const combinedFactor = (collectorAreaM2 * stcEfficiency * lossMultiplier * reductionFactor) / 1000;
 
-  // Pre-multiply constant factors for performance (8,760 iterations)
-  return hourlyGhiWm2.map(ghiWm2 => {
-    if (ghiWm2 <= 0) return 0;
-    return ghiWm2 * combinedFactor;
-  });
+  const dcOutput: number[] = new Array(hourlyGhiWm2.length);
+  const acOutput: number[] = new Array(hourlyGhiWm2.length);
+
+  for (let i = 0; i < hourlyGhiWm2.length; i++) {
+    const ghiWm2 = hourlyGhiWm2[i];
+    if (ghiWm2 <= 0) {
+      dcOutput[i] = 0;
+      acOutput[i] = 0;
+    } else {
+      const dc = ghiWm2 * combinedFactor;
+      dcOutput[i] = dc;
+      acOutput[i] = maxAcOutputKw != null ? Math.min(dc, maxAcOutputKw) : dc;
+    }
+  }
+
+  return { dcOutput, acOutput };
 }
