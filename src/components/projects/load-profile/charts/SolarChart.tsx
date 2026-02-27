@@ -140,10 +140,38 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
           <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: showTOU ? 10 : 0 }} barGap={1} barCategoryGap="5%">
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
             <XAxis dataKey="hour" tick={<TOUXAxisTick getPeriod={getPeriod} showTOU={showTOU} />} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} interval={2} />
-            <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} width={45} domain={yAxisMax ? [0, yAxisMax] : ["auto", "auto"]} />
+            <YAxis 
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} 
+              tickLine={false} 
+              axisLine={false} 
+              tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} 
+              width={45} 
+              domain={yAxisMax ? [0, yAxisMax] : ["auto", "auto"]} 
+            />
             
             {dcAcRatio > 1 && maxPvAcKva && (
-              <ReferenceLine y={maxPvAcKva} stroke="hsl(var(--destructive))" strokeDasharray="6 4" strokeWidth={1.5} label={{ value: `Inverter AC Limit`, position: "insideTopRight", fontSize: 9, fill: "hsl(var(--destructive))" }} />
+              <>
+                <ReferenceLine y={maxPvAcKva} stroke="hsl(var(--destructive))" strokeDasharray="6 4" strokeWidth={1.5} label={{ value: `Inverter AC Limit`, position: "insideTopRight", fontSize: 9, fill: "hsl(var(--destructive))" }} />
+                <YAxis 
+                  yAxisId="acLimit" 
+                  orientation="left" 
+                  tick={({ x, y, payload }: any) => {
+                    if (payload.value !== maxPvAcKva) return <g />;
+                    const label = maxPvAcKva >= 1000 ? `${(maxPvAcKva / 1000).toFixed(1)}k` : maxPvAcKva.toFixed(0);
+                    return (
+                      <text x={x} y={y} dy={3} textAnchor="end" fontSize={9} fontWeight={600} fill="hsl(var(--destructive))">
+                        {label}
+                      </text>
+                    );
+                  }}
+                  ticks={[maxPvAcKva]}
+                  tickLine={false}
+                  axisLine={false}
+                  width={45}
+                  domain={yAxisMax ? [0, yAxisMax] : ["auto", "auto"]}
+                  mirror
+                />
+              </>
             )}
             
             <Tooltip
