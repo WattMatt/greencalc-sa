@@ -1,27 +1,64 @@
 
 
-# Fix: Battery Profile TOU Period Overlay
+# Fix: Allow All Numeric Inputs to Be Fully Cleared
 
 ## Problem
-The Battery Profile chart in daily (day-to-day) mode does not display the Time-of-Use period background colours (Peak/Standard/Off-Peak), even though other charts like Load Profile and Grid Profile do.
+Every numeric input in the project uses the pattern `parseFloat(e.target.value) || 0` (or `parseInt(...) || 0`). When you select all text and press Delete/Backspace, the empty string is immediately parsed as `NaN`, which falls through to `0`, snapping the value back and preventing you from typing a new number cleanly.
 
-## Root Cause
-After investigation, the TOU overlay code **does exist** in `BatteryChart.tsx` and the correct props are being passed from `SimulationPanel.tsx`. However, the `fillOpacity` is set to `0.08` -- significantly lower than other charts which use `0.12`. Combined with the chart's white background and the fact that if no `touPeriodsOverride` is available, the fallback `getTOUPeriod(h, isWeekend)` is called **without** month or dayOfWeek context, meaning all hours may resolve to "off-peak" (a single uniform teal), rendering the overlay effectively invisible.
+## Solution
+Create a reusable `NumericInput` component that stores the **display value as a string** internally, only committing the parsed number to the parent on **blur** or **Enter**. While typing, the field is free-text, so you can clear it, type partial values like `0.` or `-`, without the value snapping back.
 
-## Fix
+## Implementation
 
-### 1. Increase TOU overlay opacity in BatteryChart (match other charts)
-Change `fillOpacity` from `0.08` to `0.12` to match LoadChart, GridFlowChart, SolarChart, and BuildingProfileChart.
+### 1. Create `src/components/ui/numeric-input.tsx`
+A thin wrapper around the existing `Input` component:
+- Internal `string` state for display
+- Syncs from parent `value` prop (number) when not focused
+- On blur / Enter: parse the string, clamp to min/max if provided, call `onChange(parsedNumber)`
+- If the field is empty on blur, fall back to a configurable `fallback` prop (default `0`)
+- Forwards all standard Input props (className, step, min, max, disabled, etc.)
 
-### 2. Pass month and dayOfWeek context to BatteryChart
-Update the `BatteryChart` props to accept `month` and `dayOfWeek` so the fallback `getTOUPeriod` call can correctly determine the season and distinguish Saturday from Sunday -- matching how other charts resolve TOU periods.
+### 2. Replace all `parseFloat(...) || 0` and `parseInt(...) || 0` patterns
+Swap every inline number input across these files to use `NumericInput`:
 
-### 3. Pass month/dayOfWeek from SimulationPanel
-Use the existing `dayDateInfo` (which already contains the date for the selected day index) to derive the month and dayOfWeek values and pass them to `BatteryChart`.
+| File | Approx. replacements |
+|------|---------------------|
+| `AdvancedSimulationConfig.tsx` | ~20 inputs |
+| `FutureEnhancementsConfig.tsx` | ~15 inputs |
+| `SystemCostsManager.tsx` | ~15 inputs |
+| `SimulationPanel.tsx` | ~5 inputs |
+| `SolarForecastCard.tsx` | 2 inputs |
+| `InverterSizeModuleConfig.tsx` | custom module fields |
+| `InverterSliderPanel.tsx` | 1 input |
+| `TenantManager.tsx` | area/kWh fields |
 
-## Files Changed
+### 3. Component API
 
-| File | Change |
-|------|--------|
-| `src/components/projects/load-profile/charts/BatteryChart.tsx` | Increase `fillOpacity` to `0.12`; accept `month` and `dayOfWeek` props; pass them to `getTOUPeriod` fallback |
-| `src/components/projects/SimulationPanel.tsx` | Derive month/dayOfWeek from `dayDateInfo` and pass to `BatteryChart` |
+```typescript
+interface NumericInputProps extends Omit<React.ComponentProps<"input">, "onChange" | "value" | "type"> {
+  value: number;
+  onChange: (value: number) => void;
+  /** Value to use when field is empty on blur. Default: 0 */
+  fallback?: number;
+  /** Use integer parsing instead of float. Default: false */
+  integer?: boolean;
+}
+```
+
+Usage before:
+```tsx
+<Input type="number" value={config.discountRate}
+  onChange={(e) => onChange({ ...config, discountRate: parseFloat(e.target.value) || 0 })} />
+```
+
+Usage after:
+```tsx
+<NumericInput value={config.discountRate}
+  onChange={(v) => onChange({ ...config, discountRate: v })} />
+```
+
+## Technical Notes
+- The component uses `type="number"` on the underlying input so browser stepper arrows and mobile numeric keyboards still work.
+- Min/max clamping happens on commit (blur/Enter), not while typing, so the user is never interrupted mid-edit.
+- The `fallback` prop lets each field decide what "empty" means (e.g. `0`, `0.5`, `25`) -- matching the current `|| 0`, `|| 0.5`, `|| 25` defaults.
+
