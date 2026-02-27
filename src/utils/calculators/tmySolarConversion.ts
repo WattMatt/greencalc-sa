@@ -3,7 +3,7 @@
  * 
  * Converts 8,760 hourly GHI values (W/m²) from a Typical Meteorological Year
  * into 8,760 hourly inverter output values (kWh), applying the full PVsyst
- * loss chain.
+ * loss chain split into DC and AC stages.
  * 
  * Pure function — no UI, no side effects.
  */
@@ -20,27 +20,26 @@ export interface TMYConversionParams {
 }
 
 export interface TMYConversionResult {
-  dcOutput: number[];             // 8,760 hourly DC values (pre-clipping, kWh)
-  acOutput: number[];             // 8,760 hourly AC values (post-clipping, kWh)
+  dcOutput: number[];             // 8,760 hourly DC values (after irradiance + array losses)
+  acOutput: number[];             // 8,760 hourly AC values (after inverter losses + clipping)
+  inverterLossMultiplier: number; // For 1:1 baseline calculation by caller
 }
 
 /**
- * Calculate the combined PVsyst loss multiplier from a config.
- * 
- * Each loss percentage is applied multiplicatively:
- *   result = (1 - loss1/100) * (1 - loss2/100) * ...
+ * Calculate the DC-stage loss multiplier (irradiance + array losses).
+ * Represents losses from GHI to the DC bus (panel/string level).
  */
-function calculateCombinedLossMultiplier(config: PVsystLossChainConfig): number {
-  const { irradiance, array, system, lossesAfterInverter } = config;
+function calculateDcLossMultiplier(config: PVsystLossChainConfig): number {
+  const { irradiance, array } = config;
 
-  // Irradiance losses (optical only — spectral & electrical shading are array-level)
+  // Irradiance losses (optical)
   const irradianceFactor =
     (1 - irradiance.transpositionLoss / 100) *
     (1 - irradiance.nearShadingLoss / 100) *
     (1 - irradiance.iamLoss / 100) *
     (1 - irradiance.soilingLoss / 100);
 
-  // Array losses (including spectral & electrical shading moved here)
+  // Array losses (including spectral & electrical shading)
   const arrayFactor =
     (1 - irradiance.spectralLoss / 100) *
     (1 - irradiance.electricalShadingLoss / 100) *
@@ -52,8 +51,15 @@ function calculateCombinedLossMultiplier(config: PVsystLossChainConfig): number 
     (1 - array.mismatchLoss / 100) *
     (1 - array.ohmicLoss / 100);
 
-  // Inverter losses
-  const inv = system.inverter;
+  return irradianceFactor * arrayFactor;
+}
+
+/**
+ * Calculate the inverter-stage loss multiplier (inverter + post-inverter losses).
+ * Represents the DC-to-AC conversion efficiency.
+ */
+function calculateInverterLossMultiplier(config: PVsystLossChainConfig): number {
+  const inv = config.system.inverter;
   const inverterFactor =
     (1 - inv.operationEfficiency / 100) *
     (1 - inv.overNominalPower / 100) *
@@ -62,10 +68,9 @@ function calculateCombinedLossMultiplier(config: PVsystLossChainConfig): number 
     (1 - inv.powerThreshold / 100) *
     (1 - inv.voltageThreshold / 100);
 
-  // Post-inverter losses
-  const postInverterFactor = 1 - (lossesAfterInverter?.availabilityLoss ?? 0) / 100;
+  const postInverterFactor = 1 - (config.lossesAfterInverter?.availabilityLoss ?? 0) / 100;
 
-  return irradianceFactor * arrayFactor * inverterFactor * postInverterFactor;
+  return inverterFactor * postInverterFactor;
 }
 
 /**
@@ -75,8 +80,12 @@ function calculateCombinedLossMultiplier(config: PVsystLossChainConfig): number 
  *   1. GHI (W/m²) × 1h = Wh/m²  →  /1000 = kWh/m²
  *   2. × collector area = energy on collectors (kWh)
  *   3. × STC efficiency = array nominal (kWh)
- *   4. × combined PVsyst loss multiplier
+ *   4. × DC loss multiplier (irradiance + array losses)
  *   5. × production reduction factor
+ *   → dcOutput
+ *   6. × inverter loss multiplier (inverter + post-inverter losses)
+ *   7. Clip at inverter AC limit
+ *   → acOutput
  */
 export function convertTMYToSolarGeneration(params: TMYConversionParams): TMYConversionResult {
   const {
@@ -88,8 +97,9 @@ export function convertTMYToSolarGeneration(params: TMYConversionParams): TMYCon
     maxAcOutputKw,
   } = params;
 
-  const lossMultiplier = calculateCombinedLossMultiplier(pvsystConfig);
-  const combinedFactor = (collectorAreaM2 * stcEfficiency * lossMultiplier * reductionFactor) / 1000;
+  const dcLossMult = calculateDcLossMultiplier(pvsystConfig);
+  const invLossMult = calculateInverterLossMultiplier(pvsystConfig);
+  const dcFactor = (collectorAreaM2 * stcEfficiency * dcLossMult * reductionFactor) / 1000;
 
   const dcOutput: number[] = new Array(hourlyGhiWm2.length);
   const acOutput: number[] = new Array(hourlyGhiWm2.length);
@@ -100,11 +110,12 @@ export function convertTMYToSolarGeneration(params: TMYConversionParams): TMYCon
       dcOutput[i] = 0;
       acOutput[i] = 0;
     } else {
-      const dc = ghiWm2 * combinedFactor;
+      const dc = ghiWm2 * dcFactor;
       dcOutput[i] = dc;
-      acOutput[i] = maxAcOutputKw != null ? Math.min(dc, maxAcOutputKw) : dc;
+      const acBeforeClip = dc * invLossMult;
+      acOutput[i] = maxAcOutputKw != null ? Math.min(acBeforeClip, maxAcOutputKw) : acBeforeClip;
     }
   }
 
-  return { dcOutput, acOutput };
+  return { dcOutput, acOutput, inverterLossMultiplier: invLossMult };
 }

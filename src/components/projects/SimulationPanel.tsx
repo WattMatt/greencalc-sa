@@ -580,7 +580,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     displayUnit: "kw",
     powerFactor: 0.9,
     showPVProfile: includesSolar && solarCapacity > 0,
-    maxPvAcKva: solarCapacity,
+    maxPvAcKva: inverterConfig.inverterSize * inverterConfig.inverterCount,
     dcCapacityKwp: solarCapacity * inverterConfig.dcAcRatio,
     dcAcRatio: inverterConfig.dcAcRatio,
     showBattery: includesBattery && batteryCapacity > 0,
@@ -610,7 +610,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     displayUnit: "kw",
     powerFactor: 0.9,
     showPVProfile: includesSolar && solarCapacity > 0,
-    maxPvAcKva: solarCapacity,
+    maxPvAcKva: inverterConfig.inverterSize * inverterConfig.inverterCount,
     dcCapacityKwp: solarCapacity * inverterConfig.dcAcRatio,
     dcAcRatio: inverterConfig.dcAcRatio,
     showBattery: includesBattery && batteryCapacity > 0,
@@ -898,19 +898,22 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       },
     };
 
+    const inverterTotalKw = inverterConfig.inverterSize * inverterConfig.inverterCount;
+
     return convertTMYToSolarGeneration({
       hourlyGhiWm2: pvgisTmyData.hourlyGhi8760,
       collectorAreaM2: moduleMetrics.collectorAreaM2,
       stcEfficiency: moduleMetrics.stcEfficiency,
       pvsystConfig: configWithModuleData,
       reductionFactor: 1 - (productionReductionPercent / 100),
-      maxAcOutputKw: solarCapacity,
+      maxAcOutputKw: inverterTotalKw,
     });
-  }, [solarDataSource, pvgisTmyData, includesSolar, lossCalculationMode, pvsystConfig, moduleMetrics, productionReductionPercent, solarCapacity]);
+  }, [solarDataSource, pvgisTmyData, includesSolar, lossCalculationMode, pvsystConfig, moduleMetrics, productionReductionPercent, inverterConfig.inverterSize, inverterConfig.inverterCount]);
 
   // Extract DC and AC arrays from TMY conversion result
   const tmyDcProfile8760 = tmyConversionResult?.dcOutput;
   const tmySolarProfile8760 = tmyConversionResult?.acOutput;
+  const tmyInverterLossMultiplier = tmyConversionResult?.inverterLossMultiplier ?? 1;
 
   // 8,760-hour annual simulation — single source of truth for all kWh and financial data
   const annualEnergyResults = useMemo(() =>
@@ -1107,13 +1110,17 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       const engineHour = representativeDay[i];
       if (!engineHour) return hour;
 
-      // Use TMY DC data for pvDcOutput and pvClipping when available
+      // Use TMY DC data for pvDcOutput, pvClipping, and pv1to1Baseline when available
+      const inverterTotalKw = inverterConfig.inverterSize * inverterConfig.inverterCount;
+      const dcAcRatio = inverterConfig.dcAcRatio;
       let pvDcOutput = hour.pvDcOutput;
       let pvClipping = hour.pvClipping;
+      let pv1to1Baseline = hour.pv1to1Baseline;
       if (tmyDcProfile8760 && !showAnnualAverage) {
         const idx = selectedDayIndex * 24 + i;
         pvDcOutput = tmyDcProfile8760[idx] || 0;
-        pvClipping = Math.max(0, pvDcOutput - solarCapacity);
+        pvClipping = Math.max(0, pvDcOutput * tmyInverterLossMultiplier - inverterTotalKw);
+        pv1to1Baseline = dcAcRatio > 1 ? (pvDcOutput / dcAcRatio) * tmyInverterLossMultiplier : undefined;
       } else if (tmyDcProfile8760 && showAnnualAverage) {
         // Average all 365 days for this hour
         let sum = 0;
@@ -1121,7 +1128,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           sum += tmyDcProfile8760[d * 24 + i] || 0;
         }
         pvDcOutput = sum / 365;
-        pvClipping = Math.max(0, pvDcOutput - solarCapacity);
+        pvClipping = Math.max(0, pvDcOutput * tmyInverterLossMultiplier - inverterTotalKw);
+        pv1to1Baseline = dcAcRatio > 1 ? (pvDcOutput / dcAcRatio) * tmyInverterLossMultiplier : undefined;
       }
 
       return {
@@ -1129,6 +1137,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         pvGeneration: ('pvGeneration' in engineHour ? (engineHour as any).pvGeneration : (engineHour as any).solar) ?? hour.pvGeneration,
         pvDcOutput,
         pvClipping,
+        pv1to1Baseline,
         batteryCharge: engineHour.batteryCharge,
         batteryDischarge: engineHour.batteryDischarge,
         batterySoC: (engineHour.batterySOC / 100) * batteryCapacity,
@@ -1139,7 +1148,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         solarUsed: engineHour.solarUsed,
       };
     });
-  }, [loadProfileChartData, representativeDay, tmyDcProfile8760, selectedDayIndex, showAnnualAverage, solarCapacity]);
+  }, [loadProfileChartData, representativeDay, tmyDcProfile8760, selectedDayIndex, showAnnualAverage, inverterConfig.inverterSize, inverterConfig.inverterCount, inverterConfig.dcAcRatio, tmyInverterLossMultiplier]);
 
   // Check if financial analysis is available (moved up for use in advanced simulation)
   const hasFinancialData = !!project.tariff_id;
@@ -2517,7 +2526,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 dcAcRatio={inverterConfig.dcAcRatio}
                 show1to1Comparison={inverterConfig.dcAcRatio > 1}
                 unit="kW"
-                maxPvAcKva={solarCapacity}
+                maxPvAcKva={inverterConfig.inverterSize * inverterConfig.inverterCount}
                 touPeriodsOverride={touPeriodsForDay}
                 month={dayDateInfo.month}
                 dayOfWeek={dayDateInfo.dayOfWeek}
