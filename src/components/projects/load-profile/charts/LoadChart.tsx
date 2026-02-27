@@ -1,8 +1,8 @@
-import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
-import { buildTOUBlocks } from "../utils/touReferenceAreas";
+import { buildTOUBoundaryLines } from "../utils/touReferenceAreas";
 
 interface LoadChartProps {
   chartData: ChartDataPoint[];
@@ -37,9 +37,9 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, touP
       <p className="text-xs font-medium text-muted-foreground">Load Profile</p>
       <div className="h-[200px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync" barGap={1} barCategoryGap="5%">
-            {showTOU && buildTOUBlocks(getPeriod).map((b) => (
-              <ReferenceArea key={`tou-${b.startHour}`} x1={b.x1} x2={b.x2} fill={b.fill} fillOpacity={0.18} stroke="none" shapeRendering="crispEdges" />
+          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync" barGap={1} barCategoryGap="5%">
+            {showTOU && buildTOUBoundaryLines(getPeriod).map((line) => (
+              <ReferenceLine key={`tou-${line.hour}`} x={line.hour} stroke={line.color} strokeDasharray="4 3" strokeWidth={1.5} />
             ))}
 
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
