@@ -1,4 +1,4 @@
-import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Sun } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
@@ -33,11 +33,6 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
   const energyGained = totalPv - total1to1;
   const netBenefit = energyGained - totalClipping;
   const yAxisMax = dcAcRatio > 1 ? Math.max(peakDc * 1.1, (maxPvAcKva || 0) * 1.3) : undefined;
-
-  const chartDataWithGain = chartData.map(d => ({
-    ...d,
-    pvGainZone: Math.max(0, (d.pvGeneration || 0) - (d.pv1to1Baseline || 0)),
-  }));
 
   return (
     <div className="space-y-1">
@@ -139,22 +134,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
       
       <div className="h-[180px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={[...chartDataWithGain, { ...chartDataWithGain[chartDataWithGain.length - 1], hour: "24:00" }]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="pvAcGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(38 92% 50%)" stopOpacity={0.6} />
-                <stop offset="95%" stopColor="hsl(38 92% 50%)" stopOpacity={0.1} />
-              </linearGradient>
-              <linearGradient id="pvGainGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(142 76% 36%)" stopOpacity={0.5} />
-                <stop offset="95%" stopColor="hsl(142 76% 36%)" stopOpacity={0.1} />
-              </linearGradient>
-              <linearGradient id="pv1to1Gradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.05} />
-              </linearGradient>
-            </defs>
-
+          <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             {/* TOU Background */}
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
@@ -183,13 +163,13 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
-                const dataPoint = chartDataWithGain.find(d => d.hour === label);
+                const dataPoint = chartData.find(d => d.hour === label);
                 const pv = dataPoint?.pvGeneration || 0;
                 const load = dataPoint?.total || 0;
                 const dcOutput = dataPoint?.pvDcOutput || 0;
                 const clipping = dataPoint?.pvClipping || 0;
                 const baseline = dataPoint?.pv1to1Baseline || 0;
-                const gain = dataPoint?.pvGainZone || 0;
+                const gain = Math.max(0, pv - baseline);
                 const hourNum = parseInt(label?.toString() || "0");
                 const period = getPeriod(hourNum);
 
@@ -225,13 +205,10 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
             {show1to1Comparison && dcAcRatio > 1 && (
               <Line type="monotone" dataKey="pv1to1Baseline" stroke="hsl(var(--muted-foreground))" strokeWidth={2} strokeDasharray="4 4" dot={false} name="1:1 Baseline" />
             )}
-            {show1to1Comparison && dcAcRatio > 1 && (
-              <Area type="monotone" dataKey="pvGainZone" stroke="none" fill="url(#pvGainGradient)" stackId="gainStack" baseValue="dataMin" name="Energy Gained" />
-            )}
             {dcAcRatio > 1 && (
               <Line type="monotone" dataKey="pvDcOutput" stroke="hsl(217 91% 60%)" strokeWidth={2.5} dot={false} name="DC Output" />
             )}
-            <Area type="monotone" dataKey={hasSolarUsedData ? "solarUsed" : "pvGeneration"} stroke="hsl(38 92% 50%)" strokeWidth={2} fill="url(#pvAcGradient)" dot={false} name="AC Output" />
+            <Bar dataKey={hasSolarUsedData ? "solarUsed" : "pvGeneration"} fill="hsl(38 92% 50%)" fillOpacity={0.6} radius={[2, 2, 0, 0]} name="AC Output" />
             <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={1} strokeDasharray="4 4" dot={false} opacity={0.4} name="Load" />
           </ComposedChart>
         </ResponsiveContainer>

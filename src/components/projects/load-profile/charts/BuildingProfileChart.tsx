@@ -1,4 +1,4 @@
-import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 import { Badge } from "@/components/ui/badge";
 
@@ -12,8 +12,6 @@ interface BuildingProfileChartProps {
 }
 
 export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, includesBattery, touPeriodsOverride }: BuildingProfileChartProps) {
-  const extendedData = [...chartData, { ...chartData[chartData.length - 1], hour: "24:00" }];
-
   const totalLoad = chartData.reduce((sum, d) => sum + (d.total || 0), 0);
   const totalSolarUsed = chartData.reduce((sum, d) => sum + (d.solarUsed ?? d.pvGeneration ?? 0), 0);
   const totalPvRaw = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);
@@ -66,26 +64,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
 
       <div className="h-[220px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={extendedData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="bpLoadGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
-              </linearGradient>
-              <linearGradient id="bpPvGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(38 92% 50%)" stopOpacity={0.5} />
-                <stop offset="95%" stopColor="hsl(38 92% 50%)" stopOpacity={0.05} />
-              </linearGradient>
-              <linearGradient id="bpImportGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(0 72% 51%)" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="hsl(0 72% 51%)" stopOpacity={0.05} />
-              </linearGradient>
-              <linearGradient id="bpExportGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(142 76% 36%)" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="hsl(142 76% 36%)" stopOpacity={0.05} />
-              </linearGradient>
-            </defs>
-
+          <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getPeriod(h);
@@ -136,10 +115,10 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
               }}
             />
 
-            <Area type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#bpLoadGradient)" dot={false} name="Load" />
-            <Area type="monotone" dataKey="solarUsed" stroke="hsl(38 92% 50%)" strokeWidth={1.5} fill="url(#bpPvGradient)" dot={false} name="PV to Load" />
-            <Area type="monotone" dataKey="gridImport" stroke="hsl(0 72% 51%)" strokeWidth={1.5} fill="url(#bpImportGradient)" dot={false} name="Grid Import" />
-            <Area type="monotone" dataKey="gridExport" stroke="hsl(142 76% 36%)" strokeWidth={1.5} fill="url(#bpExportGradient)" dot={false} name="Grid Export" />
+            <Bar dataKey="total" fill="hsl(var(--primary))" fillOpacity={0.5} radius={[2, 2, 0, 0]} name="Load" />
+            <Bar dataKey="solarUsed" fill="hsl(38 92% 50%)" fillOpacity={0.6} radius={[2, 2, 0, 0]} name="PV to Load" />
+            <Bar dataKey="gridImport" fill="hsl(0 72% 51%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} name="Grid Import" />
+            <Bar dataKey="gridExport" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} name="Grid Export" />
 
             {includesBattery && (
               <Line type="monotone" dataKey="batteryCharge" stroke="hsl(142 76% 36%)" strokeWidth={2} dot={false} name="Battery Charge" />

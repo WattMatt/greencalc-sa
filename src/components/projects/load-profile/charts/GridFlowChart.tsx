@@ -1,4 +1,4 @@
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
+import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
@@ -40,18 +40,7 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit, touPeriodsO
       </div>
       <div className="h-[160px]">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={[...chartData, { ...chartData[chartData.length - 1], hour: "24:00" }]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="gridImportGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(0 72% 51%)" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="hsl(0 72% 51%)" stopOpacity={0.05} />
-              </linearGradient>
-              <linearGradient id="gridExportGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(142 76% 36%)" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="hsl(142 76% 36%)" stopOpacity={0.05} />
-              </linearGradient>
-            </defs>
-
+          <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getPeriod(h);
@@ -108,9 +97,9 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit, touPeriodsO
               }}
             />
 
-            <Area type="monotone" dataKey="gridImport" stroke="hsl(0 72% 51%)" strokeWidth={1.5} fill="url(#gridImportGradient)" dot={false} />
-            <Area type="monotone" dataKey="gridExport" stroke="hsl(142 76% 36%)" strokeWidth={1.5} fill="url(#gridExportGradient)" dot={false} />
-          </AreaChart>
+            <Bar dataKey="gridImport" fill="hsl(0 72% 51%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
+            <Bar dataKey="gridExport" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
