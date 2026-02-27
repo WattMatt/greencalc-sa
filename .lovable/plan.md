@@ -1,40 +1,79 @@
 
 
-# Fix: Battery Chart Missing TOU Background in Load Profile View
+# Convert Remaining `<Input type="number">` to `<NumericInput>`
 
-## Problem
+Replace all raw `<Input type="number">` fields with the `NumericInput` component (from `src/components/ui/numeric-input.tsx`) across the four remaining files. `NumericInput` handles focus/blur commit, min/max clamping, and prevents invalid character entry -- matching the pattern already established elsewhere in the app.
 
-The BatteryChart in the load-profile view (line 366 of `load-profile/index.tsx`) is rendered without the `showTOU` and `isWeekend` props. Since `showTOU` defaults to `false` in BatteryChart, the TOU period backgrounds never appear on the battery chart -- even though they show correctly on the Load, Solar, Grid, and Envelope charts in the same view.
+**Note:** Some inputs use managed string state for inline-edit patterns (e.g. `solarCostEditValue`, `solarPercentageInput`, `batteryPercentageInput`). These already implement their own commit-on-blur/keydown logic and will be left as-is since converting them would require refactoring their parent state management.
 
-## Root Cause
+---
 
-When the BatteryChart call was added to `load-profile/index.tsx`, only `chartData`, `batteryCapacity`, `batteryPower`, `month`, and `dayOfWeek` were passed. The `showTOU` and `isWeekend` props were omitted, so TOU backgrounds are always hidden.
+## File 1: `src/components/projects/simulation/FutureEnhancementsConfig.tsx`
 
-## Fix
+**Import change:** Replace `Input` import with `NumericInput` import.
 
-Update the BatteryChart rendering in `src/components/projects/load-profile/index.tsx` (line 366) to include the missing props, matching the pattern used by all other charts in that file:
+Convert ~20 numeric inputs across the sub-sections:
+- **Feed-In Tariff:** escalationRate, minimumExportPrice, maximumExportPrice, gridConnectionFee
+- **Portfolio:** benchmarkIrr, targetPayback
+- **Carbon:** gridEmissionFactor, carbonTaxRate, transmissionLossPercent, recPricePerMwh
+- **Financing/PPA:** ppaRate, ppaEscalationRate, contractTerm (integer), performanceGuarantee
+- **Financing/Lease:** monthlyPayment, leaseTerm (integer), residualValue
+- **Financing/Loan:** interestRate, loanTerm (integer), downPayment
 
+Each converts from:
 ```tsx
-// Before
-<BatteryChart chartData={chartData} batteryCapacity={batteryCapacity} batteryPower={batteryPower} month={representativeMonth} dayOfWeek={representativeDayOfWeek} />
-
-// After
-<BatteryChart
-  chartData={chartData}
-  batteryCapacity={batteryCapacity}
-  batteryPower={batteryPower}
-  showTOU={showTOU}
-  isWeekend={isWeekend}
-  month={representativeMonth}
-  dayOfWeek={representativeDayOfWeek}
-/>
+<Input type="number" value={x} onChange={(e) => set(parseFloat(e.target.value) || 0)} ... />
 ```
+To:
+```tsx
+<NumericInput value={x} onChange={(v) => set(v)} ... />
+```
+With `integer={true}` added for integer fields (contractTerm, leaseTerm, loanTerm).
 
-## Files Changed
+---
 
-| File | Change |
-|------|--------|
-| `src/components/projects/load-profile/index.tsx` | Add `showTOU={showTOU}` and `isWeekend={isWeekend}` to BatteryChart rendering |
+## File 2: `src/components/projects/SystemCostsManager.tsx`
 
-This is a one-line fix -- two missing props.
+**Import change:** Add `NumericInput` import.
+
+Convert the following direct-onChange inputs (~15):
+- **Fixed costs:** healthAndSafetyCost, waterPointsCost, cctvCost, mvSwitchGearCost
+- **Fees:** professionalFeesPercent, projectManagementPercent, contingencyPercent
+- **Replacement:** replacementYear (integer), equipmentCostPercent, moduleSharePercent, inverterSharePercent, solarModuleReplacementPercent, inverterReplacementPercent, batteryReplacementPercent
+- **Financial:** mirrFinanceRate, mirrReinvestmentRate, insuranceRatePercent
+
+**Skip** (string-state managed): solarCostEditValue, batteryCostEditValue, solarPercentageInput, batteryPercentageInput -- these have their own blur/keydown commit handlers.
+
+---
+
+## File 3: `src/components/projects/SimulationPanel.tsx`
+
+**Import change:** Add `NumericInput` import.
+
+Convert 4 editable inputs:
+- **dailyOutputOverride** -- needs special handling since value can be `null` (uses computed fallback). Will use `NumericInput` with the computed value as fallback.
+- **specificYieldOverride** -- same null pattern as above.
+- **productionReductionPercent** -- integer, min 0, max 100.
+- **batteryAcCapacity** -- integer, min 0, max 5000.
+
+**Skip** (disabled/read-only): batteryChargePower, batteryDischargePower, batteryCapacity -- these are display-only.
+
+---
+
+## File 4: `src/components/projects/TenantManager.tsx`
+
+**Import change:** Add `NumericInput` import.
+
+Convert 1 input:
+- **kWh/month override** popover (line 127): Convert to `NumericInput`. Currently uses string state `value`/`setValue` -- will need to change to numeric state or adapt.
+
+**Skip** (string-state form fields): The area_sqm fields in the Add Tenant and Edit Tenant forms use string state (`newTenant.area_sqm`, `editTenant?.area_sqm`) that feeds into form validation and `parseFloat()` on submit. These are form fields where empty string is a valid intermediate state, so they remain as `<Input>`.
+
+---
+
+## Technical Details
+
+- All conversions follow the same pattern: remove `type="number"`, change `value` from string to number, change `onChange` from event handler to direct value callback, add `integer={true}` where `parseInt` was used.
+- `min`, `max`, `step`, `className`, and other passthrough props remain unchanged.
+- No new dependencies required.
 
