@@ -1,41 +1,41 @@
 
 
-# Fix TOU Background Bands — Merge Consecutive Same-Period Hours
+# Replace TOU Background Bands with Vertical Boundary Lines
 
 ## Problem
-Each chart renders **24 separate semi-transparent `ReferenceArea` rectangles** (one per hour). Where two adjacent rectangles share the same TOU period and colour, SVG anti-aliasing at their shared boundary creates a visible seam — a thin line of blended colour. With 24 boundaries, these seams produce the appearance of many more than 3 colours.
+The `ReferenceArea` approach for TOU backgrounds has persistent rendering issues (SVG anti-aliasing, Recharts prop compatibility with multiple Y axes). The coloured backgrounds blend and fail across different chart configurations.
 
 ## Solution
-Group consecutive hours that share the same TOU period into **single contiguous `ReferenceArea` blocks**. For example, if hours 0-5 are all "off-peak", render one rectangle from `00:00` to `06:00` instead of six overlapping ones. This eliminates all internal boundaries and seams.
+Replace all TOU background shading with **vertical dashed lines** at each TOU period transition boundary. Each line uses the colour of the **incoming** period (the period that starts at that hour).
+
+For example, if off-peak runs 00:00-06:00 and peak starts at 06:00, a red dashed vertical line appears at 06:00.
 
 ## Implementation
 
-### 1. New shared utility file
-**`src/components/projects/load-profile/utils/touReferenceAreas.tsx`**
+### 1. Rewrite `touReferenceAreas.tsx` utility
 
-A helper function that:
-- Accepts a `getPeriod(hour) => TOUPeriod` callback
-- Iterates hours 0-23, grouping consecutive hours with the same period into blocks
-- Returns an array of `<ReferenceArea>` elements (typically 3-8 instead of 24)
+Replace `buildTOUBlocks` with `buildTOUBoundaryLines` that:
+- Iterates hours 0-23, detecting where the period changes
+- Returns an array of `{ hour: string, color: string, period: TOUPeriod }` objects for each boundary
+- Also includes hour 0 (the very first period start)
 
-```text
-Example: If hours resolve to:
-  0-5: off-peak, 6-8: peak, 9-11: standard, 12-13: off-peak, 14-16: standard, 17-18: peak, 19-21: standard, 22-23: off-peak
+### 2. Update all 7 chart files
 
-Result: 8 ReferenceArea blocks instead of 24
-```
-
-### 2. Update all 6 chart files
-
-Replace the existing `Array.from({ length: 24 }, ...)` loop in each file with a call to the new utility, passing the existing `getPeriod` function.
+Replace `ReferenceArea` rendering with `ReferenceLine` rendering at each boundary:
+- **Import**: Swap `ReferenceArea` for `ReferenceLine` where not already imported
+- **Rendering**: Replace the `.map()` block to render `<ReferenceLine x={line.hour} stroke={line.color} strokeDasharray="4 3" strokeWidth={1.5} />` for each boundary
+- **No more `{ hour: "24:00" }` padding** needed since we are not drawing area blocks
 
 Files to update:
-- `BuildingProfileChart.tsx`
-- `LoadChart.tsx`
-- `SolarChart.tsx`
-- `GridFlowChart.tsx`
-- `BatteryChart.tsx`
-- `StackedMeterChart.tsx`
+- `src/components/projects/load-profile/utils/touReferenceAreas.tsx`
+- `src/components/projects/load-profile/charts/BuildingProfileChart.tsx`
+- `src/components/projects/load-profile/charts/LoadChart.tsx`
+- `src/components/projects/load-profile/charts/SolarChart.tsx`
+- `src/components/projects/load-profile/charts/GridFlowChart.tsx`
+- `src/components/projects/load-profile/charts/BatteryChart.tsx` (needs `yAxisId="power"` on ReferenceLine)
+- `src/components/projects/load-profile/charts/StackedMeterChart.tsx`
+- `src/components/projects/load-profile/charts/LoadEnvelopeChart.tsx`
 
-Each change replaces the ~10-line mapping block with a single function call. No changes to colours, opacity, or any other chart properties.
+### Visual Result
+Clean vertical dashed lines in red, amber, or teal at each period transition -- no background fills, no anti-aliasing issues, no multi-axis compatibility problems.
 
