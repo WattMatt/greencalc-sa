@@ -1608,39 +1608,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         onDischargeSourcesChange={(sources) => setDispatchConfig(prev => ({ ...prev, dischargeSources: sources }))}
       />
 
-      {/* Scenario Comparison */}
-      {hasFinancialData && isAdvancedEnabled && (
-        <AdvancedConfigComparison
-          currentConfig={advancedConfig}
-          energyResults={{
-            totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,
-            totalDailySolar: annualEnergyResults.totalAnnualSolar / 365,
-            totalGridImport: annualEnergyResults.totalAnnualGridImport / 365,
-            totalGridExport: annualEnergyResults.totalAnnualGridExport / 365,
-            totalSolarUsed: annualEnergyResults.totalAnnualSolarUsed / 365,
-            totalBatteryCharge: annualEnergyResults.totalAnnualBatteryCharge / 365,
-            totalBatteryDischarge: annualEnergyResults.totalAnnualBatteryDischarge / 365,
-            totalBatteryChargeFromGrid: annualEnergyResults.totalAnnualBatteryChargeFromGrid / 365,
-            selfConsumptionRate: annualEnergyResults.selfConsumptionRate,
-            solarCoverageRate: annualEnergyResults.solarCoverageRate,
-            peakLoad: annualEnergyResults.peakLoad,
-            peakGridImport: annualEnergyResults.peakGridImport,
-            peakReduction: annualEnergyResults.peakReduction,
-            batteryCycles: annualEnergyResults.batteryCycles,
-            batteryUtilization: 0,
-            revenueKwh: 0,
-            hourlyData: [],
-          }}
-          tariffData={tariffData}
-          systemCosts={systemCosts}
-          solarCapacity={solarCapacity}
-          batteryCapacity={batteryCapacity}
-          onApplyConfig={setAdvancedConfig}
-          tariffRates={tariffRates ?? undefined}
-          touSettings={touSettingsData}
-        />
-      )}
-
       {/* Note: System Costs are now configured exclusively in the Costs tab */}
 
       {/* System Configuration Carousel */}

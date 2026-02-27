@@ -1140,6 +1140,7 @@ export type Database = {
           solar_capacity_kwp: number | null
           solar_orientation: string | null
           solar_tilt_degrees: number | null
+          sort_order: number
           updated_at: string
         }
         Insert: {
@@ -1159,6 +1160,7 @@ export type Database = {
           solar_capacity_kwp?: number | null
           solar_orientation?: string | null
           solar_tilt_degrees?: number | null
+          sort_order?: number
           updated_at?: string
         }
         Update: {
@@ -1178,6 +1180,7 @@ export type Database = {
           solar_capacity_kwp?: number | null
           solar_orientation?: string | null
           solar_tilt_degrees?: number | null
+          sort_order?: number
           updated_at?: string
         }
         Relationships: [
