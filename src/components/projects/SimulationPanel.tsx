@@ -563,7 +563,33 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     enabled: solarDataSource === "solcast",
   });
 
-  // Use the same useLoadProfileData hook as Load Profile tab for consistent chart visualization
+  // ── STABLE engine data source (all days / all months) ──
+  // This feeds the 8,760-hour annual engine so it never re-runs when navigating days.
+  const ALL_DAYS = useMemo(() => new Set([0, 1, 2, 3, 4, 5, 6]), []);
+  const ALL_MONTHS = useMemo(() => new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]), []);
+
+  const {
+    chartData: stableChartData,
+  } = useLoadProfileData({
+    tenants,
+    shopTypes,
+    selectedDays: ALL_DAYS,
+    selectedMonths: ALL_MONTHS,
+    displayUnit: "kw",
+    powerFactor: 0.9,
+    showPVProfile: includesSolar && solarCapacity > 0,
+    maxPvAcKva: solarCapacity,
+    dcCapacityKwp: solarCapacity * inverterConfig.dcAcRatio,
+    dcAcRatio: inverterConfig.dcAcRatio,
+    showBattery: includesBattery && batteryCapacity > 0,
+    batteryCapacity,
+    batteryPower: batteryChargePower,
+    batteryDischargePower,
+    solcastProfile: solarDataSource === "solcast" ? solcastPvProfileData : undefined,
+  });
+
+  // ── Per-day chart data source (changes on navigation) ──
+  // Only used for chart display — NOT for the engine.
   const {
     chartData: loadProfileChartData,
     totalDaily: loadProfileTotalDaily,
@@ -679,13 +705,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return threeYearTotal;
   }, [systemCosts, solarCapacity, batteryCapacity, includesBattery]);
 
-  // Use the same load profile as charts - synchronized with SCADA data, scaling, and multipliers
-  // This ensures simulation results match the accurate demand patterns shown in Load Profile charts
+  // Use STABLE (all-days/all-months) load profile for the engine — never changes on day navigation
   const loadProfile = useMemo(() => {
-    // loadProfileChartData already contains accurately calculated kW per hour
-    // with SCADA meter data, interval corrections, area scaling, and diversity factors
-    return loadProfileChartData.map(d => d.total);
-  }, [loadProfileChartData]);
+    return stableChartData.map(d => d.total);
+  }, [stableChartData]);
 
   // Production reduction factor for conservative estimates
   const reductionFactor = 1 - (productionReductionPercent / 100);
@@ -847,11 +870,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     representativeSeason: 'low' as const,
   }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig, touSettingsData]);
 
-  // Extract solar from chart data (same source as pvGeneration) for engine input
-  // This ensures the engine receives exactly the same solar values that appear in the charts
+  // Extract solar from STABLE chart data for engine input — decoupled from day navigation
   const chartSolarProfile = useMemo(() => {
-    return loadProfileChartData.map(d => d.pvGeneration || 0);
-  }, [loadProfileChartData]);
+    return stableChartData.map(d => d.pvGeneration || 0);
+  }, [stableChartData]);
 
   const effectiveSolarProfile = includesSolar ? chartSolarProfile : loadProfile.map(() => 0);
 
@@ -1046,7 +1068,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
 
 
-  // Merge authoritative battery + grid data from EnergySimulationEngine onto load profile chart data
+  // Merge authoritative engine data onto chart data — pvGeneration comes from engine's solar dispatch
   const simulationChartData = useMemo(() => {
     if (!loadProfileChartData || !representativeDay.length) return loadProfileChartData;
     return loadProfileChartData.map((hour, i) => {
@@ -1054,6 +1076,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       if (!engineHour) return hour;
       return {
         ...hour,
+        pvGeneration: ('pvGeneration' in engineHour ? (engineHour as any).pvGeneration : (engineHour as any).solar) ?? hour.pvGeneration,
         batteryCharge: engineHour.batteryCharge,
         batteryDischarge: engineHour.batteryDischarge,
         batterySoC: (engineHour.batterySOC / 100) * batteryCapacity,
