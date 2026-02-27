@@ -1,47 +1,35 @@
 
-# Fix TOU Coloured Bars -- Use Recharts Customized Component
 
-## Root Cause
-Recharts does NOT pass `xAxis` metadata (including `bandSize`) to custom tick components. The `filterProps` function strips non-DOM props, so `props.xAxis?.bandSize` is always `undefined`, resulting in `bandSize = 0` and rects with width=0 (invisible). The bars were never actually rendering.
+# Fix TOU Bar Clipping and Coverage
 
-## Solution
-Use Recharts' `<Customized>` component instead of rendering bars inside the tick. `<Customized>` receives the full chart `props` and `state`, including `xAxisMap` which contains `bandSize` and all tick coordinate data. This gives us everything needed to draw continuous TOU period bars.
+## Issues
+1. **Left Y-axis clipping**: The first TOU bar extends into the Y-axis area
+2. **First bar overflows left**: Hour 0's bar extends past the start of the X-axis
+3. **Last bar doesn't reach end**: Hour 23's bar stops short of the X-axis endpoint
 
-## Implementation
+## Changes
 
-### 1. Rewrite `touReferenceAreas.tsx`
-- Keep `TOUXAxisTick` but simplify it to ONLY render the text label (no rect). When `showTOU` is true, shift the label down slightly to leave room for the bars above.
-- Add a new `TOUBarsLayer` component designed for use with `<Customized component={<TOUBarsLayer ... />} />`:
-  - Receives full chart state from Recharts (including `xAxisMap`)
-  - Extracts the xAxis from `xAxisMap` to get `bandSize` and all tick coordinates
-  - For each tick/data point, renders a coloured rect spanning the full `bandSize` width
-  - Positioned just below the axis line (between axis and labels)
-  - Uses `getPeriod(hourNum)` to determine the colour per hour
+**File**: `src/components/projects/load-profile/utils/touReferenceAreas.tsx`
 
-### 2. Update all 7 chart files
-- Add `import { Customized } from "recharts"` (already available)
-- Add `<Customized component={<TOUBarsLayer getPeriod={getPeriod} showTOU={showTOU} />} />` inside each `<ComposedChart>`
-- The `TOUXAxisTick` continues to handle label rendering and vertical spacing
+### 1. Move bars down slightly
+Increase `barY` offset from `+2` to `+4` to add more clearance below the axis line.
 
-### Files to edit
-- `src/components/projects/load-profile/utils/touReferenceAreas.tsx`
-- `src/components/projects/load-profile/charts/LoadChart.tsx`
-- `src/components/projects/load-profile/charts/BuildingProfileChart.tsx`
-- `src/components/projects/load-profile/charts/SolarChart.tsx`
-- `src/components/projects/load-profile/charts/GridFlowChart.tsx`
-- `src/components/projects/load-profile/charts/BatteryChart.tsx`
-- `src/components/projects/load-profile/charts/StackedMeterChart.tsx`
-- `src/components/projects/load-profile/charts/LoadEnvelopeChart.tsx`
+### 2. Clip first bar (hour 0) to half-width
+For hour 0, set `x = cx` (no left offset) and `width = bandSize / 2`, so the bar only extends rightward from the tick centre -- not past the axis origin.
+
+### 3. Add trailing half-bar for hour 23
+After hour 23, add an extra rect from `cx + bandSize/2` extending another `bandSize/2` to the right, using the same colour as hour 23. This fills the gap to the end of the axis.
 
 ### Technical Detail
+All changes are confined to the `TOUBarsLayer` function. The loop logic becomes:
 
 ```text
-TOUBarsLayer component (inside <Customized>):
-  - Extract xAxis from props.xAxisMap (first entry)
-  - Get bandSize and scale from xAxis
-  - For each data point's hour value, compute x = scale(hour)
-  - Render <rect x={x - bandSize/2} y={axisY} width={bandSize} height={5} fill={touColor} />
-  - axisY = chart offset.top + offset.height (bottom of plot area)
+for h = 0..23:
+  if h == 0:  x = cx,               width = bandSize / 2    (right half only)
+  else:       x = cx - bandSize / 2, width = bandSize        (full width)
+
+  if h == 23: also render extra rect at cx + bandSize/2, width = bandSize / 2
 ```
 
-This approach guarantees access to the axis coordinate system and band width, producing continuous coloured bars along the x-axis.
+No other files need changes.
+
