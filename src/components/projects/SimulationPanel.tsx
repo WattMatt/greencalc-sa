@@ -1525,6 +1525,15 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               lossCalculationMode,
               productionReductionPercent,
               moduleCount: moduleMetrics.moduleCount,
+              batteryChargeCRate,
+              batteryDischargeCRate,
+              batteryDoD,
+              batteryMinSoC,
+              batteryMaxSoC,
+              batteryStrategy,
+              dispatchConfig,
+              chargeTouPeriod,
+              dischargeTouSelection,
             }}
             currentResults={{
               totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,

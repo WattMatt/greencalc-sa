@@ -75,6 +75,15 @@ interface SavedSimulationsProps {
     lossCalculationMode?: "simplified" | "pvsyst";
     productionReductionPercent?: number;
     moduleCount?: number;
+    batteryChargeCRate?: number;
+    batteryDischargeCRate?: number;
+    batteryDoD?: number;
+    batteryMinSoC?: number;
+    batteryMaxSoC?: number;
+    batteryStrategy?: string;
+    dispatchConfig?: any;
+    chargeTouPeriod?: string;
+    dischargeTouSelection?: any;
   };
   currentResults: SimulationResult;
   onLoadSimulation: (config: {
@@ -195,6 +204,16 @@ export function SavedSimulations({
           // Include module and inverter counts for PV Layout comparison
           moduleCount: currentConfig.moduleCount,
           inverterCount: currentConfig.inverterConfig?.inverterCount,
+          // Battery dispatch strategy & characteristics
+          batteryChargeCRate: currentConfig.batteryChargeCRate,
+          batteryDischargeCRate: currentConfig.batteryDischargeCRate,
+          batteryDoD: currentConfig.batteryDoD,
+          batteryMinSoC: currentConfig.batteryMinSoC,
+          batteryMaxSoC: currentConfig.batteryMaxSoC,
+          batteryStrategy: currentConfig.batteryStrategy,
+          dispatchConfig: currentConfig.dispatchConfig,
+          chargeTouPeriod: currentConfig.chargeTouPeriod,
+          dischargeTouSelection: currentConfig.dischargeTouSelection,
         },
       });
       if (error) throw error;
