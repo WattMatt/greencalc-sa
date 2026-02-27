@@ -1018,7 +1018,6 @@ function ChargeSourcesList({
                               next = [...periods, period.value];
                             } else {
                               next = periods.filter(p => p !== period.value);
-                              if (next.length === 0) return;
                             }
                             const updated = sources.map((s, i) => i === idx ? { ...s, chargeTouPeriods: next } : s);
                             onChange(updated);
@@ -1118,7 +1117,6 @@ function DischargeSourcesList({
                               next = [...periods, period.value];
                             } else {
                               next = periods.filter(p => p !== period.value);
-                              if (next.length === 0) return;
                             }
                             const updated = sources.map((s, i) => i === idx ? { ...s, dischargeTouPeriods: next } : s);
                             onChange?.(updated);
