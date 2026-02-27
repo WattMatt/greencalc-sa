@@ -182,7 +182,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
                     {show1to1Comparison && dcAcRatio > 1 && gain > 0 && (
                       <p className="text-emerald-600">Energy Gained: +{gain.toFixed(1)} {unit}</p>
                     )}
-                    <p className="text-muted-foreground border-t pt-1 mt-1">Site Load: {load.toFixed(1)} {unit}</p>
+                    
                   </div>
                 );
               }}
@@ -195,7 +195,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
               <Line type="monotone" dataKey="pvDcOutput" stroke="hsl(217 91% 60%)" strokeWidth={2.5} dot={false} name="DC Output" />
             )}
             <Bar dataKey="pvGeneration" fill="hsl(38 92% 50%)" fillOpacity={0.6} radius={[2, 2, 0, 0]} name="PV Generation" />
-            <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={1} strokeDasharray="4 4" dot={false} opacity={0.4} name="Load" />
+            
             <Customized component={<TOUBarsLayer getPeriod={getPeriod} showTOU={showTOU} />} />
           </ComposedChart>
         </ResponsiveContainer>
