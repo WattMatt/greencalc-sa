@@ -1,8 +1,8 @@
-import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
-import { buildTOUBoundaryLines, ShiftedReferenceLine } from "../utils/touReferenceAreas";
+import { TOUXAxisTick } from "../utils/touReferenceAreas";
 
 interface LoadChartProps {
   chartData: ChartDataPoint[];
@@ -37,13 +37,9 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, touP
       <p className="text-xs font-medium text-muted-foreground">Load Profile</p>
       <div className="h-[200px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync" barGap={1} barCategoryGap="5%">
-            {showTOU && buildTOUBoundaryLines(getPeriod).map((line) => (
-              <ReferenceLine key={`tou-${line.hourNum}`} x={line.hour} stroke={line.color} strokeDasharray="4 3" strokeWidth={1.5} shape={<ShiftedReferenceLine />} />
-            ))}
-
+          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: showTOU ? 10 : 0 }} syncId="loadProfileSync" barGap={1} barCategoryGap="5%">
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
-            <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} interval={2} />
+            <XAxis dataKey="hour" tick={<TOUXAxisTick getPeriod={getPeriod} showTOU={showTOU} />} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} interval={2} />
             <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} width={45} />
             <Tooltip
               content={({ active, payload, label }) => {

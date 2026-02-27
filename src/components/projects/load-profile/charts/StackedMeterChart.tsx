@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
-import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { buildTOUBoundaryLines, ShiftedReferenceLine } from "../utils/touReferenceAreas";
+import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { TOUXAxisTick } from "../utils/touReferenceAreas";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip as UITooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { ExternalLink } from "lucide-react";
@@ -37,7 +37,7 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, 
     <div className="space-y-1.5">
       <div className="h-[200px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={[...data, { ...data[data.length - 1], hour: "24:00" }]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync">
+          <ComposedChart data={[...data, { ...data[data.length - 1], hour: "24:00" }]} margin={{ top: 10, right: 10, left: 0, bottom: showTOU ? 10 : 0 }} syncId="loadProfileSync">
             <defs>
               {tenantKeys.map((tk) => (
                 <linearGradient key={tk.id} id={`stackFill-${tk.id}`} x1="0" y1="0" x2="0" y2="1">
@@ -47,14 +47,10 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, 
               ))}
             </defs>
 
-            {showTOU && buildTOUBoundaryLines((h) => getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek)).map((line) => (
-              <ReferenceLine key={`tou-${line.hourNum}`} x={line.hour} stroke={line.color} strokeDasharray="4 3" strokeWidth={1.5} shape={<ShiftedReferenceLine />} />
-            ))}
-
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
             <XAxis
               dataKey="hour"
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              tick={<TOUXAxisTick getPeriod={(h: number) => getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek)} showTOU={showTOU} />}
               tickLine={false}
               axisLine={{ stroke: "hsl(var(--border))" }}
               interval={2}

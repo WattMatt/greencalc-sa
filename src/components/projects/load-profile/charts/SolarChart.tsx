@@ -1,5 +1,5 @@
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { buildTOUBoundaryLines, ShiftedReferenceLine } from "../utils/touReferenceAreas";
+import { TOUXAxisTick } from "../utils/touReferenceAreas";
 import { Badge } from "@/components/ui/badge";
 import { Sun } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
@@ -137,13 +137,9 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
       
       <div className="h-[180px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={1} barCategoryGap="5%">
-            {showTOU && buildTOUBoundaryLines(getPeriod).map((line) => (
-              <ReferenceLine key={`tou-${line.hourNum}`} x={line.hour} stroke={line.color} strokeDasharray="4 3" strokeWidth={1.5} shape={<ShiftedReferenceLine />} />
-            ))}
-
+          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: showTOU ? 10 : 0 }} barGap={1} barCategoryGap="5%">
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
-            <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} interval={2} />
+            <XAxis dataKey="hour" tick={<TOUXAxisTick getPeriod={getPeriod} showTOU={showTOU} />} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} interval={2} />
             <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} width={45} domain={yAxisMax ? [0, yAxisMax] : ["auto", "auto"]} />
             
             {dcAcRatio > 1 && maxPvAcKva && (
