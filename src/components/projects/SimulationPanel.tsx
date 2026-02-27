@@ -486,14 +486,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       moduleName: selectedModule.name,
     };
     
-    // Debug logging for module metrics
-    console.log("=== Module Metrics ===");
-    console.log("Selected Module:", selectedModule.name, selectedModule.power_wp + "W");
-    console.log("Module Dimensions:", selectedModule.width_m, "x", selectedModule.length_m, "m");
-    console.log("Module Count:", metrics.moduleCount);
-    console.log("Collector Area (m²):", metrics.collectorAreaM2.toFixed(2));
-    console.log("STC Efficiency:", metrics.stcEfficiency);
-    
     return metrics;
   }, [inverterConfig]);
 
@@ -721,20 +713,20 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // Simplified mode uses the existing PVWatts-style calculation, with reduction applied
   const solarProfileSolcastSimplified = useMemo(() => {
     if (!solcastHourlyProfile) return null;
-    const baseProfile = generateSolarProfile(pvConfig, solarCapacity, solcastHourlyProfile);
+    const baseProfile = generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, solcastHourlyProfile);
     return baseProfile.map(v => v * reductionFactor);
-  }, [pvConfig, solarCapacity, solcastHourlyProfile, reductionFactor]);
+  }, [pvConfig, moduleMetrics.actualDcCapacityKwp, solcastHourlyProfile, reductionFactor]);
 
   const solarProfilePVGISSimplified = useMemo(() => {
     if (!pvgisHourlyProfile) return null;
-    const baseProfile = generateSolarProfile(pvConfig, solarCapacity, pvgisHourlyProfile);
+    const baseProfile = generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, pvgisHourlyProfile);
     return baseProfile.map(v => v * reductionFactor);
-  }, [pvConfig, solarCapacity, pvgisHourlyProfile, reductionFactor]);
+  }, [pvConfig, moduleMetrics.actualDcCapacityKwp, pvgisHourlyProfile, reductionFactor]);
 
   const solarProfileGenericSimplified = useMemo(() => {
-    const baseProfile = generateSolarProfile(pvConfig, solarCapacity, undefined);
+    const baseProfile = generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, undefined);
     return baseProfile.map(v => v * reductionFactor);
-  }, [pvConfig, solarCapacity, reductionFactor]);
+  }, [pvConfig, moduleMetrics.actualDcCapacityKwp, reductionFactor]);
 
   // Calculate annual GHI from PVGIS monthly data (for annual PVsyst calculation)
   const annualGHI = useMemo(() => {
