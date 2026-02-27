@@ -1,4 +1,4 @@
-import { useState, useCallback, Fragment } from "react";
+import React, { useState, useCallback, Fragment } from "react";
 import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles, Save, Trash2, User, GripVertical } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -1303,16 +1303,26 @@ function BatteryCharacteristicsSection({
                 allowGridCharging: effectiveDispatchConfig.allowGridCharging,
               };
               if (v === 'tou-arbitrage' && touPeriodToWindows) {
-                const flags = dischargeTouSelection?.lowSeason.weekday ?? DEFAULT_DISCHARGE_TOU_SELECTION.lowSeason.weekday;
+                const sel = dischargeTouSelection ?? DEFAULT_DISCHARGE_TOU_SELECTION;
                 const windows: TimeWindow[] = [];
-                if (flags.peak) windows.push(...touPeriodToWindows('peak'));
-                if (flags.standard) windows.push(...touPeriodToWindows('standard'));
-                if (flags.offPeak) windows.push(...touPeriodToWindows('off-peak'));
+                // Collect windows from all 4 groups
+                for (const season of ['highSeason', 'lowSeason'] as const) {
+                  for (const dayType of ['weekday', 'weekend'] as const) {
+                    const flags = sel[season][dayType];
+                    if (flags.peak) windows.push(...touPeriodToWindows('peak'));
+                    if (flags.standard) windows.push(...touPeriodToWindows('standard'));
+                    if (flags.offPeak) windows.push(...touPeriodToWindows('off-peak'));
+                  }
+                }
+                // Deduplicate windows
+                const uniqueWindows = windows.filter((w, i, arr) =>
+                  arr.findIndex(x => x.start === w.start && x.end === w.end) === i
+                );
                 onDispatchConfigChange?.({
                   ...newConfig,
                   ...preservedChargeConfig,
-                  dischargeWindows: windows.length > 0 ? windows : [{ start: 0, end: 0 }],
-                  dischargeTouSelection,
+                  dischargeWindows: uniqueWindows.length > 0 ? uniqueWindows : [{ start: 0, end: 0 }],
+                  dischargeTouSelection: sel,
                 });
               } else {
                 onDispatchConfigChange?.({
@@ -1333,40 +1343,84 @@ function BatteryCharacteristicsSection({
           </Select>
         </div>
 
-        {/* TOU Arbitrage discharge period selection */}
-        {batteryStrategy === 'tou-arbitrage' && (
-          <div className="space-y-2 p-2 rounded bg-muted/30">
-            <Label className="text-xs font-medium">Discharge During</Label>
-            <div className="flex flex-wrap gap-3">
-              {[
-                { key: 'peak' as const, label: 'Peak' },
-                { key: 'standard' as const, label: 'Standard' },
-                { key: 'offPeak' as const, label: 'Off-Peak' },
-              ].map((period) => {
-                const flags = dischargeTouSelection?.lowSeason.weekday ?? DEFAULT_DISCHARGE_TOU_SELECTION.lowSeason.weekday;
-                const checked = flags[period.key];
-                return (
-                  <label key={period.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(v) => {
-                        const newFlags = { ...flags, [period.key]: !!v };
-                        if (!newFlags.peak && !newFlags.standard && !newFlags.offPeak) return;
-                        const newSelection: DischargeTOUSelection = {
-                          highSeason: { weekday: newFlags, weekend: { peak: false, standard: false, offPeak: false } },
-                          lowSeason: { weekday: newFlags, weekend: { peak: false, standard: false, offPeak: false } },
-                        };
-                        onDischargeTouSelectionChange?.(newSelection);
-                      }}
-                      className="h-3.5 w-3.5"
-                    />
-                    {period.label}
-                  </label>
-                );
-              })}
+        {/* TOU Arbitrage discharge period selection – full 4×3 matrix */}
+        {batteryStrategy === 'tou-arbitrage' && (() => {
+          const sel = dischargeTouSelection ?? DEFAULT_DISCHARGE_TOU_SELECTION;
+          const periods = [
+            { key: 'peak' as const, label: 'Peak', color: 'hsl(0 72% 51%)' },
+            { key: 'standard' as const, label: 'Standard', color: 'hsl(38 92% 50%)' },
+            { key: 'offPeak' as const, label: 'Off-Peak', color: 'hsl(160 84% 39%)' },
+          ];
+          const rows: { seasonKey: 'highSeason' | 'lowSeason'; dayKey: 'weekday' | 'weekend'; label: string; seasonLabel?: string; seasonColor?: string }[] = [
+            { seasonKey: 'highSeason', dayKey: 'weekday', label: 'Weekday', seasonLabel: 'High-Demand', seasonColor: 'hsl(230 70% 50%)' },
+            { seasonKey: 'highSeason', dayKey: 'weekend', label: 'Weekend' },
+            { seasonKey: 'lowSeason', dayKey: 'weekday', label: 'Weekday', seasonLabel: 'Low-Demand', seasonColor: 'hsl(270 50% 60%)' },
+            { seasonKey: 'lowSeason', dayKey: 'weekend', label: 'Weekend' },
+          ];
+
+          const handleToggle = (seasonKey: 'highSeason' | 'lowSeason', dayKey: 'weekday' | 'weekend', periodKey: 'peak' | 'standard' | 'offPeak', checked: boolean) => {
+            const newSel: DischargeTOUSelection = {
+              highSeason: {
+                weekday: { ...sel.highSeason.weekday },
+                weekend: { ...sel.highSeason.weekend },
+              },
+              lowSeason: {
+                weekday: { ...sel.lowSeason.weekday },
+                weekend: { ...sel.lowSeason.weekend },
+              },
+            };
+            newSel[seasonKey][dayKey][periodKey] = checked;
+            // Guard: at least one flag must remain checked
+            const allFalse = (['highSeason', 'lowSeason'] as const).every(s =>
+              (['weekday', 'weekend'] as const).every(d =>
+                !newSel[s][d].peak && !newSel[s][d].standard && !newSel[s][d].offPeak
+              )
+            );
+            if (allFalse) return;
+            onDischargeTouSelectionChange?.(newSel);
+          };
+
+          return (
+            <div className="space-y-2 p-2 rounded bg-muted/30">
+              <Label className="text-xs font-medium">Discharge During</Label>
+              <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-x-2 gap-y-1 text-xs">
+                {/* Header row */}
+                <div />
+                {periods.map(p => (
+                  <div key={p.key} className="text-center font-medium" style={{ color: p.color }}>
+                    {p.label}
+                  </div>
+                ))}
+                {/* Data rows */}
+                {rows.map((row, idx) => (
+                  <React.Fragment key={`${row.seasonKey}-${row.dayKey}`}>
+                    <div className="flex items-center gap-1 pr-1">
+                      {row.seasonLabel && (
+                        <span className="font-semibold mr-0.5" style={{ color: row.seasonColor }}>
+                          {row.seasonLabel}
+                        </span>
+                      )}
+                      {!row.seasonLabel && <span className="ml-3" />}
+                      <span className="text-muted-foreground">{row.label}</span>
+                    </div>
+                    {periods.map(p => {
+                      const checked = sel[row.seasonKey][row.dayKey][p.key];
+                      return (
+                        <div key={p.key} className="flex justify-center items-center">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(v) => handleToggle(row.seasonKey, row.dayKey, p.key, !!v)}
+                            className="h-3.5 w-3.5"
+                          />
+                        </div>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
