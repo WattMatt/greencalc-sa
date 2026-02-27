@@ -37,7 +37,10 @@ export function buildTOUReferenceAreas(
       x2={`${block.endHour.toString().padStart(2, "0")}:00`}
       fill={TOU_COLORS[block.period].fill}
       fillOpacity={fillOpacity}
-      stroke="none"
+      stroke={TOU_COLORS[block.period].fill}
+      strokeOpacity={fillOpacity}
+      strokeWidth={0.5}
+      shapeRendering="crispEdges"
     />
   ));
 }
