@@ -1,5 +1,5 @@
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { buildTOUBoundaryLines } from "../utils/touReferenceAreas";
+import { buildTOUBoundaryLines, ShiftedReferenceLine } from "../utils/touReferenceAreas";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -182,7 +182,7 @@ export function LoadEnvelopeChart({
               </defs>
 
               {showTOU && buildTOUBoundaryLines((h) => getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek)).map((line) => (
-                <ReferenceLine key={`tou-${line.hour}`} x={line.hour} stroke={line.color} strokeDasharray="4 3" strokeWidth={1.5} />
+                <ReferenceLine key={`tou-${line.hourNum}`} x={line.hour} stroke={line.color} strokeDasharray="4 3" strokeWidth={1.5} shape={<ShiftedReferenceLine />} />
               ))}
 
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
