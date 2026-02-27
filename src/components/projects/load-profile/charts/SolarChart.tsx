@@ -1,5 +1,5 @@
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { TOUXAxisTick } from "../utils/touReferenceAreas";
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Customized } from "recharts";
+import { TOUXAxisTick, TOUBarsLayer } from "../utils/touReferenceAreas";
 import { Badge } from "@/components/ui/badge";
 import { Sun } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
@@ -196,6 +196,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
             )}
             <Bar dataKey={hasSolarUsedData ? "solarUsed" : "pvGeneration"} fill="hsl(38 92% 50%)" fillOpacity={0.6} radius={[2, 2, 0, 0]} name="AC Output" />
             <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={1} strokeDasharray="4 4" dot={false} opacity={0.4} name="Load" />
+            <Customized component={<TOUBarsLayer getPeriod={getPeriod} showTOU={showTOU} />} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

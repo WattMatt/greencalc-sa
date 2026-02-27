@@ -1,53 +1,68 @@
 import { TOU_COLORS, TOUPeriod } from "../types";
 
 /**
- * Custom XAxis tick that renders a coloured TOU period bar
- * between the axis line and the tick label.
- *
- * Inject `getPeriod` and `showTOU` as props via
- *   <XAxis tick={<TOUXAxisTick getPeriod={fn} showTOU={flag} />} />
+ * Custom XAxis tick that renders ONLY the text label.
+ * When showTOU is true, shifts the label down to leave room for the
+ * TOUBarsLayer rendered via <Customized>.
  */
 export function TOUXAxisTick(props: any) {
-  const { x, y, payload, visibleTicksCount, index, getPeriod, showTOU } = props;
-
-  // Parse hour number from the tick value (e.g. "06:00" → 6)
-  const hourNum = parseInt(payload?.value?.toString() || "0", 10);
-
-  // Estimate band width from the xAxis metadata Recharts injects
-  const bandSize: number = props.xAxis?.bandSize ?? 0;
-
-  const period: TOUPeriod | undefined = getPeriod?.(hourNum);
-  const color = period ? TOU_COLORS[period]?.stroke : undefined;
-
-  const barHeight = 5;
-  const barY = y + 2; // just below the axis line
-  const labelY = barY + barHeight + 10; // label below the bar
+  const { x, y, payload, showTOU } = props;
 
   return (
-    <g>
-      {/* TOU colour bar – always rendered per tick so the strip is continuous */}
-      {showTOU && color && (
-        <rect
-          x={x - bandSize / 2}
-          y={barY}
-          width={bandSize}
-          height={barHeight}
-          fill={color}
-          opacity={0.55}
-          rx={1}
-        />
-      )}
-
-      {/* Normal tick label */}
-      <text
-        x={x}
-        y={showTOU ? labelY : y + 12}
-        textAnchor="middle"
-        fontSize={10}
-        fill="hsl(var(--muted-foreground))"
-      >
-        {payload?.value}
-      </text>
-    </g>
+    <text
+      x={x}
+      y={showTOU ? y + 17 : y + 12}
+      textAnchor="middle"
+      fontSize={10}
+      fill="hsl(var(--muted-foreground))"
+    >
+      {payload?.value}
+    </text>
   );
+}
+
+/**
+ * Renders continuous TOU coloured bars along the x-axis.
+ * Must be used inside <Customized component={<TOUBarsLayer ... />} />.
+ *
+ * Recharts injects full chart state (xAxisMap, offset, etc.) as props.
+ */
+export function TOUBarsLayer(props: any) {
+  const { xAxisMap, offset, getPeriod, showTOU } = props;
+
+  if (!showTOU || !xAxisMap || !offset) return null;
+
+  const xAxis = Object.values(xAxisMap)[0] as any;
+  if (!xAxis) return null;
+
+  const { scale, bandSize } = xAxis;
+  const barY = offset.top + offset.height + 2;
+  const barHeight = 5;
+
+  // Build bars for hours 0-23
+  const bars: React.ReactElement[] = [];
+  for (let h = 0; h < 24; h++) {
+    const hourLabel = `${String(h).padStart(2, "0")}:00`;
+    const cx = scale(hourLabel);
+    if (cx == null || isNaN(cx)) continue;
+
+    const period: TOUPeriod | undefined = getPeriod?.(h);
+    const color = period ? TOU_COLORS[period]?.stroke : undefined;
+    if (!color) continue;
+
+    bars.push(
+      <rect
+        key={h}
+        x={cx - bandSize / 2}
+        y={barY}
+        width={bandSize}
+        height={barHeight}
+        fill={color}
+        opacity={0.55}
+        rx={1}
+      />
+    );
+  }
+
+  return <g className="tou-bars-layer">{bars}</g>;
 }

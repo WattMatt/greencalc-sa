@@ -1,8 +1,8 @@
-import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Customized } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
-import { TOUXAxisTick } from "../utils/touReferenceAreas";
+import { TOUXAxisTick, TOUBarsLayer } from "../utils/touReferenceAreas";
 
 interface LoadChartProps {
   chartData: ChartDataPoint[];
@@ -60,6 +60,7 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, touP
                 );
               }}
             />
+            <Customized component={<TOUBarsLayer getPeriod={getPeriod} showTOU={showTOU} />} />
             <Bar dataKey="total" fill="hsl(var(--primary))" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
           </ComposedChart>
         </ResponsiveContainer>

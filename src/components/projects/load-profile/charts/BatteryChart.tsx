@@ -1,5 +1,5 @@
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { TOUXAxisTick } from "../utils/touReferenceAreas";
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Customized } from "recharts";
+import { TOUXAxisTick, TOUBarsLayer } from "../utils/touReferenceAreas";
 import { Battery } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 
@@ -109,6 +109,7 @@ export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, ba
               radius={[2, 2, 0, 0]}
             />
             <Line yAxisId="soc" type="monotone" dataKey="batterySoC" stroke="hsl(217 91% 60%)" strokeWidth={2} dot={false} />
+            <Customized component={<TOUBarsLayer getPeriod={getPeriod} showTOU={showTOU} />} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

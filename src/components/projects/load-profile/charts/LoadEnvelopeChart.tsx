@@ -1,5 +1,5 @@
-import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { TOUXAxisTick } from "../utils/touReferenceAreas";
+import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Customized } from "recharts";
+import { TOUXAxisTick, TOUBarsLayer } from "../utils/touReferenceAreas";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -237,6 +237,7 @@ export function LoadEnvelopeChart({
               <Line type="monotone" dataKey="max" stroke="hsl(var(--primary))" strokeWidth={1} dot={false} />
               <Line type="monotone" dataKey="min" stroke="hsl(var(--primary))" strokeWidth={1} dot={false} />
               <Line type="monotone" dataKey="avg" stroke="hsl(var(--primary))" strokeWidth={2} strokeDasharray="5 3" dot={false} activeDot={{ r: 4, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }} />
+              <Customized component={<TOUBarsLayer getPeriod={(h: number) => getTOUPeriod(h, isWeekend, undefined, month, dayOfWeek)} showTOU={showTOU} />} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>

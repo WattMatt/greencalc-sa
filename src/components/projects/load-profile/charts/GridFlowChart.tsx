@@ -1,5 +1,5 @@
-import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { TOUXAxisTick } from "../utils/touReferenceAreas";
+import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Customized } from "recharts";
+import { TOUXAxisTick, TOUBarsLayer } from "../utils/touReferenceAreas";
 import { Badge } from "@/components/ui/badge";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
@@ -86,6 +86,7 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit, touPeriodsO
 
             <Bar dataKey="gridImport" stackId="grid" fill="hsl(0 72% 51%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
             <Bar dataKey="gridExport" stackId="grid" fill="hsl(142 76% 36%)" fillOpacity={0.5} radius={[2, 2, 0, 0]} />
+            <Customized component={<TOUBarsLayer getPeriod={getPeriod} showTOU={showTOU} />} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
