@@ -43,6 +43,10 @@ export interface PVGISTMYResponse {
   summary: PVGISSummary;
   typicalDay: PVGISTypicalDay;
   monthly: PVGISMonthly[];
+  /** Full 8,760-hour GHI array (W/m²), chronological */
+  hourly8760Ghi?: number[];
+  /** Full 8,760-hour temperature array (°C), chronological */
+  hourly8760Temp?: number[];
   error?: string;
 }
 
