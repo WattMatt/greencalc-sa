@@ -140,7 +140,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
             )}
 
             {/* Load as stepped line overlay */}
-            <Line type="stepAfter" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Load" />
+            <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Load" />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
