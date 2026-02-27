@@ -34,7 +34,7 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, touP
       <p className="text-xs font-medium text-muted-foreground">Load Profile</p>
       <div className="h-[200px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync" barGap={1} barCategoryGap="10%">
+          <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync" barGap={1} barCategoryGap="5%">
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getPeriod(h);

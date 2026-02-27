@@ -64,7 +64,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
 
       <div className="h-[220px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={1} barCategoryGap="10%">
+          <ComposedChart data={[...chartData, ...(showTOU ? [{ hour: "24:00" }] : [])]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={1} barCategoryGap="5%">
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getPeriod(h);
