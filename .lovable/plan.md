@@ -1,20 +1,22 @@
 
-# Smooth Load Line on Building Profile Chart
+# Fix TOU Period Background Colours — Solid Blocks, No Gradient Effect
 
-## Change
+## Problem
+The TOU period background colours in the daily chart view appear as faint, gradient-like washes that blend into each other. The user wants three clearly distinct, solid colour blocks for Peak, Standard, and Off-Peak.
 
-In `src/components/projects/load-profile/charts/BuildingProfileChart.tsx`, line 143:
+## Root Cause
+The `fillOpacity` on `ReferenceArea` components is set extremely low (0.08 in some charts, 0.12 in others), making the colours almost invisible and creating the illusion of gradients where periods transition.
 
-Change the `Line` component's `type` from `"stepAfter"` to `"monotone"` to produce a smooth, continuous curve matching the style used for SoC in the battery profile chart.
+## Solution
+Increase the `fillOpacity` to a consistent, visible value (e.g., `0.18`) across all six chart files so the TOU period colours are clearly distinguishable as solid blocks.
 
-### Before
-```tsx
-<Line type="stepAfter" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Load" />
-```
+## Files to Update
 
-### After
-```tsx
-<Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Load" />
-```
+1. **`src/components/projects/load-profile/charts/BuildingProfileChart.tsx`** — Change `fillOpacity={0.08}` to `fillOpacity={0.18}`
+2. **`src/components/projects/load-profile/charts/LoadChart.tsx`** — Change `fillOpacity={0.12}` to `fillOpacity={0.18}`
+3. **`src/components/projects/load-profile/charts/GridFlowChart.tsx`** — Change `fillOpacity={0.08}` to `fillOpacity={0.18}`
+4. **`src/components/projects/load-profile/charts/SolarChart.tsx`** — Check and standardise `fillOpacity` to `0.18`
+5. **`src/components/projects/load-profile/charts/BatteryChart.tsx`** — Change `fillOpacity={0.12}` to `fillOpacity={0.18}`
+6. **`src/components/projects/load-profile/charts/StackedMeterChart.tsx`** — Change `fillOpacity={0.12}` to `fillOpacity={0.18}`
 
-Single-line change, no other files affected.
+Each change is a single-property update on the existing `ReferenceArea` component within the TOU rendering loop. No structural changes required.
