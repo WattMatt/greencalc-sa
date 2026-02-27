@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { DollarSign, Sun, Battery, Calculator, RotateCcw, TrendingUp, AlertCircle, Percent } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { DEFAULT_SYSTEM_COSTS } from "./simulation/FinancialAnalysis";
@@ -592,11 +593,9 @@ export function SystemCostsManager({
                   <Label className="text-sm">Health & Safety Consultant</Label>
                   <div className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">R</span>
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={costs.healthAndSafetyCost ?? 0}
-                      onChange={(e) => onChange({ ...costs, healthAndSafetyCost: parseFloat(e.target.value) || 0 })}
-                      onBlur={onBlur}
+                      onChange={(v) => onChange({ ...costs, healthAndSafetyCost: v })}
                       className="h-8 w-28 text-sm text-right px-2"
                       min={0}
                       step={1000}
@@ -609,11 +608,9 @@ export function SystemCostsManager({
                   <Label className="text-sm">Water Points</Label>
                   <div className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">R</span>
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={costs.waterPointsCost ?? 0}
-                      onChange={(e) => onChange({ ...costs, waterPointsCost: parseFloat(e.target.value) || 0 })}
-                      onBlur={onBlur}
+                      onChange={(v) => onChange({ ...costs, waterPointsCost: v })}
                       className="h-8 w-28 text-sm text-right px-2"
                       min={0}
                       step={1000}
@@ -626,11 +623,9 @@ export function SystemCostsManager({
                   <Label className="text-sm">CCTV</Label>
                   <div className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">R</span>
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={costs.cctvCost ?? 0}
-                      onChange={(e) => onChange({ ...costs, cctvCost: parseFloat(e.target.value) || 0 })}
-                      onBlur={onBlur}
+                      onChange={(v) => onChange({ ...costs, cctvCost: v })}
                       className="h-8 w-28 text-sm text-right px-2"
                       min={0}
                       step={1000}
@@ -643,11 +638,9 @@ export function SystemCostsManager({
                   <Label className="text-sm">MV Switch Gear</Label>
                   <div className="flex items-center gap-1">
                     <span className="text-xs text-muted-foreground">R</span>
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={costs.mvSwitchGearCost ?? 0}
-                      onChange={(e) => onChange({ ...costs, mvSwitchGearCost: parseFloat(e.target.value) || 0 })}
-                      onBlur={onBlur}
+                      onChange={(v) => onChange({ ...costs, mvSwitchGearCost: v })}
                       className="h-8 w-28 text-sm text-right px-2"
                       min={0}
                       step={10000}
@@ -799,10 +792,9 @@ export function SystemCostsManager({
                   <div className="flex justify-between items-center">
                     <Label className="text-xs">Professional Fees</Label>
                     <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
+                      <NumericInput
                         value={costs.professionalFeesPercent ?? 0}
-                        onChange={(e) => onChange({ ...costs, professionalFeesPercent: parseFloat(e.target.value) || 0 })}
+                        onChange={(v) => onChange({ ...costs, professionalFeesPercent: v })}
                         className="h-6 w-14 text-xs text-right px-2"
                         min={0}
                         max={15}
@@ -828,10 +820,9 @@ export function SystemCostsManager({
                   <div className="flex justify-between items-center">
                     <Label className="text-xs">Project Management</Label>
                     <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
+                      <NumericInput
                         value={costs.projectManagementPercent ?? 0}
-                        onChange={(e) => onChange({ ...costs, projectManagementPercent: parseFloat(e.target.value) || 0 })}
+                        onChange={(v) => onChange({ ...costs, projectManagementPercent: v })}
                         className="h-6 w-14 text-xs text-right px-2"
                         min={0}
                         max={15}
@@ -857,10 +848,9 @@ export function SystemCostsManager({
                   <div className="flex justify-between items-center">
                     <Label className="text-xs">Contingency</Label>
                     <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
+                      <NumericInput
                         value={costs.contingencyPercent ?? 0}
-                        onChange={(e) => onChange({ ...costs, contingencyPercent: parseFloat(e.target.value) || 0 })}
+                        onChange={(v) => onChange({ ...costs, contingencyPercent: v })}
                         className="h-6 w-14 text-xs text-right px-2"
                         min={0}
                         max={15}
@@ -913,10 +903,11 @@ export function SystemCostsManager({
             <div className="flex justify-between items-center">
               <Label className="text-xs">Replacement Year</Label>
               <div className="flex items-center gap-1">
-                <Input
-                  type="number"
+                <NumericInput
+                  integer
                   value={costs.replacementYear}
-                  onChange={(e) => onChange({ ...costs, replacementYear: parseInt(e.target.value) || 10 })}
+                  onChange={(v) => onChange({ ...costs, replacementYear: v })}
+                  fallback={10}
                   className="h-6 w-16 text-xs text-right px-2"
                   min={5}
                   max={20}
@@ -951,10 +942,9 @@ export function SystemCostsManager({
                 <div className="flex justify-between items-center">
                   <Label className="text-xs">Equipment %</Label>
                   <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={costs.equipmentCostPercent}
-                      onChange={(e) => onChange({ ...costs, equipmentCostPercent: parseFloat(e.target.value) || 0 })}
+                      onChange={(v) => onChange({ ...costs, equipmentCostPercent: v })}
                       className="h-6 w-14 text-xs text-right px-2"
                       min={0}
                       max={100}
@@ -978,10 +968,9 @@ export function SystemCostsManager({
                 <div className="flex justify-between items-center">
                   <Label className="text-xs">Module Share</Label>
                   <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={costs.moduleSharePercent}
-                      onChange={(e) => onChange({ ...costs, moduleSharePercent: parseFloat(e.target.value) || 0 })}
+                      onChange={(v) => onChange({ ...costs, moduleSharePercent: v })}
                       className="h-6 w-14 text-xs text-right px-2"
                       min={0}
                       max={100}
@@ -1005,10 +994,9 @@ export function SystemCostsManager({
                 <div className="flex justify-between items-center">
                   <Label className="text-xs">Inverter Share</Label>
                   <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={costs.inverterSharePercent}
-                      onChange={(e) => onChange({ ...costs, inverterSharePercent: parseFloat(e.target.value) || 0 })}
+                      onChange={(v) => onChange({ ...costs, inverterSharePercent: v })}
                       className="h-6 w-14 text-xs text-right px-2"
                       min={0}
                       max={100}
@@ -1043,10 +1031,9 @@ export function SystemCostsManager({
                     <Label className="text-xs">Solar Module Cost</Label>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={costs.solarModuleReplacementPercent}
-                      onChange={(e) => onChange({ ...costs, solarModuleReplacementPercent: parseFloat(e.target.value) || 0 })}
+                      onChange={(v) => onChange({ ...costs, solarModuleReplacementPercent: v })}
                       className="h-6 w-14 text-xs text-right px-2"
                       min={0}
                       max={100}
@@ -1076,10 +1063,9 @@ export function SystemCostsManager({
                     <Label className="text-xs">Inverter Cost</Label>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={costs.inverterReplacementPercent}
-                      onChange={(e) => onChange({ ...costs, inverterReplacementPercent: parseFloat(e.target.value) || 0 })}
+                      onChange={(v) => onChange({ ...costs, inverterReplacementPercent: v })}
                       className="h-6 w-14 text-xs text-right px-2"
                       min={0}
                       max={100}
@@ -1110,10 +1096,9 @@ export function SystemCostsManager({
                       <Label className="text-xs">Battery Cost</Label>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
+                      <NumericInput
                         value={costs.batteryReplacementPercent}
-                        onChange={(e) => onChange({ ...costs, batteryReplacementPercent: parseFloat(e.target.value) || 0 })}
+                        onChange={(v) => onChange({ ...costs, batteryReplacementPercent: v })}
                         className="h-6 w-14 text-xs text-right px-2"
                         min={0}
                         max={100}
@@ -1177,10 +1162,9 @@ export function SystemCostsManager({
                     <p className="text-[10px] text-muted-foreground">Interest paid on cash flows</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={costs.mirrFinanceRate}
-                      onChange={(e) => onChange({ ...costs, mirrFinanceRate: parseFloat(e.target.value) || 0 })}
+                      onChange={(v) => onChange({ ...costs, mirrFinanceRate: v })}
                       className="h-6 w-16 text-xs text-right px-2"
                       min={0}
                       max={25}
@@ -1210,10 +1194,9 @@ export function SystemCostsManager({
                     <p className="text-[10px] text-muted-foreground">Interest received on reinvestment</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
+                    <NumericInput
                       value={costs.mirrReinvestmentRate}
-                      onChange={(e) => onChange({ ...costs, mirrReinvestmentRate: parseFloat(e.target.value) || 0 })}
+                      onChange={(v) => onChange({ ...costs, mirrReinvestmentRate: v })}
                       className="h-6 w-16 text-xs text-right px-2"
                       min={0}
                       max={25}
@@ -1249,10 +1232,9 @@ export function SystemCostsManager({
                   <p className="text-[10px] text-muted-foreground">% of (Total Capital + O&M)</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Input
-                    type="number"
+                  <NumericInput
                     value={costs.insuranceRatePercent}
-                    onChange={(e) => onChange({ ...costs, insuranceRatePercent: parseFloat(e.target.value) || 0 })}
+                    onChange={(v) => onChange({ ...costs, insuranceRatePercent: v })}
                     className="h-6 w-16 text-xs text-right px-2"
                     min={0}
                     max={5}

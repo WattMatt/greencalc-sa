@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { NumericInput } from "@/components/ui/numeric-input";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1663,12 +1664,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-muted-foreground text-[10px]">Expected daily output</Label>
                       <div className="flex items-center gap-1">
-                        <Input
-                          type="number"
+                        <NumericInput
+                          integer
                           value={dailyOutputOverride ?? (annualPVsystResult 
                             ? Math.round(annualPVsystResult.eGrid / 365)
                             : Math.round(annualEnergyResults.totalAnnualSolar / 365))}
-                          onChange={(e) => setDailyOutputOverride(parseInt(e.target.value) || 0)}
+                          onChange={(v) => setDailyOutputOverride(v)}
                           className="h-6 w-20 text-right text-xs"
                         />
                         <span className="text-xs text-muted-foreground">kWh</span>
@@ -1680,12 +1681,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-muted-foreground text-[10px]">Specific yield</Label>
                       <div className="flex items-center gap-1">
-                        <Input
-                          type="number"
+                        <NumericInput
+                          integer
                           value={specificYieldOverride ?? (annualPVsystResult 
                             ? Math.round(annualPVsystResult.specificYield)
                             : Math.round(annualEnergyResults.totalAnnualSolar / solarCapacity))}
-                          onChange={(e) => setSpecificYieldOverride(parseInt(e.target.value) || 0)}
+                          onChange={(v) => setSpecificYieldOverride(v)}
                           className="h-6 w-20 text-right text-xs"
                         />
                         <span className="text-xs text-muted-foreground whitespace-nowrap">kWh/kWp/yr</span>
@@ -1700,10 +1701,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-muted-foreground text-[10px]">Production reduction</Label>
                       <div className="flex items-center gap-1">
-                        <Input
-                          type="number"
+                        <NumericInput
+                          integer
                           value={productionReductionPercent}
-                          onChange={(e) => setProductionReductionPercent(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                          onChange={(v) => setProductionReductionPercent(v)}
                           className="h-6 w-16 text-right text-xs"
                           min={0}
                           max={100}
@@ -1742,10 +1743,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   {/* Row 1: AC Capacity (user input) */}
                   <div className="space-y-1">
                     <Label className="text-xs">AC Capacity (kWh)</Label>
-                    <Input
-                      type="number"
+                    <NumericInput
+                      integer
                       value={batteryAcCapacity}
-                      onChange={(e) => setBatteryAcCapacity(Math.max(0, parseInt(e.target.value) || 0))}
+                      onChange={(v) => setBatteryAcCapacity(v)}
                       className="h-8"
                       min={0}
                       max={5000}
