@@ -1,26 +1,24 @@
 
-# Fix Solar Chart to Show Full PV Generation
+# Shift TOU Bars Left by Half a Bar Width
 
 ## Problem
-When the simulation dispatches solar energy to the battery, the PV Profile chart only displays `solarUsed` (solar direct to load) instead of the full `pvGeneration`. This makes it look like less solar was generated, even though the energy was produced and dispatched to the battery.
+The first TOU bar at hour 0 is a half-width bar starting at the tick centre. The user wants to remove this half-bar and instead shift the entire series left by half a `bandSize`, so each bar is centred between tick marks rather than on them.
 
-## Root Cause
-Line 197 of `SolarChart.tsx`:
+## Change
+
+**File**: `src/components/projects/load-profile/utils/touReferenceAreas.tsx`
+
+Update the loop in `TOUBarsLayer`:
+
+1. **Remove the special `h === 0` half-bar logic** -- all bars get the same width (`bandSize`).
+2. **Shift every bar left by an additional `bandSize / 2`**, so each bar starts one full `bandSize` to the left of the tick centre (i.e. `x = cx - bandSize`). This effectively positions each bar from `[tick - bandSize, tick]` instead of `[tick - bandSize/2, tick + bandSize/2]`.
+3. **Remove the trailing half-bar after hour 23** since the shift already aligns the series correctly -- the last bar (hour 23) will now end at its tick centre, reaching the visual end of the axis.
+
+### Resulting logic
+```text
+for h = 0..23:
+  x = cx - bandSize      // shifted left by half a bar
+  width = bandSize        // uniform width, no special cases
 ```
-<Bar dataKey={hasSolarUsedData ? "solarUsed" : "pvGeneration"} ... />
-```
-When simulation data is present, `solarUsed` exists and the bar switches to it, hiding battery-bound generation.
 
-## Fix
-**File**: `src/components/projects/load-profile/charts/SolarChart.tsx`
-
-1. Always use `pvGeneration` as the bar dataKey -- this is the total AC output regardless of dispatch destination.
-2. Update the header stats to show `totalPv` as the AC value (not `effectiveGeneration` which uses `solarUsed`).
-3. Keep the breakdown badges (To Load, To Battery, Exported) as they are -- these correctly show where the energy went without double-counting.
-
-The badges already handle the breakdown:
-- "To Load" = `solarUsed`
-- "To Battery" = `batteryCharge`  
-- "Exported" = `gridExport`
-
-So the bar shows total generation, and the badges explain the dispatch. No double-counting.
+No trailing bar, no first-bar special case. One file, ~10 lines changed.
