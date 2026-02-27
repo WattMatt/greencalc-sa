@@ -31,8 +31,8 @@ export interface ChargeSource {
 }
 
 export const DEFAULT_CHARGE_SOURCES: ChargeSource[] = [
-  { id: 'pv', enabled: true },
-  { id: 'grid', enabled: true },
+  { id: 'pv', enabled: false },
+  { id: 'grid', enabled: false },
   { id: 'generator', enabled: false },
 ];
 
@@ -45,9 +45,9 @@ export interface DischargeSource {
 }
 
 export const DEFAULT_DISCHARGE_SOURCES: DischargeSource[] = [
-  { id: 'load', enabled: true },
-  { id: 'battery', enabled: true },
-  { id: 'grid-export', enabled: true },
+  { id: 'load', enabled: false },
+  { id: 'battery', enabled: false },
+  { id: 'grid-export', enabled: false },
 ];
 
 export interface DispatchConfig {
@@ -76,39 +76,12 @@ function isInAnyWindow(hour: number, windows: TimeWindow[]): boolean {
 // ── Default dispatch configs per strategy ──
 
 export function getDefaultDispatchConfig(strategy: BatteryDispatchStrategy): DispatchConfig {
-  switch (strategy) {
-    case 'none':
-      return {
-        chargeWindows: [],
-        dischargeWindows: [],
-        allowGridCharging: false,
-      };
-    case 'self-consumption':
-      return {
-        chargeWindows: [],
-        dischargeWindows: [],
-        allowGridCharging: false,
-      };
-    case 'tou-arbitrage':
-      return {
-        chargeWindows: [{ start: 22, end: 6 }],
-        dischargeWindows: [{ start: 7, end: 10 }, { start: 18, end: 20 }],
-        allowGridCharging: true,
-      };
-    case 'peak-shaving':
-      return {
-        chargeWindows: [{ start: 22, end: 6 }],
-        dischargeWindows: [],
-        allowGridCharging: true,
-        peakShavingTarget: 150,
-      };
-    case 'scheduled':
-      return {
-        chargeWindows: [{ start: 0, end: 6 }],
-        dischargeWindows: [{ start: 7, end: 20 }],
-        allowGridCharging: true,
-      };
-  }
+  // All strategies start empty — user must explicitly configure
+  return {
+    chargeWindows: [],
+    dischargeWindows: [],
+    allowGridCharging: false,
+  };
 }
 
 // ── Core interfaces ──
