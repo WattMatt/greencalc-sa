@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPaybackPeriod } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import { mergePvsystConfig, mergeAdvancedConfig } from "@/utils/simulationConfig
 import { SavedSimulations } from "./SavedSimulations";
 import { SimulationKPICards } from "./simulation/SimulationKPICards";
 import { SimulationChartTabs } from "./simulation/SimulationChartTabs";
+import { useAutoSave } from "./simulation/useAutoSave";
 import {
   PVSystemConfig,
   PVSystemConfigData,
@@ -277,12 +278,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [loadedSimulationDate, setLoadedSimulationDate] = useState<string | null>(null);
   const hasInitializedFromSaved = useRef(false);
   
-  // Auto-save tracking
-  const [isAutoSaving, setIsAutoSaving] = useState(false);
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const hasInitialLoadComplete = useRef(false);
-  const AUTOSAVE_DEBOUNCE_MS = 1500;
+  // Auto-save tracking (extracted to useAutoSave hook — wired below after financialResults)
 
   // Day-of-year index (0-364) for navigating the 365-day annual simulation
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
@@ -314,7 +310,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   useEffect(() => {
     // Reset initialization flag when projectId changes
     hasInitializedFromSaved.current = false;
-    hasInitialLoadComplete.current = false;
   }, [projectId]);
 
   useEffect(() => {
@@ -1148,183 +1143,47 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return breakeven.year - 1 + fraction;
   }, [advancedResults]);
 
-  // Auto-save mutation - upserts simulation on tab change
-  const autoSaveMutation = useMutation({
-    mutationFn: async () => {
-      const simulationName = `Auto-saved ${format(new Date(), "MMM d, HH:mm")}`;
-
-      // IMPORTANT:
-      // Auto-save must NEVER overwrite a manually saved (named) simulation.
-      // Instead, maintain a dedicated auto-save record per project.
-      const { data: existingAuto, error: existingAutoError } = await supabase
-        .from("project_simulations")
-        .select("id,name")
-        .eq("project_id", projectId)
-        .ilike("name", "Auto-saved%")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (existingAutoError) throw existingAutoError;
-
-      const existingId = existingAuto?.id;
-      
-      const simulationData = {
-        project_id: projectId,
-        name: simulationName,
-        simulation_type: solarDataSource,
-        solar_capacity_kwp: solarCapacity,
-        battery_capacity_kwh: includesBattery ? batteryCapacity : 0,
-        battery_power_kw: includesBattery ? batteryPower : 0,
-        solar_orientation: pvConfig.location,
-        solar_tilt_degrees: pvConfig.tilt,
-        annual_solar_savings: hasFinancialData ? financialResults.annualSavings : 0,
-        annual_grid_cost: annualEnergyResults.totalAnnualGridImport * 2.5,
-        payback_years: hasFinancialData ? financialResults.paybackYears : 0,
-        roi_percentage: hasFinancialData ? financialResults.roi : 0,
-        results_json: JSON.parse(JSON.stringify({
-          totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,
-          totalDailySolar: annualEnergyResults.totalAnnualSolar / 365,
-          totalGridImport: annualEnergyResults.totalAnnualGridImport / 365,
-          totalSolarUsed: annualEnergyResults.totalAnnualSolarUsed / 365,
-          annualSavings: hasFinancialData ? financialResults.annualSavings : 0,
-          systemCost: financialResults.systemCost,
-          paybackYears: hasFinancialData ? financialResults.paybackYears : 0,
-          roi: hasFinancialData ? financialResults.roi : 0,
-          peakDemand: annualEnergyResults.peakLoad,
-          newPeakDemand: annualEnergyResults.peakGridImport,
-          pvConfig,
-          solarDataSource,
-          inverterConfig,
-          systemCosts,
-          // Blended solar rate for IRR/financial modeling
-          blendedSolarRate: selectedBlendedRate,
-          blendedRateType,
-          useHourlyTouRates,
-          blendedRates: annualBlendedRates ? {
-            allHours: annualBlendedRates.allHours.annual,
-            solarHours: annualBlendedRates.solarHours.annual,
-          } : null,
-          // Save PVsyst loss configuration for persistence
-          lossCalculationMode,
-          pvsystConfig,
-          // Save production reduction percentage
-          productionReductionPercent,
-          // Save advanced simulation config (degradation, financial, seasonal, etc.)
-          advancedConfig,
-          // Save module and inverter counts for layout comparison
-          moduleCount: moduleMetrics.moduleCount,
-          inverterCount: inverterConfig.inverterCount,
-          // Save battery dispatch strategy
-          batteryStrategy,
-          dispatchConfig,
-          chargeTouPeriod,
-          dischargeTouSelection,
-          // Save battery characteristics
-          batteryChargeCRate,
-          batteryDischargeCRate,
-          batteryDoD,
-          batteryMinSoC,
-          batteryMaxSoC,
-        })),
-      };
-
-      if (existingId) {
-        // Update existing simulation
-        const { error } = await supabase
-          .from("project_simulations")
-          .update(simulationData)
-          .eq("id", existingId);
-        if (error) throw error;
-      } else {
-        // Insert new simulation
-        const { error } = await supabase
-          .from("project_simulations")
-          .insert(simulationData);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      setLastSavedAt(new Date());
-      queryClient.invalidateQueries({ queryKey: ["project-simulations", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["last-simulation", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["project-latest-simulation", projectId] });
-    },
-  });
-
-  // Debounced auto-save on any configuration change
-  useEffect(() => {
-    // Skip if not yet initialized from saved data
-    if (!hasInitializedFromSaved.current || !isFetched) return;
-    
-    // Skip on first render after initialization
-    if (!hasInitialLoadComplete.current) {
-      hasInitialLoadComplete.current = true;
-      return;
-    }
-    
-    // Clear any pending save
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-    }
-    
-    // Only auto-save if we have valid tenants
-    if (tenants.length === 0) return;
-    
-    // Schedule debounced save
-    autoSaveTimeoutRef.current = setTimeout(async () => {
-      setIsAutoSaving(true);
-      try {
-        await autoSaveMutation.mutateAsync();
-      } finally {
-        setIsAutoSaving(false);
-      }
-    }, AUTOSAVE_DEBOUNCE_MS);
-    
-    // Cleanup on unmount
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-    };
-  }, [
-    // Watch all configuration values
+  // Auto-save hook (extracted from inline mutation + debounce)
+  const { isAutoSaving, lastSavedAt, triggerSave } = useAutoSave({
+    projectId,
+    solarDataSource,
     solarCapacity,
     batteryCapacity,
     batteryPower,
+    includesBattery,
     pvConfig,
     inverterConfig,
-    pvsystConfig,
-    advancedConfig,
-    lossCalculationMode,
-    productionReductionPercent,
-    solarDataSource,
     systemCosts,
-    blendedRateType,
+    lossCalculationMode,
+    pvsystConfig,
+    productionReductionPercent,
+    advancedConfig,
+    moduleCount: moduleMetrics.moduleCount,
     batteryStrategy,
     dispatchConfig,
-    batteryChargeCRate,
-    batteryDischargeCRate,
-    batteryMinSoC,
-    batteryMaxSoC,
     chargeTouPeriod,
     dischargeTouSelection,
+    batteryChargeCRate,
+    batteryDischargeCRate,
+    batteryDoD,
+    batteryMinSoC,
+    batteryMaxSoC,
+    blendedRateType,
     useHourlyTouRates,
-  ]);
+    selectedBlendedRate,
+    annualBlendedRates,
+    annualEnergyResults,
+    financialResults,
+    hasFinancialData,
+    tenantCount: tenants.length,
+    hasInitializedFromSaved: hasInitializedFromSaved.current,
+    isFetched,
+  });
 
   // Expose autoSave method to parent
   useImperativeHandle(ref, () => ({
-    autoSave: async () => {
-      // Cancel any pending debounced save first
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-        autoSaveTimeoutRef.current = null;
-      }
-      // Only auto-save if we have tenants (valid simulation)
-      if (tenants.length > 0) {
-        await autoSaveMutation.mutateAsync();
-      }
-    }
-  }), [autoSaveMutation, tenants.length]);
+    autoSave: triggerSave,
+  }), [triggerSave]);
 
   // Get the active data source's peak sun hours for display (must be before early return)
   const activeDataSourceLabel = useMemo(() => {
