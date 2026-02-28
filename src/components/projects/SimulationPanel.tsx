@@ -23,7 +23,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { useSolcastForecast } from "@/hooks/useSolcastForecast";
 import { usePVGISProfile, PVGISTMYResponse, PVGISMonthlyResponse } from "@/hooks/usePVGISProfile";
 import { convertTMYToSolarGeneration } from "@/utils/calculators/tmySolarConversion";
-import { mergePvsystConfig, mergeAdvancedConfig } from "@/utils/simulationConfig";
+import { restoreSimulationState, type SimulationStateSetters } from "./simulation/restoreSimulationState";
 
 import { SavedSimulations } from "./SavedSimulations";
 import { SimulationKPICards } from "./simulation/SimulationKPICards";
@@ -278,6 +278,16 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [loadedSimulationDate, setLoadedSimulationDate] = useState<string | null>(null);
   const hasInitializedFromSaved = useRef(false);
   
+  // Shared state setters for restoreSimulationState utility
+  const stateSetters: SimulationStateSetters = useMemo(() => ({
+    setSolarCapacity, setBatteryAcCapacity, setBatteryMinSoC, setBatteryMaxSoC,
+    setBatteryChargeCRate, setBatteryDischargeCRate, setBatteryStrategy, setDispatchConfig,
+    setChargeTouPeriod, setDischargeTouSelection, setPvConfig, setInverterConfig,
+    setSolarDataSource, setPvsystConfig, setLossCalculationMode, setProductionReductionPercent,
+    setAdvancedConfig, setLoadedSimulationName, setLoadedSimulationDate,
+    onSystemCostsChange,
+  }), [onSystemCostsChange]);
+  
   // Auto-save tracking (extracted to useAutoSave hook — wired below after financialResults)
 
   // Day-of-year index (0-364) for navigating the 365-day annual simulation
@@ -316,91 +326,33 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     if (isFetched && lastSavedSimulation && !hasInitializedFromSaved.current) {
       hasInitializedFromSaved.current = true;
       
-      // Auto-loading saved simulation (debug logging removed for performance)
-      
-      // Load configuration values
-      setSolarCapacity(lastSavedSimulation.solar_capacity_kwp || 0);
-      const savedMinSoC = savedResultsJson?.batteryMinSoC ?? 0;
-      const savedMaxSoC = savedResultsJson?.batteryMaxSoC ?? 0;
-      const savedDoD = savedMaxSoC - savedMinSoC;
-      const savedChargeCRate = savedResultsJson?.batteryChargeCRate ?? savedResultsJson?.batteryCRate;
-      const savedDischargeCRate = savedResultsJson?.batteryDischargeCRate ?? savedResultsJson?.batteryCRate;
-      setBatteryMinSoC(savedMinSoC);
-      setBatteryMaxSoC(savedMaxSoC);
-      const savedDcCap = includesBattery ? (lastSavedSimulation.battery_capacity_kwh || 0) : 0;
-      const savedPower = includesBattery ? (lastSavedSimulation.battery_power_kw || 0) : 0;
-      const derivedAc = Math.round(savedDcCap * savedDoD / 100);
-      setBatteryAcCapacity(derivedAc);
-      const fallbackCRate = derivedAc > 0 ? Math.round(savedPower / derivedAc * 100) / 100 : 0.5;
-      setBatteryChargeCRate(savedChargeCRate ?? fallbackCRate);
-      setBatteryDischargeCRate(savedDischargeCRate ?? fallbackCRate);
-      
-      // Load PV config if saved
-      if (savedResultsJson?.pvConfig) {
-        setPvConfig(savedResultsJson.pvConfig);
-      }
-      
-      // Load inverter config if saved - merge with defaults to preserve new fields
-      if (savedResultsJson?.inverterConfig) {
-        setInverterConfig({
-          ...getDefaultInverterConfig(),
-          ...savedResultsJson.inverterConfig,
-        });
-      }
-      
-      // Load PVsyst config if saved - merge with defaults to preserve new fields like lossesAfterInverter
-      if (savedResultsJson?.pvsystConfig) {
-        setPvsystConfig(mergePvsystConfig(savedResultsJson.pvsystConfig));
-      }
-      
-      // System costs are now loaded by ProjectDetail.tsx on initial load
-      // to ensure consistency between Costs tab and Simulation tab
-      
-      // Set solar data source based on saved type
-      const savedType = lastSavedSimulation.simulation_type;
-      if (savedType === "solcast" || savedType === "pvgis_monthly" || savedType === "pvgis_tmy") {
-        setSolarDataSource(savedType);
-      } else if (savedType === "generic") {
-        setSolarDataSource("pvgis_monthly"); // Default to PVGIS monthly for legacy "generic" saves
-      }
-      
-      // Load production reduction if saved
-      if (savedResultsJson?.productionReductionPercent !== undefined) {
-        setProductionReductionPercent(savedResultsJson.productionReductionPercent);
-      }
-      
-      // Load loss calculation mode if saved
-      if (savedResultsJson?.lossCalculationMode) {
-        setLossCalculationMode(savedResultsJson.lossCalculationMode);
-      }
-      
-      // Load advanced config if saved - deep merge with defaults to preserve new fields
-      if (savedResultsJson?.advancedConfig) {
-        setAdvancedConfig(mergeAdvancedConfig(savedResultsJson.advancedConfig));
-      }
-      
-      // Load battery dispatch strategy if saved
-      if (savedResultsJson?.batteryStrategy) {
-        setBatteryStrategy(savedResultsJson.batteryStrategy);
-        setDispatchConfig(savedResultsJson.dispatchConfig ?? getDefaultDispatchConfig(savedResultsJson.batteryStrategy));
-      }
-      if (savedResultsJson?.chargeTouPeriod) setChargeTouPeriod(savedResultsJson.chargeTouPeriod);
-      if (savedResultsJson?.dischargeTouSelection) {
-        setDischargeTouSelection(savedResultsJson.dischargeTouSelection);
-      } else if (savedResultsJson?.dischargeTouPeriod) {
-        const period = savedResultsJson.dischargeTouPeriod as TOUPeriod;
-        const flags = { peak: period === 'peak', standard: period === 'standard', offPeak: period === 'off-peak' };
-        setDischargeTouSelection({
-          highSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
-          lowSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
-        });
-      }
-
-      // Track what we loaded for UI feedback
-      setLoadedSimulationName(lastSavedSimulation.name);
-      setLoadedSimulationDate(lastSavedSimulation.created_at);
+      restoreSimulationState({
+        solarCapacity: lastSavedSimulation.solar_capacity_kwp || 0,
+        batteryCapacityDc: includesBattery ? (lastSavedSimulation.battery_capacity_kwh || 0) : 0,
+        batteryPower: includesBattery ? (lastSavedSimulation.battery_power_kw || 0) : 0,
+        simulationType: lastSavedSimulation.simulation_type,
+        simulationName: lastSavedSimulation.name,
+        simulationDate: lastSavedSimulation.created_at,
+        batteryMinSoC: savedResultsJson?.batteryMinSoC,
+        batteryMaxSoC: savedResultsJson?.batteryMaxSoC,
+        batteryChargeCRate: savedResultsJson?.batteryChargeCRate,
+        batteryDischargeCRate: savedResultsJson?.batteryDischargeCRate,
+        batteryCRate: savedResultsJson?.batteryCRate,
+        batteryStrategy: savedResultsJson?.batteryStrategy,
+        dispatchConfig: savedResultsJson?.dispatchConfig,
+        chargeTouPeriod: savedResultsJson?.chargeTouPeriod,
+        dischargeTouPeriod: savedResultsJson?.dischargeTouPeriod,
+        dischargeTouSelection: savedResultsJson?.dischargeTouSelection,
+        pvConfig: savedResultsJson?.pvConfig,
+        inverterConfig: savedResultsJson?.inverterConfig,
+        pvsystConfig: savedResultsJson?.pvsystConfig,
+        lossCalculationMode: savedResultsJson?.lossCalculationMode,
+        productionReductionPercent: savedResultsJson?.productionReductionPercent,
+        advancedConfig: savedResultsJson?.advancedConfig,
+        // System costs NOT restored here — ProjectDetail handles initial load
+      }, stateSetters, includesBattery);
     }
-  }, [isFetched, lastSavedSimulation, savedResultsJson, includesBattery, onSystemCostsChange]);
+  }, [isFetched, lastSavedSimulation, savedResultsJson, includesBattery, stateSetters]);
 
 
 
@@ -1401,96 +1353,32 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               newPeakDemand: annualEnergyResults.peakGridImport,
             }}
             onLoadSimulation={(config) => {
-              setSolarCapacity(config.solarCapacity);
-              if (includesBattery) {
-                const dcCap = config.batteryCapacity || 0;
-                const pwr = config.batteryPower || 0;
-                const dod = config.batteryDoD || batteryDoD || 85;
-                const savedChargeCRate = config.batteryChargeCRate ?? config.batteryCRate;
-                const savedDischargeCRate = config.batteryDischargeCRate ?? config.batteryCRate;
-                const loadedMinSoC = config.batteryMinSoC ?? Math.round((100 - dod) / 2);
-                const loadedMaxSoC = config.batteryMaxSoC ?? Math.round(loadedMinSoC + dod);
-                setBatteryMinSoC(loadedMinSoC);
-                setBatteryMaxSoC(loadedMaxSoC);
-                const ac = Math.round(dcCap * dod / 100);
-                setBatteryAcCapacity(ac);
-                const fallbackCRate = ac > 0 ? Math.round(pwr / ac * 100) / 100 : 0.5;
-                setBatteryChargeCRate(savedChargeCRate ?? fallbackCRate);
-                setBatteryDischargeCRate(savedDischargeCRate ?? fallbackCRate);
-                setBatteryMinSoC(config.batteryMinSoC ?? 10);
-                setBatteryMaxSoC(config.batteryMaxSoC ?? 95);
-              }
-              if (config.batteryStrategy) {
-                setBatteryStrategy(config.batteryStrategy as BatteryDispatchStrategy);
-                setDispatchConfig(config.dispatchConfig ?? getDefaultDispatchConfig(config.batteryStrategy as BatteryDispatchStrategy));
-              }
-              if (config.chargeTouPeriod) setChargeTouPeriod(config.chargeTouPeriod as TOUPeriod);
-              if (config.dischargeTouSelection) {
-                setDischargeTouSelection(config.dischargeTouSelection);
-              } else if (config.dischargeTouPeriod) {
-                const period = config.dischargeTouPeriod as TOUPeriod;
-                const flags = { peak: period === 'peak', standard: period === 'standard', offPeak: period === 'off-peak' };
-                setDischargeTouSelection({
-                  highSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
-                  lowSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
-                });
-              }
-              if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
-                setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
-              }
-              if (config.inverterConfig) {
-                setInverterConfig((prev) => ({ ...prev, ...config.inverterConfig }));
-              }
-              if (config.solarDataSource) {
-                setSolarDataSource(config.solarDataSource);
-              }
-              if (config.pvsystConfig) {
-                setPvsystConfig(mergePvsystConfig(config.pvsystConfig));
-              }
-              if (config.lossCalculationMode) {
-                setLossCalculationMode(config.lossCalculationMode);
-              }
-              if (config.productionReductionPercent !== undefined) {
-                setProductionReductionPercent(config.productionReductionPercent);
-              }
-              if (config.advancedConfig) {
-                setAdvancedConfig(mergeAdvancedConfig(config.advancedConfig));
-              }
-              if (config.systemCosts) {
-                const savedCosts = config.systemCosts as any;
-                onSystemCostsChange({
-                  solarCostPerKwp: savedCosts.solarCostPerKwp,
-                  batteryCostPerKwh: savedCosts.batteryCostPerKwh,
-                  solarMaintenancePercentage: savedCosts.solarMaintenancePercentage ?? savedCosts.maintenancePercentage ?? 3.5,
-                  batteryMaintenancePercentage: savedCosts.batteryMaintenancePercentage ?? 1.5,
-                  maintenancePerYear: savedCosts.maintenancePerYear ?? 0,
-                  healthAndSafetyCost: savedCosts.healthAndSafetyCost ?? 0,
-                  waterPointsCost: savedCosts.waterPointsCost ?? 0,
-                  cctvCost: savedCosts.cctvCost ?? 0,
-                  mvSwitchGearCost: savedCosts.mvSwitchGearCost ?? 0,
-                  insuranceCostPerYear: savedCosts.insuranceCostPerYear ?? 0,
-                  insuranceRatePercent: savedCosts.insuranceRatePercent ?? 1.0,
-                  professionalFeesPercent: savedCosts.professionalFeesPercent ?? 0,
-                  projectManagementPercent: savedCosts.projectManagementPercent ?? 0,
-                  contingencyPercent: savedCosts.contingencyPercent ?? 0,
-                  replacementYear: savedCosts.replacementYear ?? 10,
-                  equipmentCostPercent: savedCosts.equipmentCostPercent ?? 45,
-                  moduleSharePercent: savedCosts.moduleSharePercent ?? 70,
-                  inverterSharePercent: savedCosts.inverterSharePercent ?? 30,
-                  solarModuleReplacementPercent: savedCosts.solarModuleReplacementPercent ?? 10,
-                  inverterReplacementPercent: savedCosts.inverterReplacementPercent ?? 50,
-                  batteryReplacementPercent: savedCosts.batteryReplacementPercent ?? 30,
-                  costOfCapital: savedCosts.costOfCapital ?? 9.0,
-                  cpi: savedCosts.cpi ?? 6.0,
-                  electricityInflation: savedCosts.electricityInflation ?? 10.0,
-                  projectDurationYears: savedCosts.projectDurationYears ?? 20,
-                  lcoeDiscountRate: savedCosts.lcoeDiscountRate ?? 9.0,
-                  mirrFinanceRate: savedCosts.mirrFinanceRate ?? 9.0,
-                  mirrReinvestmentRate: savedCosts.mirrReinvestmentRate ?? 10.0,
-                });
-              }
-              setLoadedSimulationName(config.simulationName);
-              setLoadedSimulationDate(config.simulationDate);
+              restoreSimulationState({
+                solarCapacity: config.solarCapacity,
+                batteryCapacityDc: config.batteryCapacity || 0,
+                batteryPower: config.batteryPower || 0,
+                batteryDoD: config.batteryDoD || batteryDoD || 85,
+                batteryMinSoC: config.batteryMinSoC,
+                batteryMaxSoC: config.batteryMaxSoC,
+                batteryChargeCRate: config.batteryChargeCRate,
+                batteryDischargeCRate: config.batteryDischargeCRate,
+                batteryCRate: config.batteryCRate,
+                batteryStrategy: config.batteryStrategy,
+                dispatchConfig: config.dispatchConfig,
+                chargeTouPeriod: config.chargeTouPeriod,
+                dischargeTouPeriod: config.dischargeTouPeriod,
+                dischargeTouSelection: config.dischargeTouSelection,
+                pvConfig: config.pvConfig,
+                inverterConfig: config.inverterConfig,
+                solarDataSource: config.solarDataSource,
+                pvsystConfig: config.pvsystConfig,
+                lossCalculationMode: config.lossCalculationMode,
+                productionReductionPercent: config.productionReductionPercent,
+                advancedConfig: config.advancedConfig,
+                systemCosts: config.systemCosts,
+                simulationName: config.simulationName,
+                simulationDate: config.simulationDate,
+              }, stateSetters, includesBattery);
             }}
             includesBattery={includesBattery}
           />
