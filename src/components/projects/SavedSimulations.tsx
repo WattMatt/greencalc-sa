@@ -349,9 +349,9 @@ export function SavedSimulations({
     }
     
     const configToLoad = {
-      solarCapacity: sim.solar_capacity_kwp || 100,
-      batteryCapacity: sim.battery_capacity_kwh || 50,
-      batteryPower: sim.battery_power_kw || 25,
+      solarCapacity: sim.solar_capacity_kwp || 0,
+      batteryCapacity: sim.battery_capacity_kwh || 0,
+      batteryPower: sim.battery_power_kw || 0,
       pvConfig: resultsJson?.pvConfig || {},
       simulationName: sim.name,
       simulationDate: sim.created_at,

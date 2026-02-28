@@ -11,6 +11,7 @@
 
 import { EnergySimulationResults, HourlyEnergyData, AnnualEnergySimulationResults, AnnualHourlyEnergyData } from "./EnergySimulationEngine";
 import { TariffData, SystemCosts } from "./FinancialAnalysis";
+import { calculateTotalSystemCost } from "@/utils/simulationConfig";
 import {
   AdvancedSimulationConfig,
   AdvancedFinancialResults,
@@ -421,23 +422,7 @@ export function runAdvancedSimulation(
   const baseAnnualGridExport = annualEnergyResults?.totalAnnualGridExport ?? baseEnergyResults.totalGridExport * 365;
   
   // Calculate initial system cost (Total Capital Cost)
-  const additionalCosts = 
-    (systemCosts.healthAndSafetyCost ?? 0) +
-    (systemCosts.waterPointsCost ?? 0) +
-    (systemCosts.cctvCost ?? 0) +
-    (systemCosts.mvSwitchGearCost ?? 0);
-  
-  const baseCost = 
-    solarCapacity * systemCosts.solarCostPerKwp +
-    batteryCapacity * systemCosts.batteryCostPerKwh;
-  
-  const subtotalBeforeFees = baseCost + additionalCosts;
-  
-  const professionalFees = subtotalBeforeFees * ((systemCosts.professionalFeesPercent ?? 0) / 100);
-  const projectManagementFees = subtotalBeforeFees * ((systemCosts.projectManagementPercent ?? 0) / 100);
-  const subtotalWithFees = subtotalBeforeFees + professionalFees + projectManagementFees;
-  const contingency = subtotalWithFees * ((systemCosts.contingencyPercent ?? 0) / 100);
-  const initialCost = subtotalWithFees + contingency;
+  const { totalCapitalCost: initialCost } = calculateTotalSystemCost(systemCosts, solarCapacity, batteryCapacity);
   
   // ===== Income-based approach: Base values (Year 1, before escalation) =====
   const baseEnergyRate = tariff.averageRatePerKwh;
