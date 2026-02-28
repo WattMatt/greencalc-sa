@@ -585,220 +585,8 @@ function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig, p
   return dispatchTouArbitrage(s, hour, config, permissions, touContext);
 }
 
-// ── Main simulation function ──
-
-/**
- * Run energy simulation with given load and solar profiles
- * This is pure energy flow – no tariff or cost calculations
- *
- * @deprecated Use `runAnnualEnergySimulation` instead. This 24-hour single-day
- * function is retained only for backward compatibility with LoadSheddingScenarios'
- * internal `simulateWithLoadShedding`. All primary simulation paths now use the
- * 8,760-hour annual engine exclusively.
- */
-export function runEnergySimulation(
-  loadProfile: number[], // 24-hour load profile in kWh
-  solarProfile: number[], // 24-hour solar generation in kWh
-  config: EnergySimulationConfig
-): EnergySimulationResults {
-  const {
-    batteryCapacity,
-    batteryPower,
-    batteryChargePower: configChargePower,
-    batteryDischargePower: configDischargePower,
-    batteryMinSoC = 0.10,
-    batteryMaxSoC = 0.95,
-    batteryInitialSoC = 0.50,
-    dispatchStrategy = 'self-consumption',
-    dispatchConfig,
-    touPeriodToWindows: touPeriodToWindowsFn,
-  } = config;
-
-  // Use explicit charge/discharge power if provided, otherwise fall back to legacy batteryPower
-  const batteryChargePower = configChargePower ?? batteryPower;
-  const batteryDischargePower = configDischargePower ?? batteryPower;
-
-  const effectiveDispatchConfig = dispatchConfig ?? getDefaultDispatchConfig(dispatchStrategy);
-
-  const hourlyData: HourlyEnergyData[] = [];
-  
-  // Initialize battery state
-  let batteryState = batteryCapacity * batteryInitialSoC;
-  const minBatteryLevel = batteryCapacity * batteryMinSoC;
-  const maxBatteryLevel = batteryCapacity * batteryMaxSoC;
-  
-  // Accumulators
-  let totalGridImport = 0;
-  let totalGridExport = 0;
-  let totalSolarUsed = 0;
-  let totalBatteryCharge = 0;
-  let totalBatteryDischarge = 0;
-  let totalBatteryChargeFromGrid = 0;
-
-  // Resolve representative TOU context for chart display (if touSettings provided)
-  const repSeason = config.representativeSeason ?? 'high';
-  const repDayType: 'weekday' | 'saturday' | 'sunday' = 'weekday'; // chart shows weekday by default
-  let repHourMap: TOUHourMap | undefined;
-  if (config.touSettings) {
-    const seasonSettings = repSeason === 'high' ? config.touSettings.highSeason : config.touSettings.lowSeason;
-    repHourMap = seasonSettings[repDayType];
-  }
-
-  for (let h = 0; h < 24; h++) {
-    const load = loadProfile[h] || 0;
-    const solar = solarProfile[h] || 0;
-    const netLoad = load - solar;
-
-    const hourState: HourState = {
-      load, solar, netLoad, batteryState,
-      minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower,
-    };
-
-    // Compute source-aware permissions for this hour
-    const chargePerms = getChargePermissions(h, effectiveDispatchConfig, touPeriodToWindowsFn);
-    const dischargePerms = getDischargePermissions(h, effectiveDispatchConfig, touPeriodToWindowsFn);
-    const permissions: DispatchPermissions = { ...chargePerms, ...dischargePerms };
-
-    // Build touContext from representative hour map if available
-    let touContext: TouContext | undefined;
-    if (repHourMap) {
-      const touPeriod: TOUPeriod = repHourMap[h] || 'off-peak';
-      touContext = { season: repSeason, dayType: repDayType, touPeriod };
-    }
-
-    let result: HourResult;
-    switch (dispatchStrategy) {
-      case 'none':
-        // Battery never discharges; override permission
-        result = dispatchSelfConsumption(hourState, { ...permissions, batteryDischargeAllowed: false }, effectiveDispatchConfig);
-        break;
-      case 'tou-arbitrage':
-        result = dispatchTouArbitrage(hourState, h, effectiveDispatchConfig, permissions, touContext);
-        break;
-      case 'peak-shaving':
-        result = dispatchPeakShaving(hourState, h, effectiveDispatchConfig, permissions);
-        break;
-      case 'scheduled':
-        result = dispatchScheduled(hourState, h, effectiveDispatchConfig, permissions, touContext);
-        break;
-      case 'self-consumption':
-      default:
-        result = dispatchSelfConsumption(hourState, permissions, effectiveDispatchConfig);
-        break;
-    }
-
-    batteryState = result.newBatteryState;
-    totalGridImport += result.gridImport;
-    totalGridExport += result.gridExport;
-    totalSolarUsed += result.solarUsed;
-    totalBatteryCharge += result.batteryCharge;
-    totalBatteryDischarge += result.batteryDischarge;
-    totalBatteryChargeFromGrid += result.batteryChargeFromGrid;
-
-    hourlyData.push({
-      hour: `${h.toString().padStart(2, "0")}:00`,
-      load,
-      solar,
-      gridImport: result.gridImport,
-      gridExport: result.gridExport,
-      solarUsed: result.solarUsed,
-      solarDirectToLoad: result.solarDirectToLoad,
-      batteryCharge: result.batteryCharge,
-      batteryDischarge: result.batteryDischarge,
-      batterySOC: (batteryState / batteryCapacity) * 100,
-      netLoad,
-    });
-  }
-
-  // Calculate summary metrics
-  const totalDailyLoad = loadProfile.reduce((a, b) => a + b, 0);
-  const totalDailySolar = solarProfile.reduce((a, b) => a + b, 0);
-  const peakLoad = Math.max(...loadProfile);
-  const peakGridImport = Math.max(...hourlyData.map(d => d.gridImport));
-  
-  // Self-consumption: % of solar that was used on-site
-  const selfConsumptionRate = totalDailySolar > 0 
-    ? (totalSolarUsed / totalDailySolar) * 100 
-    : 0;
-  
-  // Solar coverage: % of load met by solar (direct + via battery)
-  const solarCoverageRate = totalDailyLoad > 0 
-    ? ((totalSolarUsed + totalBatteryDischarge) / totalDailyLoad) * 100 
-    : 0;
-  
-  // Peak reduction
-  const peakReduction = peakLoad > 0 
-    ? ((peakLoad - peakGridImport) / peakLoad) * 100 
-    : 0;
-  
-  // Battery metrics
-  const batteryCycles = batteryCapacity > 0 
-    ? totalBatteryDischarge / batteryCapacity 
-    : 0;
-  const batteryUtilization = batteryCapacity > 0 
-    ? ((totalBatteryCharge + totalBatteryDischarge) / 2 / batteryCapacity) * 100 
-    : 0;
-
-  // Revenue kWh = energy that displaces grid or is exported (not battery charging)
-  const revenueKwh = totalSolarUsed + totalBatteryDischarge + totalGridExport;
-
-  return {
-    hourlyData,
-    totalDailyLoad,
-    totalDailySolar,
-    totalGridImport,
-    totalGridExport,
-    totalSolarUsed,
-    totalBatteryCharge,
-    totalBatteryDischarge,
-    totalBatteryChargeFromGrid,
-    selfConsumptionRate,
-    solarCoverageRate,
-    peakLoad,
-    peakGridImport,
-    peakReduction,
-    batteryCycles,
-    batteryUtilization,
-    revenueKwh,
-  };
-}
-
-/**
- * Scale energy results to different time periods
- */
-export function scaleToAnnual(dailyResults: EnergySimulationResults): {
-  annualLoad: number;
-  annualSolar: number;
-  annualGridImport: number;
-  annualGridExport: number;
-  annualSolarUsed: number;
-  annualBatteryCycles: number;
-} {
-  return {
-    annualLoad: dailyResults.totalDailyLoad * 365,
-    annualSolar: dailyResults.totalDailySolar * 365,
-    annualGridImport: dailyResults.totalGridImport * 365,
-    annualGridExport: dailyResults.totalGridExport * 365,
-    annualSolarUsed: dailyResults.totalSolarUsed * 365,
-    annualBatteryCycles: dailyResults.batteryCycles * 365,
-  };
-}
-
-export function scaleToMonthly(dailyResults: EnergySimulationResults): {
-  monthlyLoad: number;
-  monthlySolar: number;
-  monthlyGridImport: number;
-  monthlyGridExport: number;
-  monthlySolarUsed: number;
-} {
-  return {
-    monthlyLoad: dailyResults.totalDailyLoad * 30,
-    monthlySolar: dailyResults.totalDailySolar * 30,
-    monthlyGridImport: dailyResults.totalGridImport * 30,
-    monthlyGridExport: dailyResults.totalGridExport * 30,
-    monthlySolarUsed: dailyResults.totalSolarUsed * 30,
-  };
-}
+// Deprecated functions (runEnergySimulation, scaleToAnnual, scaleToMonthly) removed.
+// All primary simulation paths now use runAnnualEnergySimulation exclusively.
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ANNUAL 8,760-HOUR SIMULATION
@@ -899,11 +687,21 @@ export function buildAnnualCalendar(touSettings: TOUSettings): DayCalendarInfo[]
 
 /**
  * Create a touPeriodToWindows function for a specific hour map.
- * This allows the existing dispatch permission functions to resolve
- * TOU periods correctly for each day in the annual simulation.
+ * Results are cached by hourMap reference since there are only ~6 unique maps.
  */
+const _touResolverCache = new WeakMap<TOUHourMap, (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[]>();
+
 function makeTouPeriodToWindowsFromHourMap(hourMap: TOUHourMap): (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[] {
-  return (period: 'off-peak' | 'standard' | 'peak') => {
+  const cached = _touResolverCache.get(hourMap);
+  if (cached) return cached;
+
+  // Pre-compute windows for all three periods at once
+  const windowsByPeriod: Record<string, TimeWindow[]> = {
+    'off-peak': [],
+    'standard': [],
+    'peak': [],
+  };
+  for (const period of ['off-peak', 'standard', 'peak'] as const) {
     const windows: TimeWindow[] = [];
     let start: number | null = null;
     for (let h = 0; h <= 24; h++) {
@@ -915,8 +713,12 @@ function makeTouPeriodToWindowsFromHourMap(hourMap: TOUHourMap): (period: 'off-p
         start = null;
       }
     }
-    return windows.length > 0 ? windows : [{ start: 0, end: 0 }];
-  };
+    windowsByPeriod[period] = windows.length > 0 ? windows : [{ start: 0, end: 0 }];
+  }
+
+  const resolver = (period: 'off-peak' | 'standard' | 'peak') => windowsByPeriod[period];
+  _touResolverCache.set(hourMap, resolver);
+  return resolver;
 }
 
 /**
@@ -948,7 +750,12 @@ export function runAnnualEnergySimulation(
   const effectiveDispatchConfig = dispatchConfig ?? getDefaultDispatchConfig(dispatchStrategy);
 
   const calendar = buildAnnualCalendar(touSettings);
-  const hourlyData: AnnualHourlyEnergyData[] = [];
+  // Pre-allocate array for 8,760 hourly entries
+  const hourlyData: AnnualHourlyEnergyData[] = new Array(8760);
+  let hourlyIdx = 0;
+
+  // Pre-compute hour label strings (avoid 8,760 string allocations)
+  const HOUR_LABELS: string[] = Array.from({ length: 24 }, (_, h) => `${h.toString().padStart(2, '0')}:00`);
 
   let batteryState = batteryCapacity * batteryInitialSoC;
   const minBatteryLevel = batteryCapacity * batteryMinSoC;
@@ -1023,8 +830,8 @@ export function runAnnualEnergySimulation(
       totalSolar += solar;
       peakGridImport = Math.max(peakGridImport, result.gridImport);
 
-      hourlyData.push({
-        hour: `${h.toString().padStart(2, '0')}:00`,
+      hourlyData[hourlyIdx++] = {
+        hour: HOUR_LABELS[h],
         load,
         solar,
         gridImport: result.gridImport,
@@ -1040,7 +847,7 @@ export function runAnnualEnergySimulation(
         dayType: day.dayType,
         touPeriod,
         batteryChargeFromGrid: result.batteryChargeFromGrid,
-      });
+      };
     }
   }
 

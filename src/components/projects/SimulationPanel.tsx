@@ -3,11 +3,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { NumericInput } from "@/components/ui/numeric-input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, Database, Activity, RefreshCw, Save } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, Database, Activity, Save } from "lucide-react";
+import { InverterPane } from "./simulation/InverterPane";
+import { SolarModulesPane } from "./simulation/SolarModulesPane";
+import { BatteryPane } from "./simulation/BatteryPane";
 import { DischargeTOUSelection, DEFAULT_DISCHARGE_TOU_SELECTION, TOUPeriod as LoadProfileTOUPeriod } from "./load-profile/types";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
@@ -69,8 +69,6 @@ import { AdvancedResultsDisplay } from "./simulation/AdvancedResultsDisplay";
 import { AdvancedConfigComparison } from "./simulation/AdvancedConfigComparison";
 import { LoadSheddingAnalysisPanel } from "./simulation/LoadSheddingAnalysisPanel";
 import { InverterSizing, InverterConfig, getDefaultInverterConfig } from "./InverterSizing";
-import { InverterSizeModuleConfig } from "./InverterSizeModuleConfig";
-import { InverterSliderPanel } from "./InverterSliderPanel";
 import { getModulePresetById, getDefaultModulePreset, calculateModuleMetrics } from "./SolarModulePresets";
 import { SystemCostsData } from "./SystemCostsManager";
 import type { BlendedRateType } from "./TariffSelector";
@@ -746,17 +744,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             enabled: includesSolar,
             disabledMessage: 'Enable Solar PV to configure inverters',
             content: (
-              <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
-                <CardContent className="pt-4">
-                  <InverterSliderPanel
-                    config={inverterConfig}
-                    onChange={setInverterConfig}
-                    currentSolarCapacity={solarCapacity}
-                    onSolarCapacityChange={setSolarCapacity}
-                    maxSolarKva={maxSolarKva}
-                  />
-                </CardContent>
-              </Card>
+              <InverterPane
+                inverterConfig={inverterConfig}
+                onInverterConfigChange={setInverterConfig}
+                currentSolarCapacity={solarCapacity}
+                onSolarCapacityChange={setSolarCapacity}
+                maxSolarKva={maxSolarKva}
+                solarExceedsLimit={!!solarExceedsLimit}
+              />
             ),
           },
           {
@@ -766,88 +761,26 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             enabled: includesSolar,
             disabledMessage: 'Solar PV is not enabled for this project',
             content: (
-              <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <Sun className="h-4 w-4" />
-                    Solar PV System
-                    {maxSolarKva && (
-                      <span className="text-xs font-normal text-muted-foreground ml-auto">
-                        Max: {maxSolarKva.toFixed(0)} kVA
-                      </span>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <InverterSizeModuleConfig
-                      config={inverterConfig}
-                      onChange={setInverterConfig}
-                      onSolarCapacityChange={setSolarCapacity}
-                    />
-                  </div>
-                  <div className="pt-2 border-t space-y-2 text-[10px]">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-muted-foreground text-[10px]">Expected daily output</Label>
-                      <div className="flex items-center gap-1">
-                        <NumericInput
-                          integer
-                          value={dailyOutputOverride ?? (annualPVsystResult 
-                            ? Math.round(annualPVsystResult.eGrid / 365)
-                            : Math.round(annualEnergyResults.totalAnnualSolar / 365))}
-                          onChange={(v) => setDailyOutputOverride(v)}
-                          className="h-6 w-20 text-right text-xs"
-                        />
-                        <span className="text-xs text-muted-foreground">kWh</span>
-                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDailyOutputOverride(null)} title="Reset to calculated value">
-                          <RefreshCw className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-muted-foreground text-[10px]">Specific yield</Label>
-                      <div className="flex items-center gap-1">
-                        <NumericInput
-                          integer
-                          value={specificYieldOverride ?? (annualPVsystResult 
-                            ? Math.round(annualPVsystResult.specificYield)
-                            : Math.round(annualEnergyResults.totalAnnualSolar / solarCapacity))}
-                          onChange={(v) => setSpecificYieldOverride(v)}
-                          className="h-6 w-20 text-right text-xs"
-                        />
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">kWh/kWp/yr</span>
-                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setSpecificYieldOverride(null)} title="Reset to calculated value">
-                          <RefreshCw className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-muted-foreground text-[10px]">Production reduction</Label>
-                      <div className="flex items-center gap-1">
-                        <NumericInput
-                          integer
-                          value={productionReductionPercent}
-                          onChange={(v) => setProductionReductionPercent(v)}
-                          className="h-6 w-16 text-right text-xs"
-                          min={0}
-                          max={100}
-                        />
-                        <span className="text-xs text-muted-foreground">%</span>
-                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setProductionReductionPercent(15)} title="Reset to default (15%)">
-                          <RefreshCw className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                    {productionReductionPercent > 0 && (
-                      <p className="text-[9px] text-muted-foreground mt-1">
-                        Output reduced by {productionReductionPercent}% for conservative estimate
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+              <SolarModulesPane
+                inverterConfig={inverterConfig}
+                onInverterConfigChange={setInverterConfig}
+                onSolarCapacityChange={setSolarCapacity}
+                maxSolarKva={maxSolarKva}
+                solarExceedsLimit={!!solarExceedsLimit}
+                dailyOutputOverride={dailyOutputOverride}
+                onDailyOutputOverrideChange={setDailyOutputOverride}
+                specificYieldOverride={specificYieldOverride}
+                onSpecificYieldOverrideChange={setSpecificYieldOverride}
+                productionReductionPercent={productionReductionPercent}
+                onProductionReductionPercentChange={setProductionReductionPercent}
+                calculatedDailyOutput={annualPVsystResult 
+                  ? Math.round(annualPVsystResult.eGrid / 365)
+                  : Math.round(annualEnergyResults.totalAnnualSolar / 365)}
+                calculatedSpecificYield={annualPVsystResult 
+                  ? Math.round(annualPVsystResult.specificYield)
+                  : Math.round(annualEnergyResults.totalAnnualSolar / solarCapacity)}
+                solarCapacity={solarCapacity}
+              />
             ),
           },
           {
@@ -857,71 +790,15 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             enabled: includesBattery,
             disabledMessage: 'Battery storage is not enabled for this project',
             content: (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <Battery className="h-4 w-4" />
-                    Battery Storage
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs">AC Capacity (kWh)</Label>
-                    <NumericInput
-                      integer
-                      value={batteryAcCapacity}
-                      onChange={(v) => setBatteryAcCapacity(v)}
-                      className="h-8"
-                      min={0}
-                      max={5000}
-                      step={10}
-                    />
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Charge Power (kW)</Label>
-                      <Input
-                        type="number"
-                        value={batteryChargePower.toFixed(1)}
-                        disabled
-                        className="h-8 bg-muted"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Discharge Power (kW)</Label>
-                      <Input
-                        type="number"
-                        value={batteryDischargePower.toFixed(1)}
-                        disabled
-                        className="h-8 bg-muted"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">DC Capacity (kWh)</Label>
-                      <Input
-                        type="number"
-                        value={batteryCapacity}
-                        disabled
-                        className="h-8 bg-muted"
-                      />
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
-                    <div className="flex justify-between">
-                      <span>Usable capacity</span>
-                      <span className="text-foreground">{batteryAcCapacity} kWh</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Daily cycles</span>
-                      <span className="text-foreground">{annualEnergyResults.batteryCycles.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Energy throughput</span>
-                      <span className="text-foreground">{(annualEnergyResults.totalAnnualBatteryDischarge / 365).toFixed(0)} kWh</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <BatteryPane
+                batteryAcCapacity={batteryAcCapacity}
+                onBatteryAcCapacityChange={setBatteryAcCapacity}
+                batteryChargePower={batteryChargePower}
+                batteryDischargePower={batteryDischargePower}
+                batteryCapacity={batteryCapacity}
+                batteryCycles={annualEnergyResults.batteryCycles}
+                annualBatteryDischarge={annualEnergyResults.totalAnnualBatteryDischarge}
+              />
             ),
           },
           {

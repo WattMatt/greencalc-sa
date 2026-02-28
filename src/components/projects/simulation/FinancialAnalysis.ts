@@ -108,119 +108,8 @@ export interface FinancialResults {
   solarFixedCost: number;
 }
 
-/**
- * Calculate financial results from energy simulation
- */
-export function calculateFinancials(
-  energyResults: EnergySimulationResults,
-  tariff: TariffData,
-  systemCosts: SystemCosts,
-  solarCapacity: number, // kWp
-  batteryCapacity: number // kWh
-): FinancialResults {
-  const {
-    totalDailyLoad,
-    totalGridImport,
-    totalGridExport,
-    peakLoad,
-    peakGridImport,
-  } = energyResults;
-
-  const {
-    fixedMonthlyCharge,
-    demandChargePerKva,
-    averageRatePerKwh,
-    exportRatePerKwh = 0,
-  } = tariff;
-
-  const {
-    solarCostPerKwp,
-    batteryCostPerKwh,
-    maintenancePerYear = 0,
-  } = systemCosts;
-
-  // Daily fixed cost (pro-rated)
-  const dailyFixedCost = fixedMonthlyCharge / 30;
-
-  // === Grid-only scenario ===
-  // Energy costs are daily (kWh × R/kWh)
-  const gridOnlyEnergyCost = totalDailyLoad * averageRatePerKwh;
-  // Demand charges are MONTHLY (kVA × R/kVA/month), pro-rated daily
-  // Note: Peak load in kW, assuming power factor ~0.9 for kVA conversion
-  const powerFactor = 0.9;
-  const peakLoadKva = peakLoad / powerFactor;
-  const gridOnlyDemandCost = (peakLoadKva * demandChargePerKva) / 30; // Pro-rate monthly charge to daily
-  const gridOnlyFixedCost = dailyFixedCost;
-  const gridOnlyDailyCost = gridOnlyEnergyCost + gridOnlyDemandCost + gridOnlyFixedCost;
-  const gridOnlyMonthlyCost = gridOnlyDailyCost * 30;
-  const gridOnlyAnnualCost = gridOnlyDailyCost * 365;
-
-  // === With solar+battery scenario ===
-  const solarEnergyCost = totalGridImport * averageRatePerKwh;
-  // Reduced peak demand with solar (pro-rated monthly charge)
-  const peakGridImportKva = peakGridImport / powerFactor;
-  const solarDemandCost = (peakGridImportKva * demandChargePerKva) / 30; // Pro-rate monthly charge to daily
-  const solarFixedCost = dailyFixedCost; // Fixed charges typically remain
-  const dailyExportRevenue = totalGridExport * exportRatePerKwh;
-  
-  const solarDailyCost = solarEnergyCost + solarDemandCost + solarFixedCost - dailyExportRevenue;
-  const solarMonthlyCost = solarDailyCost * 30;
-  const solarAnnualCost = solarDailyCost * 365;
-
-  // === Savings ===
-  const dailySavings = gridOnlyDailyCost - solarDailyCost;
-  const monthlySavings = dailySavings * 30;
-  const annualSavings = dailySavings * 365;
-  const savingsPercentage = gridOnlyAnnualCost > 0 
-    ? (annualSavings / gridOnlyAnnualCost) * 100 
-    : 0;
-
-  // === Investment analysis ===
-  const { totalCapitalCost: systemCost } = calculateTotalSystemCost(systemCosts, solarCapacity, batteryCapacity);
-  
-  const netAnnualSavings = annualSavings - maintenancePerYear;
-  const paybackYears = netAnnualSavings > 0 
-    ? systemCost / netAnnualSavings 
-    : Infinity;
-  const roi = systemCost > 0 
-    ? (netAnnualSavings / systemCost) * 100 
-    : 0;
-
-  return {
-    // Grid-only
-    gridOnlyDailyCost,
-    gridOnlyMonthlyCost,
-    gridOnlyAnnualCost,
-    
-    // With solar
-    solarDailyCost,
-    solarMonthlyCost,
-    solarAnnualCost,
-    
-    // Export
-    dailyExportRevenue,
-    annualExportRevenue: dailyExportRevenue * 365,
-    
-    // Savings
-    dailySavings,
-    monthlySavings,
-    annualSavings,
-    savingsPercentage,
-    
-    // Investment
-    systemCost,
-    paybackYears,
-    roi,
-    
-    // Breakdown
-    gridOnlyEnergyCost,
-    gridOnlyDemandCost,
-    gridOnlyFixedCost,
-    solarEnergyCost,
-    solarDemandCost,
-    solarFixedCost,
-  };
-}
+// Deprecated: calculateFinancials (24-hour daily scaling) removed.
+// Use calculateFinancialsFromAnnual for all financial calculations.
 
 /**
  * Calculate financial results from annual 8,760-hour simulation (single source of truth).
@@ -330,27 +219,7 @@ interface AnnualEnergySimulationResultsInput {
   peakGridImport: number;
 }
 
-/**
- * Compare multiple tariffs against same energy results
- */
-export function compareTariffs(
-  energyResults: EnergySimulationResults,
-  tariffs: { name: string; tariff: TariffData }[],
-  systemCosts: SystemCosts,
-  solarCapacity: number,
-  batteryCapacity: number
-): { name: string; results: FinancialResults }[] {
-  return tariffs.map(({ name, tariff }) => ({
-    name,
-    results: calculateFinancials(
-      energyResults,
-      tariff,
-      systemCosts,
-      solarCapacity,
-      batteryCapacity
-    ),
-  }));
-}
+// Deprecated: compareTariffs removed (used the removed calculateFinancials).
 
 /**
  * Default system costs for South Africa (2025/2026)
