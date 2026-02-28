@@ -19,6 +19,7 @@ import type { DispatchConfig, BatteryDispatchStrategy } from "./EnergySimulation
 import type { AdvancedSimulationConfig, AdvancedFinancialResults } from "./AdvancedSimulationTypes";
 import { runAdvancedSimulation } from "./AdvancedSimulationEngine";
 import { calculateAnnualBlendedRates } from "@/lib/tariffCalculations";
+import { calculateFinancialMetrics } from "@/utils/financialMetrics";
 import type { BlendedRateType } from "../TariffSelector";
 import type { SystemCostsData } from "../SystemCostsManager";
 import type { InverterConfig } from "../InverterSizing";
@@ -241,26 +242,42 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     [comparisonTabViewed, loadProfile, solarProfileSolcast, energyConfig, touSettingsData]
   );
 
-  // ── Day slices ──
+  // ── Day slices (O(1) direct indexing instead of O(8760) filter) ──
   const dailySlice = useMemo(() => {
     if (!annualEnergyResults?.hourlyData) return [];
-    return annualEnergyResults.hourlyData.filter(h => h.dayIndex === selectedDayIndex);
+    const start = selectedDayIndex * 24;
+    return annualEnergyResults.hourlyData.slice(start, start + 24);
   }, [annualEnergyResults, selectedDayIndex]);
 
+  // ── Annual average (single O(8760) pass instead of O(8760×24)) ──
   const annualAverageSlice = useMemo(() => {
-    if (!annualEnergyResults?.hourlyData) return [];
+    const hourly = annualEnergyResults?.hourlyData;
+    if (!hourly || hourly.length === 0) return [];
+
+    const FIELDS = ['load', 'solarUsed', 'gridImport', 'gridExport', 'batteryCharge', 'batteryDischarge', 'batterySOC', 'netLoad', 'solar', 'batteryChargeFromGrid'] as const;
+    const sums: number[][] = Array.from({ length: 24 }, () => new Array(FIELDS.length).fill(0));
+    const counts = new Array(24).fill(0);
+
+    for (let i = 0; i < hourly.length; i++) {
+      const h = i % 24;
+      const entry = hourly[i] as any;
+      counts[h]++;
+      for (let f = 0; f < FIELDS.length; f++) {
+        sums[h][f] += entry[FIELDS[f]] || 0;
+      }
+    }
+
     return Array.from({ length: 24 }, (_, h) => {
-      const hourEntries = annualEnergyResults.hourlyData.filter(d => parseInt(d.hour) === h);
-      const count = hourEntries.length || 1;
-      const avg = (field: string) => hourEntries.reduce((sum, e) => sum + ((e as any)[field] || 0), 0) / count;
+      const c = counts[h] || 1;
+      const s = sums[h];
       return {
         hour: `${h.toString().padStart(2, '0')}:00`,
-        load: avg('load'), solarUsed: avg('solarUsed'),
-        gridImport: avg('gridImport'), gridExport: avg('gridExport'),
-        batteryCharge: avg('batteryCharge'), batteryDischarge: avg('batteryDischarge'),
-        batterySOC: avg('batterySOC'), netLoad: avg('netLoad'),
-        pvGeneration: avg('solar'),
-        batteryChargeFromGrid: avg('batteryChargeFromGrid'),
+        load: s[0] / c, solarUsed: s[1] / c,
+        gridImport: s[2] / c, gridExport: s[3] / c,
+        batteryCharge: s[4] / c, batteryDischarge: s[5] / c,
+        batterySOC: s[6] / c, netLoad: s[7] / c,
+        pvGeneration: s[8] / c,
+        batteryChargeFromGrid: s[9] / c,
         touPeriod: 'off-peak' as LoadProfileTOUPeriod,
       };
     });
@@ -384,48 +401,19 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     return (solarMaintenance + batteryMaintenance) * cpiMultiplier;
   }, [systemCosts, solarCapacity, batteryCapacity, includesBattery]);
 
-  // ── Basic financial metrics (NPV, IRR, MIRR, LCOE) ──
-  const basicFinancialMetrics = useMemo(() => {
-    const projectLifeYears = systemCosts.projectDurationYears ?? 20;
-    const discountRate = (systemCosts.lcoeDiscountRate ?? 9) / 100;
-    const financeRate = (systemCosts.mirrFinanceRate ?? 9) / 100;
-    const reinvestmentRate = (systemCosts.mirrReinvestmentRate ?? 10) / 100;
-    const annualSavings = financialResults.annualSavings;
-    const systemCost = financialResults.systemCost;
-    const annualGeneration = annualEnergyResults.totalAnnualSolar;
-
-    let npv = -systemCost;
-    for (let y = 1; y <= projectLifeYears; y++) {
-      npv += annualSavings / Math.pow(1 + discountRate, y);
-    }
-
-    let irr = 0.1;
-    for (let iter = 0; iter < 50; iter++) {
-      let npvAtRate = -systemCost;
-      let derivativeNpv = 0;
-      for (let y = 1; y <= projectLifeYears; y++) {
-        const df = Math.pow(1 + irr, y);
-        npvAtRate += annualSavings / df;
-        derivativeNpv -= y * annualSavings / Math.pow(1 + irr, y + 1);
-      }
-      if (Math.abs(derivativeNpv) < 1e-10) break;
-      const newIrr = irr - npvAtRate / derivativeNpv;
-      if (Math.abs(newIrr - irr) < 1e-6) break;
-      irr = newIrr;
-    }
-
-    let fvPositive = 0;
-    for (let y = 1; y <= projectLifeYears; y++) {
-      fvPositive += annualSavings * Math.pow(1 + reinvestmentRate, projectLifeYears - y);
-    }
-    const pvNegative = systemCost;
-    const mirr = pvNegative > 0 ? Math.pow(fvPositive / pvNegative, 1 / projectLifeYears) - 1 : 0;
-
-    const lifetimeGeneration = annualGeneration * projectLifeYears * 0.9;
-    const lcoe = lifetimeGeneration > 0 ? systemCost / lifetimeGeneration : 0;
-
-    return { npv, irr: irr * 100, mirr: mirr * 100, lcoe, projectLifeYears, discountRate: discountRate * 100 };
-  }, [financialResults, annualEnergyResults, systemCosts]);
+  // ── Basic financial metrics (NPV, IRR, MIRR, LCOE) — delegated to pure utility ──
+  const basicFinancialMetrics = useMemo(() =>
+    calculateFinancialMetrics({
+      systemCost: financialResults.systemCost,
+      annualSavings: financialResults.annualSavings,
+      annualGeneration: annualEnergyResults.totalAnnualSolar,
+      projectLifeYears: systemCosts.projectDurationYears ?? 20,
+      discountRate: (systemCosts.lcoeDiscountRate ?? 9) / 100,
+      financeRate: (systemCosts.mirrFinanceRate ?? 9) / 100,
+      reinvestmentRate: (systemCosts.mirrReinvestmentRate ?? 10) / 100,
+    }),
+    [financialResults, annualEnergyResults, systemCosts]
+  );
 
   // ── Advanced simulation ──
   const isAdvancedEnabled =
