@@ -590,6 +590,11 @@ function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig, p
 /**
  * Run energy simulation with given load and solar profiles
  * This is pure energy flow – no tariff or cost calculations
+ *
+ * @deprecated Use `runAnnualEnergySimulation` instead. This 24-hour single-day
+ * function is retained only for backward compatibility with LoadSheddingScenarios'
+ * internal `simulateWithLoadShedding`. All primary simulation paths now use the
+ * 8,760-hour annual engine exclusively.
  */
 export function runEnergySimulation(
   loadProfile: number[], // 24-hour load profile in kWh
