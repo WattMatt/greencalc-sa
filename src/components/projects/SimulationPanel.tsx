@@ -1,22 +1,21 @@
 import { useState, useMemo, useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, Database, Activity, Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { InverterPane } from "./simulation/InverterPane";
 import { SolarModulesPane } from "./simulation/SolarModulesPane";
 import { BatteryPane } from "./simulation/BatteryPane";
 import { DischargeTOUSelection, DEFAULT_DISCHARGE_TOU_SELECTION, TOUPeriod as LoadProfileTOUPeriod } from "./load-profile/types";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Badge } from "@/components/ui/badge";
-import { format, formatDistanceToNow } from "date-fns";
 import { useSolarProfiles, type SolarDataSource } from "./simulation/useSolarProfiles";
 import { restoreSimulationState, type SimulationStateSetters } from "./simulation/restoreSimulationState";
 import { useSimulationEngine } from "./simulation/useSimulationEngine";
+import { SimulationToolbar } from "./simulation/SimulationToolbar";
+import { SavedConfigCollapsible } from "./simulation/SavedConfigCollapsible";
+import { getInitialSimulationValues } from "./simulation/useInitialSimulationState";
 
-import { SavedSimulations } from "./SavedSimulations";
 import { SimulationKPICards } from "./simulation/SimulationKPICards";
 import { SimulationChartTabs } from "./simulation/SimulationChartTabs";
 import { FinancialConfigPane } from "./simulation/FinancialConfigPane";
@@ -25,12 +24,8 @@ import {
   PVSystemConfig,
   PVSystemConfigData,
   getDefaultPVConfig,
-  SA_SOLAR_LOCATIONS,
   calculateSystemEfficiency,
 } from "./PVSystemConfig";
-import {
-  type TariffData,
-} from "./simulation";
 import {
   type BatteryDispatchStrategy,
   type DispatchConfig,
@@ -59,16 +54,14 @@ function touPeriodToWindows(period: TOUPeriod): TimeWindow[] {
   }
   return windows.length > 0 ? windows : [{ start: 0, end: 0 }];
 }
+
 import {
   AdvancedSimulationConfig,
   DEFAULT_ADVANCED_CONFIG,
-  AdvancedFinancialResults,
 } from "./simulation/AdvancedSimulationTypes";
 import { AdvancedSimulationConfigPanel } from "./simulation/AdvancedSimulationConfig";
 import { AdvancedResultsDisplay } from "./simulation/AdvancedResultsDisplay";
-import { AdvancedConfigComparison } from "./simulation/AdvancedConfigComparison";
-import { LoadSheddingAnalysisPanel } from "./simulation/LoadSheddingAnalysisPanel";
-import { InverterSizing, InverterConfig, getDefaultInverterConfig } from "./InverterSizing";
+import { InverterConfig, getDefaultInverterConfig } from "./InverterSizing";
 import { getModulePresetById, getDefaultModulePreset, calculateModuleMetrics } from "./SolarModulePresets";
 import { SystemCostsData } from "./SystemCostsManager";
 import type { BlendedRateType } from "./TariffSelector";
@@ -101,13 +94,11 @@ export interface SimulationPanelRef {
   autoSave: () => Promise<void>;
 }
 
-const DEFAULT_PROFILE = Array(24).fill(4.17);
-
 export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, includesSolar = true, onRequestEnableFeature, blendedRateType = 'solarHours', onBlendedRateTypeChange, useHourlyTouRates = true, onUseHourlyTouRatesChange }, ref) => {
   const queryClient = useQueryClient();
   const { touSettings: touSettingsData } = useTOUSettings();
 
-  // Fetch the most recent saved simulation FIRST
+  // Fetch the most recent saved simulation
   const { data: lastSavedSimulation, isLoading: isLoadingLastSaved, isFetched } = useQuery({
     queryKey: ["last-simulation", projectId],
     queryFn: async () => {
@@ -126,84 +117,44 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   const savedResultsJson = lastSavedSimulation?.results_json as any;
 
-  const getCachedSimulation = () => {
-    const cached = queryClient.getQueryData<any>(["last-simulation", projectId]);
-    return cached ? { sim: cached, json: cached?.results_json as any } : null;
-  };
-  
-  const [solarCapacity, setSolarCapacity] = useState(() => {
-    const c = getCachedSimulation();
-    return c?.sim?.solar_capacity_kwp ?? 0;
-  });
-  const [batteryAcCapacity, setBatteryAcCapacity] = useState(() => {
-    const c = getCachedSimulation();
-    if (c) {
-      const minSoC = c.json?.batteryMinSoC ?? 0;
-      const maxSoC = c.json?.batteryMaxSoC ?? 0;
-      const dod = maxSoC - minSoC;
-      const dcCap = includesBattery ? (c.sim.battery_capacity_kwh || 0) : 0;
-      return Math.round(dcCap * dod / 100);
-    }
-    return 0;
-  });
-  const [batteryChargeCRate, setBatteryChargeCRate] = useState(() => {
-    const c = getCachedSimulation();
-    if (c?.json?.batteryChargeCRate) return c.json.batteryChargeCRate;
-    if (c?.json?.batteryCRate) return c.json.batteryCRate;
-    return 0;
-  });
-  const [batteryDischargeCRate, setBatteryDischargeCRate] = useState(() => {
-    const c = getCachedSimulation();
-    if (c?.json?.batteryDischargeCRate) return c.json.batteryDischargeCRate;
-    if (c?.json?.batteryCRate) return c.json.batteryCRate;
-    return 0;
-  });
-  const [batteryMinSoC, setBatteryMinSoC] = useState(() => {
-    const c = getCachedSimulation();
-    return c?.json?.batteryMinSoC ?? 0;
-  });
-  const [batteryMaxSoC, setBatteryMaxSoC] = useState(() => {
-    const c = getCachedSimulation();
-    return c?.json?.batteryMaxSoC ?? 0;
-  });
-   
-   const [batteryStrategy, setBatteryStrategy] = useState<BatteryDispatchStrategy>(() => {
-     const c = getCachedSimulation();
-     return c?.json?.batteryStrategy ?? 'none';
-   });
-   const [dispatchConfig, setDispatchConfig] = useState<DispatchConfig>(() => {
-     const c = getCachedSimulation();
-     return c?.json?.dispatchConfig ?? getDefaultDispatchConfig('none');
-   });
-   
-   const [chargeTouPeriod, setChargeTouPeriod] = useState<TOUPeriod | undefined>(() => {
-     const c = getCachedSimulation();
-     return c?.json?.chargeTouPeriod ?? undefined;
-   });
-   const [dischargeTouSelection, setDischargeTouSelection] = useState<DischargeTOUSelection>(() => {
-     const c = getCachedSimulation();
-     return c?.json?.dischargeTouSelection ?? DEFAULT_DISCHARGE_TOU_SELECTION;
-   });
+  // ── Consolidated initial state from cache ──
+  const initial = useMemo(
+    () => getInitialSimulationValues(queryClient, projectId, includesBattery),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [] // intentionally run once on mount
+  );
 
-   const handleDischargeTouSelectionChange = useCallback((selection: DischargeTOUSelection) => {
-     setDischargeTouSelection(selection);
-     const flags = selection.lowSeason.weekday;
-     const windows: TimeWindow[] = [];
-     if (flags.peak) windows.push(...touPeriodToWindows('peak'));
-     if (flags.standard) windows.push(...touPeriodToWindows('standard'));
-     if (flags.offPeak) windows.push(...touPeriodToWindows('off-peak'));
-     setDispatchConfig(prev => ({
-       ...prev,
-       dischargeWindows: windows.length > 0 ? windows : [{ start: 0, end: 0 }],
-       dischargeTouSelection: selection,
-     }));
-   }, []);
+  const [solarCapacity, setSolarCapacity] = useState(initial.solarCapacity);
+  const [batteryAcCapacity, setBatteryAcCapacity] = useState(initial.batteryAcCapacity);
+  const [batteryChargeCRate, setBatteryChargeCRate] = useState(initial.batteryChargeCRate);
+  const [batteryDischargeCRate, setBatteryDischargeCRate] = useState(initial.batteryDischargeCRate);
+  const [batteryMinSoC, setBatteryMinSoC] = useState(initial.batteryMinSoC);
+  const [batteryMaxSoC, setBatteryMaxSoC] = useState(initial.batteryMaxSoC);
+  const [batteryStrategy, setBatteryStrategy] = useState<BatteryDispatchStrategy>(initial.batteryStrategy);
+  const [dispatchConfig, setDispatchConfig] = useState<DispatchConfig>(initial.dispatchConfig);
+  const [chargeTouPeriod, setChargeTouPeriod] = useState<TOUPeriod | undefined>(initial.chargeTouPeriod);
+  const [dischargeTouSelection, setDischargeTouSelection] = useState<DischargeTOUSelection>(initial.dischargeTouSelection);
+
+  const handleDischargeTouSelectionChange = useCallback((selection: DischargeTOUSelection) => {
+    setDischargeTouSelection(selection);
+    const flags = selection.lowSeason.weekday;
+    const windows: TimeWindow[] = [];
+    if (flags.peak) windows.push(...touPeriodToWindows('peak'));
+    if (flags.standard) windows.push(...touPeriodToWindows('standard'));
+    if (flags.offPeak) windows.push(...touPeriodToWindows('off-peak'));
+    setDispatchConfig(prev => ({
+      ...prev,
+      dischargeWindows: windows.length > 0 ? windows : [{ start: 0, end: 0 }],
+      dischargeTouSelection: selection,
+    }));
+  }, []);
 
   const batteryDoD = batteryMaxSoC - batteryMinSoC;
   const batteryCapacity = batteryDoD > 0 ? Math.round(batteryAcCapacity / (batteryDoD / 100)) : 0;
   const batteryChargePower = Math.round(batteryAcCapacity * batteryChargeCRate * 10) / 10;
   const batteryDischargePower = Math.round(batteryAcCapacity * batteryDischargeCRate * 10) / 10;
   const batteryPower = Math.max(batteryChargePower, batteryDischargePower);
+
   const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [solarDataSource, setSolarDataSource] = useState<SolarDataSource>("pvgis_monthly");
@@ -234,10 +185,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [comparisonTabViewed, setComparisonTabViewed] = useState(false);
 
   const navigateDayIndex = useCallback((direction: "prev" | "next") => {
-    setSelectedDayIndex(prev => {
-      if (direction === "prev") return Math.max(0, prev - 1);
-      return Math.min(364, prev + 1);
-    });
+    setSelectedDayIndex(prev => direction === "prev" ? Math.max(0, prev - 1) : Math.min(364, prev + 1));
   }, []);
 
   const dayDateInfo = useMemo(() => {
@@ -251,14 +199,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   }, [selectedDayIndex]);
 
   // Auto-load the last saved simulation when data arrives (only once per projectId)
-  useEffect(() => {
-    hasInitializedFromSaved.current = false;
-  }, [projectId]);
+  useEffect(() => { hasInitializedFromSaved.current = false; }, [projectId]);
 
   useEffect(() => {
     if (isFetched && lastSavedSimulation && !hasInitializedFromSaved.current) {
       hasInitializedFromSaved.current = true;
-      
       restoreSimulationState({
         solarCapacity: lastSavedSimulation.solar_capacity_kwp || 0,
         batteryCapacityDc: includesBattery ? (lastSavedSimulation.battery_capacity_kwh || 0) : 0,
@@ -286,83 +231,37 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     }
   }, [isFetched, lastSavedSimulation, savedResultsJson, includesBattery, stateSetters]);
 
-  // Calculate module metrics for PVsyst calculations
+  // Calculate module metrics
   const moduleMetrics = useMemo(() => {
     const selectedModule = inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule
       ? inverterConfig.customModule
       : getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
-    
     const currentAcCapacity = inverterConfig.inverterSize * inverterConfig.inverterCount;
-    const metrics = {
-      ...calculateModuleMetrics(currentAcCapacity, inverterConfig.dcAcRatio, selectedModule),
-      moduleName: selectedModule.name,
-    };
-    
-    return metrics;
+    return { ...calculateModuleMetrics(currentAcCapacity, inverterConfig.dcAcRatio, selectedModule), moduleName: selectedModule.name };
   }, [inverterConfig]);
 
-  // Sync CPI from systemCosts to advancedConfig for O&M escalation
+  // Sync CPI from systemCosts to advancedConfig
   useEffect(() => {
     if (systemCosts.cpi !== advancedConfig.financial.inflationRate) {
-      setAdvancedConfig(prev => ({
-        ...prev,
-        financial: {
-          ...prev.financial,
-          inflationRate: systemCosts.cpi ?? 6.0,
-        }
-      }));
+      setAdvancedConfig(prev => ({ ...prev, financial: { ...prev.financial, inflationRate: systemCosts.cpi ?? 6.0 } }));
     }
   }, [systemCosts.cpi]);
 
   // ── Solar profiles hook ──
   const {
-    solcastData, solcastLoading,
-    pvgisTmyData, pvgisMonthlyData, pvgisLoadingTMY, pvgisLoadingMonthly,
+    solcastLoading, pvgisLoadingTMY, pvgisLoadingMonthly,
     solarProfile, solarProfileSolcast, solarProfileGenericSimplified,
-    solcastPvProfileData,
-    annualPVsystResult,
+    solcastPvProfileData, annualPVsystResult,
     tmyDcProfile8760, tmySolarProfile8760, tmyInverterLossMultiplier,
-    selectedLocation, effectiveLat, effectiveLng,
-    isLoadingData, hasRealData, activeDataSourceLabel,
+    selectedLocation, isLoadingData, hasRealData, activeDataSourceLabel,
     reductionFactor,
   } = useSolarProfiles({
     pvConfig, moduleMetrics, solarDataSource, lossCalculationMode, pvsystConfig,
     productionReductionPercent, inverterConfig, project, projectId, includesSolar,
   });
-  const solarProfileGeneric = solarProfileGenericSimplified;
 
-  // ── Simulation engine hook (energy, financial, chart data) ──
-  const {
-    energyConfig,
-    loadProfile,
-    loadProfileChartData,
-    loadProfileTotalDaily,
-    loadProfilePeakHour,
-    loadProfileLoadFactor,
-    loadProfileIsWeekend,
-    tenantsWithScada,
-    tenantsEstimated,
-    annualEnergyResults,
-    annualEnergyResultsGeneric,
-    annualEnergyResultsSolcast,
-    representativeDay,
-    touPeriodsForDay,
-    tariffData,
-    tariffRates,
-    tariff,
-    annualBlendedRates,
-    selectedBlendedRate,
-    hasFinancialData,
-    financialResults,
-    financialResultsGeneric,
-    financialResultsSolcast,
-    basicFinancialMetrics,
-    threeYearOM,
-    advancedResults,
-    unifiedPaybackPeriod,
-    isAdvancedEnabled,
-    simulationChartData,
-  } = useSimulationEngine({
+  // ── Simulation engine hook ──
+  const engine = useSimulationEngine({
     projectId, project, tenants, shopTypes,
     solarCapacity, batteryCapacity, batteryAcCapacity, batteryPower,
     batteryChargePower, batteryDischargePower,
@@ -382,256 +281,83 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   // Auto-save hook
   const { isAutoSaving, lastSavedAt, triggerSave } = useAutoSave({
-    projectId,
-    solarDataSource,
-    solarCapacity,
-    batteryCapacity,
-    batteryPower,
-    includesBattery,
-    pvConfig,
-    inverterConfig,
-    systemCosts,
-    lossCalculationMode,
-    pvsystConfig,
-    productionReductionPercent,
-    advancedConfig,
+    projectId, solarDataSource, solarCapacity, batteryCapacity, batteryPower,
+    includesBattery, pvConfig, inverterConfig, systemCosts,
+    lossCalculationMode, pvsystConfig, productionReductionPercent, advancedConfig,
     moduleCount: moduleMetrics.moduleCount,
-    batteryStrategy,
-    dispatchConfig,
-    chargeTouPeriod,
-    dischargeTouSelection,
-    batteryChargeCRate,
-    batteryDischargeCRate,
-    batteryDoD,
-    batteryMinSoC,
-    batteryMaxSoC,
-    blendedRateType,
-    useHourlyTouRates,
-    selectedBlendedRate,
-    annualBlendedRates,
-    annualEnergyResults,
-    financialResults,
-    hasFinancialData,
+    batteryStrategy, dispatchConfig, chargeTouPeriod, dischargeTouSelection,
+    batteryChargeCRate, batteryDischargeCRate, batteryDoD, batteryMinSoC, batteryMaxSoC,
+    blendedRateType, useHourlyTouRates,
+    selectedBlendedRate: engine.selectedBlendedRate,
+    annualBlendedRates: engine.annualBlendedRates,
+    annualEnergyResults: engine.annualEnergyResults,
+    financialResults: engine.financialResults,
+    hasFinancialData: engine.hasFinancialData,
     tenantCount: tenants.length,
     hasInitializedFromSaved: hasInitializedFromSaved.current,
     isFetched,
   });
 
-  // Expose autoSave method to parent
-  useImperativeHandle(ref, () => ({
-    autoSave: triggerSave,
-  }), [triggerSave]);
+  useImperativeHandle(ref, () => ({ autoSave: triggerSave }), [triggerSave]);
 
-  // Connection size and max solar limit
   const connectionSizeKva = project.connection_size_kva ? Number(project.connection_size_kva) : null;
   const maxSolarKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
   const solarExceedsLimit = maxSolarKva && solarCapacity > maxSolarKva;
   const systemEfficiency = calculateSystemEfficiency(pvConfig);
 
+  // ── Saved config props (memoised to avoid re-renders) ──
+  const savedCurrentConfig = useMemo(() => ({
+    solarCapacity, batteryCapacity: includesBattery ? batteryCapacity : 0,
+    batteryPower: includesBattery ? batteryPower : 0,
+    pvConfig, usingSolcast: solarDataSource === "solcast", solarDataSource, inverterConfig,
+    systemCosts, pvsystConfig, advancedConfig, lossCalculationMode, productionReductionPercent,
+    moduleCount: moduleMetrics.moduleCount,
+    batteryChargeCRate, batteryDischargeCRate, batteryDoD, batteryMinSoC, batteryMaxSoC,
+    batteryStrategy, dispatchConfig, chargeTouPeriod, dischargeTouSelection,
+  }), [solarCapacity, batteryCapacity, batteryPower, includesBattery, pvConfig, solarDataSource, inverterConfig, systemCosts, pvsystConfig, advancedConfig, lossCalculationMode, productionReductionPercent, moduleMetrics.moduleCount, batteryChargeCRate, batteryDischargeCRate, batteryDoD, batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig, chargeTouPeriod, dischargeTouSelection]);
+
+  const savedCurrentResults = useMemo(() => ({
+    totalDailyLoad: engine.annualEnergyResults.totalAnnualLoad / 365,
+    totalDailySolar: engine.annualEnergyResults.totalAnnualSolar / 365,
+    totalGridImport: engine.annualEnergyResults.totalAnnualGridImport / 365,
+    totalSolarUsed: engine.annualEnergyResults.totalAnnualSolarUsed / 365,
+    annualSavings: engine.hasFinancialData ? engine.financialResults.annualSavings : 0,
+    systemCost: engine.financialResults.systemCost,
+    paybackYears: engine.hasFinancialData ? engine.financialResults.paybackYears : 0,
+    roi: engine.hasFinancialData ? engine.financialResults.roi : 0,
+    peakDemand: engine.annualEnergyResults.peakLoad,
+    newPeakDemand: engine.annualEnergyResults.peakGridImport,
+  }), [engine.annualEnergyResults, engine.financialResults, engine.hasFinancialData]);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div>
-            <h2 className="text-lg font-semibold">Energy Simulation</h2>
-            <p className="text-sm text-muted-foreground">
-              Model solar and battery energy flows • {selectedLocation.name}
-              {hasRealData ? (
-                <span className="text-primary"> ({activeDataSourceLabel})</span>
-              ) : (
-                <span> ({selectedLocation.ghi} kWh/m²/day)</span>
-              )}
-            </p>
-          </div>
-          {/* Auto-save indicator */}
-          {isAutoSaving ? (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              <span>Saving...</span>
-            </div>
-          ) : lastSavedAt ? (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md">
-              <Save className="h-3 w-3" />
-              <span>Saved {formatDistanceToNow(lastSavedAt, { addSuffix: true })}</span>
-            </div>
-          ) : null}
-        </div>
-        {/* Solar Data Source Toggle */}
-        <div className="flex items-center gap-2">
-          <ToggleGroup
-            type="single"
-            value={solarDataSource}
-            onValueChange={(value) => value && setSolarDataSource(value as SolarDataSource)}
-            className="border rounded-lg p-0.5"
-          >
-            <ToggleGroupItem
-              value="solcast"
-              size="sm"
-              className="text-xs gap-1 px-3"
-              disabled={solcastLoading}
-            >
-              {solcastLoading ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Cloud className="h-3 w-3" />
-              )}
-              Solcast
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="pvgis_monthly"
-              size="sm"
-              className="text-xs gap-1 px-3"
-              disabled={pvgisLoadingMonthly}
-            >
-              {pvgisLoadingMonthly ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Database className="h-3 w-3" />
-              )}
-              PVGIS
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="pvgis_tmy"
-              size="sm"
-              className="text-xs gap-1 px-3"
-              disabled={pvgisLoadingTMY}
-            >
-              {pvgisLoadingTMY ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Database className="h-3 w-3" />
-              )}
-              TMY
-            </ToggleGroupItem>
-          </ToggleGroup>
-          
-          {/* Loss Calculation Mode Toggle */}
-          <ToggleGroup
-            type="single"
-            value={lossCalculationMode}
-            onValueChange={(value) => value && setLossCalculationMode(value as LossCalculationMode)}
-            className="border rounded-lg p-0.5"
-          >
-            <ToggleGroupItem value="simplified" size="sm" className="text-xs gap-1 px-3">
-              <Zap className="h-3 w-3" />
-              Simplified
-            </ToggleGroupItem>
-            <ToggleGroupItem value="pvsyst" size="sm" className="text-xs gap-1 px-3">
-              <Activity className="h-3 w-3" />
-              PVsyst
-            </ToggleGroupItem>
-          </ToggleGroup>
-          
-          {hasRealData && (
-            <Badge variant="outline" className="text-xs">
-              {solarDataSource === "solcast" ? "Forecast" : solarDataSource === "pvgis_tmy" ? "Typical Year" : "19-Yr Avg"}
-            </Badge>
-          )}
-        </div>
-      </div>
+      <SimulationToolbar
+        selectedLocationName={selectedLocation.name}
+        activeDataSourceLabel={activeDataSourceLabel}
+        hasRealData={hasRealData}
+        locationGhi={selectedLocation.ghi}
+        solarDataSource={solarDataSource}
+        onSolarDataSourceChange={setSolarDataSource}
+        solcastLoading={solcastLoading}
+        pvgisLoadingMonthly={pvgisLoadingMonthly}
+        pvgisLoadingTMY={pvgisLoadingTMY}
+        lossCalculationMode={lossCalculationMode}
+        onLossCalculationModeChange={setLossCalculationMode}
+        isAutoSaving={isAutoSaving}
+        lastSavedAt={lastSavedAt}
+      />
 
-      {/* Saved Configurations Collapsible */}
-      <Collapsible>
-        <CollapsibleTrigger asChild>
-          <Button variant="outline" className="w-full justify-between h-auto py-2.5 px-3">
-            <div className="flex items-center gap-2 text-sm">
-              {isLoadingLastSaved ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  <span className="text-muted-foreground">Loading saved configurations...</span>
-                </>
-              ) : loadedSimulationName ? (
-                <>
-                  <Database className="h-4 w-4 text-primary" />
-                  <span className="font-medium">{loadedSimulationName}</span>
-                  {loadedSimulationDate && (
-                    <span className="text-muted-foreground">
-                      • {format(new Date(loadedSimulationDate), "dd MMM yyyy HH:mm")}
-                    </span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Database className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Saved Configurations</span>
-                </>
-              )}
-            </div>
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-2">
-          <SavedSimulations
-            projectId={projectId}
-            currentConfig={{
-              solarCapacity,
-              batteryCapacity: includesBattery ? batteryCapacity : 0,
-              batteryPower: includesBattery ? batteryPower : 0,
-              pvConfig,
-              usingSolcast: solarDataSource === "solcast",
-              solarDataSource,
-              inverterConfig,
-              systemCosts,
-              pvsystConfig,
-              advancedConfig,
-              lossCalculationMode,
-              productionReductionPercent,
-              moduleCount: moduleMetrics.moduleCount,
-              batteryChargeCRate,
-              batteryDischargeCRate,
-              batteryDoD,
-              batteryMinSoC,
-              batteryMaxSoC,
-              batteryStrategy,
-              dispatchConfig,
-              chargeTouPeriod,
-              dischargeTouSelection,
-            }}
-            currentResults={{
-              totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,
-              totalDailySolar: annualEnergyResults.totalAnnualSolar / 365,
-              totalGridImport: annualEnergyResults.totalAnnualGridImport / 365,
-              totalSolarUsed: annualEnergyResults.totalAnnualSolarUsed / 365,
-              annualSavings: hasFinancialData ? financialResults.annualSavings : 0,
-              systemCost: financialResults.systemCost,
-              paybackYears: hasFinancialData ? financialResults.paybackYears : 0,
-              roi: hasFinancialData ? financialResults.roi : 0,
-              peakDemand: annualEnergyResults.peakLoad,
-              newPeakDemand: annualEnergyResults.peakGridImport,
-            }}
-            onLoadSimulation={(config) => {
-              restoreSimulationState({
-                solarCapacity: config.solarCapacity,
-                batteryCapacityDc: config.batteryCapacity || 0,
-                batteryPower: config.batteryPower || 0,
-                batteryDoD: config.batteryDoD || batteryDoD || 85,
-                batteryMinSoC: config.batteryMinSoC,
-                batteryMaxSoC: config.batteryMaxSoC,
-                batteryChargeCRate: config.batteryChargeCRate,
-                batteryDischargeCRate: config.batteryDischargeCRate,
-                batteryCRate: config.batteryCRate,
-                batteryStrategy: config.batteryStrategy,
-                dispatchConfig: config.dispatchConfig,
-                chargeTouPeriod: config.chargeTouPeriod,
-                dischargeTouPeriod: config.dischargeTouPeriod,
-                dischargeTouSelection: config.dischargeTouSelection,
-                pvConfig: config.pvConfig,
-                inverterConfig: config.inverterConfig,
-                solarDataSource: config.solarDataSource,
-                pvsystConfig: config.pvsystConfig,
-                lossCalculationMode: config.lossCalculationMode,
-                productionReductionPercent: config.productionReductionPercent,
-                advancedConfig: config.advancedConfig,
-                systemCosts: config.systemCosts,
-                simulationName: config.simulationName,
-                simulationDate: config.simulationDate,
-              }, stateSetters, includesBattery);
-            }}
-            includesBattery={includesBattery}
-          />
-        </CollapsibleContent>
-      </Collapsible>
+      <SavedConfigCollapsible
+        projectId={projectId}
+        isLoadingLastSaved={isLoadingLastSaved}
+        loadedSimulationName={loadedSimulationName}
+        loadedSimulationDate={loadedSimulationDate}
+        currentConfig={savedCurrentConfig}
+        currentResults={savedCurrentResults}
+        stateSetters={stateSetters}
+        includesBattery={includesBattery}
+        batteryDoD={batteryDoD}
+      />
 
       {/* Connection Size Warning */}
       {!connectionSizeKva && (
@@ -645,7 +371,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         </Card>
       )}
 
-      {/* Solar Limit Exceeded Warning */}
       {solarExceedsLimit && (
         <Card className="border-destructive/50 bg-destructive/5">
           <CardContent className="py-3 flex items-center gap-2">
@@ -657,7 +382,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         </Card>
       )}
 
-      {/* Advanced PV Configuration (Collapsible) */}
+      {/* Advanced PV Configuration */}
       <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
         <Card className="border-dashed">
           <CollapsibleTrigger asChild>
@@ -678,19 +403,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           </CollapsibleTrigger>
           <CollapsibleContent>
             <CardContent className="pt-0">
-              <PVSystemConfig
-                config={pvConfig}
-                onChange={setPvConfig}
-                maxSolarKva={maxSolarKva}
-                solarCapacity={solarCapacity}
-                projectLocation={project?.location}
-              />
+              <PVSystemConfig config={pvConfig} onChange={setPvConfig} maxSolarKva={maxSolarKva} solarCapacity={solarCapacity} projectLocation={project?.location} />
             </CardContent>
           </CollapsibleContent>
         </Card>
       </Collapsible>
 
-      {/* PVsyst Loss Chain Configuration */}
       {lossCalculationMode === "pvsyst" && (
         <PVsystLossChainConfigPanel
           config={{ ...pvsystConfig, stcEfficiency: moduleMetrics.stcEfficiency }}
@@ -698,137 +416,67 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           dailyGHI={selectedLocation.ghi}
           capacityKwp={solarCapacity}
           ambientTemp={25}
-          moduleMetrics={{
-            moduleCount: moduleMetrics.moduleCount,
-            collectorAreaM2: moduleMetrics.collectorAreaM2,
-            stcEfficiency: moduleMetrics.stcEfficiency,
-            moduleName: moduleMetrics.moduleName,
-          }}
+          moduleMetrics={{ moduleCount: moduleMetrics.moduleCount, collectorAreaM2: moduleMetrics.collectorAreaM2, stcEfficiency: moduleMetrics.stcEfficiency, moduleName: moduleMetrics.moduleName }}
         />
       )}
 
-      {/* Advanced Simulation Configuration */}
       <AdvancedSimulationConfigPanel
-        config={advancedConfig}
-        onChange={setAdvancedConfig}
-        includesBattery={includesBattery}
-        batteryChargeCRate={batteryChargeCRate}
-        onBatteryChargeCRateChange={setBatteryChargeCRate}
-        batteryDischargeCRate={batteryDischargeCRate}
-        onBatteryDischargeCRateChange={setBatteryDischargeCRate}
-        batteryDoD={batteryDoD}
-        batteryMinSoC={batteryMinSoC}
-        onBatteryMinSoCChange={setBatteryMinSoC}
-        batteryMaxSoC={batteryMaxSoC}
-        onBatteryMaxSoCChange={setBatteryMaxSoC}
-        batteryStrategy={batteryStrategy}
-        onBatteryStrategyChange={setBatteryStrategy}
-        dispatchConfig={dispatchConfig}
-        onDispatchConfigChange={setDispatchConfig}
-        chargeTouPeriod={chargeTouPeriod}
-        onChargeTouPeriodChange={setChargeTouPeriod}
-        dischargeTouSelection={dischargeTouSelection}
-        onDischargeTouSelectionChange={handleDischargeTouSelectionChange}
+        config={advancedConfig} onChange={setAdvancedConfig} includesBattery={includesBattery}
+        batteryChargeCRate={batteryChargeCRate} onBatteryChargeCRateChange={setBatteryChargeCRate}
+        batteryDischargeCRate={batteryDischargeCRate} onBatteryDischargeCRateChange={setBatteryDischargeCRate}
+        batteryDoD={batteryDoD} batteryMinSoC={batteryMinSoC} onBatteryMinSoCChange={setBatteryMinSoC}
+        batteryMaxSoC={batteryMaxSoC} onBatteryMaxSoCChange={setBatteryMaxSoC}
+        batteryStrategy={batteryStrategy} onBatteryStrategyChange={setBatteryStrategy}
+        dispatchConfig={dispatchConfig} onDispatchConfigChange={setDispatchConfig}
+        chargeTouPeriod={chargeTouPeriod} onChargeTouPeriodChange={setChargeTouPeriod}
+        dischargeTouSelection={dischargeTouSelection} onDischargeTouSelectionChange={handleDischargeTouSelectionChange}
         touPeriodToWindows={touPeriodToWindows}
         dischargeSources={dispatchConfig.dischargeSources}
         onDischargeSourcesChange={(sources) => setDispatchConfig(prev => ({ ...prev, dischargeSources: sources }))}
       />
 
-      {/* System Configuration Carousel */}
       <ConfigCarousel
         panes={[
           {
-            id: 'inverters',
-            label: 'Inverters',
-            icon: <Zap className="h-4 w-4" />,
-            enabled: includesSolar,
-            disabledMessage: 'Enable Solar PV to configure inverters',
-            content: (
-              <InverterPane
-                inverterConfig={inverterConfig}
-                onInverterConfigChange={setInverterConfig}
-                currentSolarCapacity={solarCapacity}
-                onSolarCapacityChange={setSolarCapacity}
-                maxSolarKva={maxSolarKva}
-                solarExceedsLimit={!!solarExceedsLimit}
-              />
-            ),
+            id: 'inverters', label: 'Inverters', icon: <Zap className="h-4 w-4" />,
+            enabled: includesSolar, disabledMessage: 'Enable Solar PV to configure inverters',
+            content: <InverterPane inverterConfig={inverterConfig} onInverterConfigChange={setInverterConfig} currentSolarCapacity={solarCapacity} onSolarCapacityChange={setSolarCapacity} maxSolarKva={maxSolarKva} solarExceedsLimit={!!solarExceedsLimit} />,
           },
           {
-            id: 'solarPV',
-            label: 'Solar Modules',
-            icon: <Sun className="h-4 w-4" />,
-            enabled: includesSolar,
-            disabledMessage: 'Solar PV is not enabled for this project',
+            id: 'solarPV', label: 'Solar Modules', icon: <Sun className="h-4 w-4" />,
+            enabled: includesSolar, disabledMessage: 'Solar PV is not enabled for this project',
             content: (
               <SolarModulesPane
-                inverterConfig={inverterConfig}
-                onInverterConfigChange={setInverterConfig}
-                onSolarCapacityChange={setSolarCapacity}
-                maxSolarKva={maxSolarKva}
-                solarExceedsLimit={!!solarExceedsLimit}
-                dailyOutputOverride={dailyOutputOverride}
-                onDailyOutputOverrideChange={setDailyOutputOverride}
-                specificYieldOverride={specificYieldOverride}
-                onSpecificYieldOverrideChange={setSpecificYieldOverride}
-                productionReductionPercent={productionReductionPercent}
-                onProductionReductionPercentChange={setProductionReductionPercent}
-                calculatedDailyOutput={annualPVsystResult 
-                  ? Math.round(annualPVsystResult.eGrid / 365)
-                  : Math.round(annualEnergyResults.totalAnnualSolar / 365)}
-                calculatedSpecificYield={annualPVsystResult 
-                  ? Math.round(annualPVsystResult.specificYield)
-                  : Math.round(annualEnergyResults.totalAnnualSolar / solarCapacity)}
+                inverterConfig={inverterConfig} onInverterConfigChange={setInverterConfig}
+                onSolarCapacityChange={setSolarCapacity} maxSolarKva={maxSolarKva} solarExceedsLimit={!!solarExceedsLimit}
+                dailyOutputOverride={dailyOutputOverride} onDailyOutputOverrideChange={setDailyOutputOverride}
+                specificYieldOverride={specificYieldOverride} onSpecificYieldOverrideChange={setSpecificYieldOverride}
+                productionReductionPercent={productionReductionPercent} onProductionReductionPercentChange={setProductionReductionPercent}
+                calculatedDailyOutput={annualPVsystResult ? Math.round(annualPVsystResult.eGrid / 365) : Math.round(engine.annualEnergyResults.totalAnnualSolar / 365)}
+                calculatedSpecificYield={annualPVsystResult ? Math.round(annualPVsystResult.specificYield) : Math.round(engine.annualEnergyResults.totalAnnualSolar / solarCapacity)}
                 solarCapacity={solarCapacity}
               />
             ),
           },
           {
-            id: 'battery',
-            label: 'Battery',
-            icon: <Battery className="h-4 w-4" />,
-            enabled: includesBattery,
-            disabledMessage: 'Battery storage is not enabled for this project',
-            content: (
-              <BatteryPane
-                batteryAcCapacity={batteryAcCapacity}
-                onBatteryAcCapacityChange={setBatteryAcCapacity}
-                batteryChargePower={batteryChargePower}
-                batteryDischargePower={batteryDischargePower}
-                batteryCapacity={batteryCapacity}
-                batteryCycles={annualEnergyResults.batteryCycles}
-                annualBatteryDischarge={annualEnergyResults.totalAnnualBatteryDischarge}
-              />
-            ),
+            id: 'battery', label: 'Battery', icon: <Battery className="h-4 w-4" />,
+            enabled: includesBattery, disabledMessage: 'Battery storage is not enabled for this project',
+            content: <BatteryPane batteryAcCapacity={batteryAcCapacity} onBatteryAcCapacityChange={setBatteryAcCapacity} batteryChargePower={batteryChargePower} batteryDischargePower={batteryDischargePower} batteryCapacity={batteryCapacity} batteryCycles={engine.annualEnergyResults.batteryCycles} annualBatteryDischarge={engine.annualEnergyResults.totalAnnualBatteryDischarge} />,
           },
           {
-            id: 'financial',
-            label: 'Financial',
-            icon: <TrendingUp className="h-4 w-4" />,
-            enabled: hasFinancialData,
-            cannotToggle: true,
-            disabledMessage: 'Select a tariff to enable financial analysis',
+            id: 'financial', label: 'Financial', icon: <TrendingUp className="h-4 w-4" />,
+            enabled: engine.hasFinancialData, cannotToggle: true, disabledMessage: 'Select a tariff to enable financial analysis',
             content: (
               <FinancialConfigPane
-                hasFinancialData={hasFinancialData}
-                annualBlendedRates={annualBlendedRates}
-                blendedRateType={blendedRateType}
-                onBlendedRateTypeChange={onBlendedRateTypeChange}
-                useHourlyTouRates={useHourlyTouRates}
-                onUseHourlyTouRatesChange={onUseHourlyTouRatesChange}
-                financialResults={financialResults}
-                advancedResults={advancedResults}
-                basicFinancialMetrics={basicFinancialMetrics}
-                unifiedPaybackPeriod={unifiedPaybackPeriod}
-                threeYearOM={threeYearOM}
-                solarCapacity={solarCapacity}
-                annualEnergyResults={annualEnergyResults}
-                annualPVsystResult={annualPVsystResult}
-                reductionFactor={reductionFactor}
-                inverterConfig={inverterConfig}
-                systemCosts={systemCosts}
-                advancedConfig={advancedConfig}
-                projectLocation={project?.location}
+                hasFinancialData={engine.hasFinancialData} annualBlendedRates={engine.annualBlendedRates}
+                blendedRateType={blendedRateType} onBlendedRateTypeChange={onBlendedRateTypeChange}
+                useHourlyTouRates={useHourlyTouRates} onUseHourlyTouRatesChange={onUseHourlyTouRatesChange}
+                financialResults={engine.financialResults} advancedResults={engine.advancedResults}
+                basicFinancialMetrics={engine.basicFinancialMetrics} unifiedPaybackPeriod={engine.unifiedPaybackPeriod}
+                threeYearOM={engine.threeYearOM} solarCapacity={solarCapacity}
+                annualEnergyResults={engine.annualEnergyResults} annualPVsystResult={annualPVsystResult}
+                reductionFactor={reductionFactor} inverterConfig={inverterConfig}
+                systemCosts={systemCosts} advancedConfig={advancedConfig} projectLocation={project?.location}
               />
             ),
           },
@@ -836,54 +484,37 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         onRequestEnable={onRequestEnableFeature}
       />
 
-      {/* Energy Results Summary */}
       <SimulationKPICards
-        annualLoad={annualEnergyResults.totalAnnualLoad}
-        annualSolar={annualEnergyResults.totalAnnualSolar}
-        annualGridImport={annualEnergyResults.totalAnnualGridImport}
-        selfConsumptionRate={annualEnergyResults.selfConsumptionRate}
-        peakReduction={annualEnergyResults.peakReduction}
+        annualLoad={engine.annualEnergyResults.totalAnnualLoad}
+        annualSolar={engine.annualEnergyResults.totalAnnualSolar}
+        annualGridImport={engine.annualEnergyResults.totalAnnualGridImport}
+        selfConsumptionRate={engine.annualEnergyResults.selfConsumptionRate}
+        peakReduction={engine.annualEnergyResults.peakReduction}
         includesSolar={includesSolar}
         annualPVsystResult={annualPVsystResult}
         reductionFactor={reductionFactor}
       />
 
-      {/* Advanced Results Display */}
-      {advancedResults && (
-        <AdvancedResultsDisplay results={advancedResults} />
-      )}
+      {engine.advancedResults && <AdvancedResultsDisplay results={engine.advancedResults} />}
 
-      {/* Charts */}
       <SimulationChartTabs
-        showAnnualAverage={showAnnualAverage}
-        setShowAnnualAverage={setShowAnnualAverage}
-        selectedDayIndex={selectedDayIndex}
-        setSelectedDayIndex={setSelectedDayIndex}
-        navigateDayIndex={navigateDayIndex}
-        dayDateInfo={dayDateInfo}
-        simulationChartData={simulationChartData}
-        loadProfileIsWeekend={loadProfileIsWeekend}
-        touPeriodsForDay={touPeriodsForDay}
-        dcAcRatio={inverterConfig.dcAcRatio}
+        showAnnualAverage={showAnnualAverage} setShowAnnualAverage={setShowAnnualAverage}
+        selectedDayIndex={selectedDayIndex} setSelectedDayIndex={setSelectedDayIndex}
+        navigateDayIndex={navigateDayIndex} dayDateInfo={dayDateInfo}
+        simulationChartData={engine.simulationChartData} loadProfileIsWeekend={engine.loadProfileIsWeekend}
+        touPeriodsForDay={engine.touPeriodsForDay} dcAcRatio={inverterConfig.dcAcRatio}
         maxPvAcKva={inverterConfig.inverterSize * inverterConfig.inverterCount}
-        includesBattery={includesBattery}
-        batteryCapacity={batteryCapacity}
-        batteryAcCapacity={batteryAcCapacity}
-        batteryChargePower={batteryChargePower}
-        loadProfile={loadProfile}
-        solarProfile={solarProfile}
-        energyConfig={energyConfig}
-        tariffRate={tariffData.averageRatePerKwh}
-        comparisonTabViewed={comparisonTabViewed}
-        setComparisonTabViewed={setComparisonTabViewed}
-        solarProfileSolcast={solarProfileSolcast}
-        solarProfileGeneric={solarProfileGenericSimplified}
-        annualEnergyResultsGeneric={annualEnergyResultsGeneric}
-        annualEnergyResultsSolcast={annualEnergyResultsSolcast}
-        financialResultsGeneric={financialResultsGeneric}
-        financialResultsSolcast={financialResultsSolcast}
-        hasFinancialData={hasFinancialData}
-        selectedLocationName={selectedLocation.name}
+        includesBattery={includesBattery} batteryCapacity={batteryCapacity}
+        batteryAcCapacity={batteryAcCapacity} batteryChargePower={batteryChargePower}
+        loadProfile={engine.loadProfile} solarProfile={solarProfile} energyConfig={engine.energyConfig}
+        tariffRate={engine.tariffData.averageRatePerKwh}
+        comparisonTabViewed={comparisonTabViewed} setComparisonTabViewed={setComparisonTabViewed}
+        solarProfileSolcast={solarProfileSolcast} solarProfileGeneric={solarProfileGenericSimplified}
+        annualEnergyResultsGeneric={engine.annualEnergyResultsGeneric}
+        annualEnergyResultsSolcast={engine.annualEnergyResultsSolcast}
+        financialResultsGeneric={engine.financialResultsGeneric}
+        financialResultsSolcast={engine.financialResultsSolcast}
+        hasFinancialData={engine.hasFinancialData} selectedLocationName={selectedLocation.name}
       />
     </div>
   );
