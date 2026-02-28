@@ -34,6 +34,7 @@ import { convertTMYToSolarGeneration } from "@/utils/calculators/tmySolarConvers
 import { mergePvsystConfig, mergeAdvancedConfig } from "@/utils/simulationConfig";
 
 import { SavedSimulations } from "./SavedSimulations";
+import { SimulationKPICards } from "./simulation/SimulationKPICards";
 import {
   PVSystemConfig,
   PVSystemConfigData,
@@ -2234,63 +2235,16 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       />
 
       {/* Energy Results Summary (always visible - tariff-independent) */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Daily Load</CardDescription>
-            <CardTitle className="text-2xl">{Math.round(annualEnergyResults.totalAnnualLoad / 365)} kWh</CardTitle>
-          </CardHeader>
-        </Card>
-        {includesSolar && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Solar Generated</CardDescription>
-              <CardTitle className="text-2xl text-amber-500">
-                {Math.round(annualEnergyResults.totalAnnualSolar / 365)} kWh
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        )}
-        {includesSolar && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Annual Production</CardDescription>
-              <CardTitle className="text-2xl text-chart-2">
-                {annualPVsystResult 
-                  ? Math.round(annualPVsystResult.eGrid * reductionFactor).toLocaleString()
-                  : Math.round(annualEnergyResults.totalAnnualSolar).toLocaleString()} kWh
-              </CardTitle>
-              {annualPVsystResult && (
-                <p className="text-xs text-muted-foreground">
-                  {Math.round(annualPVsystResult.specificYield * reductionFactor).toLocaleString()} kWh/kWp • PR: {annualPVsystResult.performanceRatio.toFixed(1)}%
-                </p>
-              )}
-            </CardHeader>
-          </Card>
-        )}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Grid Import</CardDescription>
-            <CardTitle className="text-2xl">{Math.round(annualEnergyResults.totalAnnualGridImport / 365)} kWh</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Self-Consumption</CardDescription>
-            <CardTitle className="text-2xl text-green-600">
-              {Math.round(annualEnergyResults.selfConsumptionRate)}%
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Peak Reduction</CardDescription>
-            <CardTitle className="text-2xl">
-              {Math.round(annualEnergyResults.peakReduction)}%
-            </CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      <SimulationKPICards
+        annualLoad={annualEnergyResults.totalAnnualLoad}
+        annualSolar={annualEnergyResults.totalAnnualSolar}
+        annualGridImport={annualEnergyResults.totalAnnualGridImport}
+        selfConsumptionRate={annualEnergyResults.selfConsumptionRate}
+        peakReduction={annualEnergyResults.peakReduction}
+        includesSolar={includesSolar}
+        annualPVsystResult={annualPVsystResult}
+        reductionFactor={reductionFactor}
+      />
 
       {/* SavedSimulations moved to collapsible at top */}
 
