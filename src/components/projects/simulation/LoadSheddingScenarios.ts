@@ -13,7 +13,7 @@
  * - Stage 8: 16 hours/day (worst case)
  */
 
-import { EnergySimulationConfig, EnergySimulationResults, runEnergySimulation } from "./EnergySimulationEngine";
+import { EnergySimulationConfig, EnergySimulationResults } from "./EnergySimulationEngine";
 
 export interface LoadSheddingStage {
   stage: number;
