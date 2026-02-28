@@ -64,10 +64,13 @@ All four phases have been implemented. The simulation tab has been refactored fr
 
 | Area | Before | After |
 |------|--------|-------|
-| SimulationPanel.tsx | 2,817 lines | ~1,013 lines (64% reduction) |
+| SimulationPanel.tsx | 2,817 lines | ~470 lines (83% reduction) |
 | Unnecessary simulation runs | 3× 8,760h on every change | 1× primary + lazy comparisons |
 | Config restore duplication | 3 copies | 1 shared utility |
 | System cost duplication | 3 copies | 1 shared utility |
 | JSON.stringify per render | 6 calls | 0 (direct value deps) |
 | Console.log in hot path | 5+ statements | 0 |
 | "No Defaults" violations | SavedSimulations.tsx | Fixed |
+| annualAverageSlice complexity | O(8760×24) filter | O(8760) single-pass accumulator |
+| dailySlice complexity | O(8760) filter | O(1) array.slice() |
+| NPV/IRR/MIRR/LCOE | Inline in hook (40 lines) | Pure utility (`financialMetrics.ts`) |
