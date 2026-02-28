@@ -21,11 +21,8 @@
  */
 
 export {
-  runEnergySimulation,
   runAnnualEnergySimulation,
   buildAnnualCalendar,
-  scaleToAnnual,
-  scaleToMonthly,
   getDefaultDispatchConfig,
   type EnergySimulationConfig,
   type EnergySimulationResults,
@@ -38,9 +35,7 @@ export {
 } from "./EnergySimulationEngine";
 
 export {
-  calculateFinancials,
   calculateFinancialsFromAnnual,
-  compareTariffs,
   DEFAULT_SYSTEM_COSTS,
   type TariffData,
   type SystemCosts,
