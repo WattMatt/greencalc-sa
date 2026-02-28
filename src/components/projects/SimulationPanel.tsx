@@ -31,6 +31,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { useSolcastForecast } from "@/hooks/useSolcastForecast";
 import { usePVGISProfile, PVGISTMYResponse, PVGISMonthlyResponse } from "@/hooks/usePVGISProfile";
 import { convertTMYToSolarGeneration } from "@/utils/calculators/tmySolarConversion";
+import { mergePvsystConfig, mergeAdvancedConfig } from "@/utils/simulationConfig";
 
 import { SavedSimulations } from "./SavedSimulations";
 import {
@@ -310,6 +311,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // Day-of-year index (0-364) for navigating the 365-day annual simulation
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [showAnnualAverage, setShowAnnualAverage] = useState(true);
+  
+  // Lazy comparison: only run comparison simulations when tab is first viewed
+  const [comparisonTabViewed, setComparisonTabViewed] = useState(false);
 
   // Day-of-year navigation helper
   const navigateDayIndex = useCallback((direction: "prev" | "next") => {
@@ -341,7 +345,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     if (isFetched && lastSavedSimulation && !hasInitializedFromSaved.current) {
       hasInitializedFromSaved.current = true;
       
-      console.log("Auto-loading saved simulation:", lastSavedSimulation.name, savedResultsJson);
+      // Auto-loading saved simulation (debug logging removed for performance)
       
       // Load configuration values
       setSolarCapacity(lastSavedSimulation.solar_capacity_kwp || 0);
@@ -375,29 +379,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       
       // Load PVsyst config if saved - merge with defaults to preserve new fields like lossesAfterInverter
       if (savedResultsJson?.pvsystConfig) {
-        setPvsystConfig({
-          ...DEFAULT_PVSYST_CONFIG,
-          ...savedResultsJson.pvsystConfig,
-          irradiance: {
-            ...DEFAULT_PVSYST_CONFIG.irradiance,
-            ...savedResultsJson.pvsystConfig?.irradiance,
-          },
-          array: {
-            ...DEFAULT_PVSYST_CONFIG.array,
-            ...savedResultsJson.pvsystConfig?.array,
-          },
-          system: {
-            ...DEFAULT_PVSYST_CONFIG.system,
-            inverter: {
-              ...DEFAULT_PVSYST_CONFIG.system.inverter,
-              ...savedResultsJson.pvsystConfig?.system?.inverter,
-            },
-          },
-          lossesAfterInverter: {
-            ...DEFAULT_PVSYST_CONFIG.lossesAfterInverter,
-            ...savedResultsJson.pvsystConfig?.lossesAfterInverter,
-          },
-        });
+        setPvsystConfig(mergePvsystConfig(savedResultsJson.pvsystConfig));
       }
       
       // System costs are now loaded by ProjectDetail.tsx on initial load
@@ -423,30 +405,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       
       // Load advanced config if saved - deep merge with defaults to preserve new fields
       if (savedResultsJson?.advancedConfig) {
-        setAdvancedConfig({
-          ...DEFAULT_ADVANCED_CONFIG,
-          ...savedResultsJson.advancedConfig,
-          seasonal: {
-            ...DEFAULT_ADVANCED_CONFIG.seasonal,
-            ...savedResultsJson.advancedConfig?.seasonal,
-          },
-          degradation: {
-            ...DEFAULT_ADVANCED_CONFIG.degradation,
-            ...savedResultsJson.advancedConfig?.degradation,
-          },
-          financial: {
-            ...DEFAULT_ADVANCED_CONFIG.financial,
-            ...savedResultsJson.advancedConfig?.financial,
-          },
-          gridConstraints: {
-            ...DEFAULT_ADVANCED_CONFIG.gridConstraints,
-            ...savedResultsJson.advancedConfig?.gridConstraints,
-          },
-          loadGrowth: {
-            ...DEFAULT_ADVANCED_CONFIG.loadGrowth,
-            ...savedResultsJson.advancedConfig?.loadGrowth,
-          },
-        });
+        setAdvancedConfig(mergeAdvancedConfig(savedResultsJson.advancedConfig));
       }
       
       // Load battery dispatch strategy if saved
@@ -774,10 +733,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       },
     };
     
-    console.log('=== Config Verification ===');
-    console.log('pvsystConfig.lossesAfterInverter:', pvsystConfig.lossesAfterInverter);
-    console.log('configWithModuleData.lossesAfterInverter:', configWithModuleData.lossesAfterInverter);
-    
     // Calculate annual output using Excel methodology
     const result = calculateAnnualPVsystOutput(
       annualGHI,
@@ -785,12 +740,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       moduleMetrics.stcEfficiency,
       dcCapacityKwp,
       configWithModuleData,
-      true  // Enable debug logging
+      false  // Debug logging disabled in production
     );
-    
-    console.log('=== Annual PVsyst Result ===');
-    console.log('E_Grid:', result.eGrid.toFixed(0), 'kWh/year');
-    console.log('Specific Yield:', result.specificYield.toFixed(0), 'kWh/kWp/year');
     
     return result;
   }, [lossCalculationMode, annualGHI, moduleMetrics, pvsystConfig, inverterConfig]);
@@ -915,14 +866,15 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     [loadProfile, effectiveSolarProfile, energyConfig, touSettingsData, tmySolarProfile8760]
   );
 
+  // Deferred comparison simulations — only run when Data Comparison tab is first opened
   const annualEnergyResultsGeneric = useMemo(() =>
-    runAnnualEnergySimulation(loadProfile, solarProfileGeneric, energyConfig, touSettingsData),
-    [loadProfile, solarProfileGeneric, energyConfig, touSettingsData]
+    comparisonTabViewed ? runAnnualEnergySimulation(loadProfile, solarProfileGeneric, energyConfig, touSettingsData) : null,
+    [comparisonTabViewed, loadProfile, solarProfileGeneric, energyConfig, touSettingsData]
   );
 
   const annualEnergyResultsSolcast = useMemo(() =>
-    solarProfileSolcast ? runAnnualEnergySimulation(loadProfile, solarProfileSolcast, energyConfig, touSettingsData) : null,
-    [loadProfile, solarProfileSolcast, energyConfig, touSettingsData]
+    comparisonTabViewed && solarProfileSolcast ? runAnnualEnergySimulation(loadProfile, solarProfileSolcast, energyConfig, touSettingsData) : null,
+    [comparisonTabViewed, loadProfile, solarProfileSolcast, energyConfig, touSettingsData]
   );
 
   // Extract the specific 24h slice for the selected day index from annual data
@@ -1363,23 +1315,23 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     solarCapacity,
     batteryCapacity,
     batteryPower,
-    JSON.stringify(pvConfig),
-    JSON.stringify(inverterConfig),
-    JSON.stringify(pvsystConfig),
-    JSON.stringify(advancedConfig),
+    pvConfig,
+    inverterConfig,
+    pvsystConfig,
+    advancedConfig,
     lossCalculationMode,
     productionReductionPercent,
     solarDataSource,
-    JSON.stringify(systemCosts),
+    systemCosts,
     blendedRateType,
     batteryStrategy,
-    JSON.stringify(dispatchConfig),
+    dispatchConfig,
     batteryChargeCRate,
     batteryDischargeCRate,
     batteryMinSoC,
     batteryMaxSoC,
     chargeTouPeriod,
-    JSON.stringify(dischargeTouSelection),
+    dischargeTouSelection,
     useHourlyTouRates,
   ]);
 
@@ -1658,30 +1610,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 setSolarDataSource(config.solarDataSource);
               }
               if (config.pvsystConfig) {
-                setPvsystConfig((prev) => ({
-                  ...DEFAULT_PVSYST_CONFIG,
-                  ...prev,
-                  ...config.pvsystConfig,
-                  irradiance: {
-                    ...DEFAULT_PVSYST_CONFIG.irradiance,
-                    ...config.pvsystConfig?.irradiance,
-                  },
-                  array: {
-                    ...DEFAULT_PVSYST_CONFIG.array,
-                    ...config.pvsystConfig?.array,
-                  },
-                  system: {
-                    ...DEFAULT_PVSYST_CONFIG.system,
-                    inverter: {
-                      ...DEFAULT_PVSYST_CONFIG.system.inverter,
-                      ...config.pvsystConfig?.system?.inverter,
-                    },
-                  },
-                  lossesAfterInverter: {
-                    ...DEFAULT_PVSYST_CONFIG.lossesAfterInverter,
-                    ...config.pvsystConfig?.lossesAfterInverter,
-                  },
-                }));
+                setPvsystConfig(mergePvsystConfig(config.pvsystConfig));
               }
               if (config.lossCalculationMode) {
                 setLossCalculationMode(config.lossCalculationMode);
@@ -1690,31 +1619,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 setProductionReductionPercent(config.productionReductionPercent);
               }
               if (config.advancedConfig) {
-                setAdvancedConfig((prev) => ({
-                  ...DEFAULT_ADVANCED_CONFIG,
-                  ...prev,
-                  ...config.advancedConfig,
-                  seasonal: {
-                    ...DEFAULT_ADVANCED_CONFIG.seasonal,
-                    ...config.advancedConfig?.seasonal,
-                  },
-                  degradation: {
-                    ...DEFAULT_ADVANCED_CONFIG.degradation,
-                    ...config.advancedConfig?.degradation,
-                  },
-                  financial: {
-                    ...DEFAULT_ADVANCED_CONFIG.financial,
-                    ...config.advancedConfig?.financial,
-                  },
-                  gridConstraints: {
-                    ...DEFAULT_ADVANCED_CONFIG.gridConstraints,
-                    ...config.advancedConfig?.gridConstraints,
-                  },
-                  loadGrowth: {
-                    ...DEFAULT_ADVANCED_CONFIG.loadGrowth,
-                    ...config.advancedConfig?.loadGrowth,
-                  },
-                }));
+                setAdvancedConfig(mergeAdvancedConfig(config.advancedConfig));
               }
               if (config.systemCosts) {
                 const savedCosts = config.systemCosts as any;
@@ -2395,7 +2300,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       )}
 
       {/* Charts */}
-      <Tabs defaultValue="building">
+      <Tabs defaultValue="building" onValueChange={(v) => { if (v === 'compare') setComparisonTabViewed(true); }}>
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="building">Building Profile</TabsTrigger>
           <TabsTrigger value="load">Load Profile</TabsTrigger>
@@ -2408,7 +2313,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <Zap className="h-3 w-3" />
             Load Shedding
           </TabsTrigger>
-          {annualEnergyResultsSolcast && (
+          {solarProfileSolcast && (
             <TabsTrigger value="compare" className="gap-1">
               <Cloud className="h-3 w-3" />
               Data Comparison
@@ -2574,8 +2479,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           />
         </TabsContent>
 
-        {/* Data Comparison Tab - Solcast vs Generic */}
-        {annualEnergyResultsSolcast && (
+        {/* Data Comparison Tab - Solcast vs Generic (lazy-loaded) */}
+        {annualEnergyResultsSolcast && annualEnergyResultsGeneric && (
           <TabsContent value="compare" className="mt-4 space-y-4">
             {/* Solar Profile Comparison Chart */}
             <Card>

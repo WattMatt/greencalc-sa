@@ -9,6 +9,7 @@
  */
 
 import { EnergySimulationResults } from "./EnergySimulationEngine";
+import { calculateTotalSystemCost } from "@/utils/simulationConfig";
 
 export interface TariffData {
   // 2025/2026 Unbundled Structure
@@ -175,31 +176,7 @@ export function calculateFinancials(
     : 0;
 
   // === Investment analysis ===
-  // Calculate additional costs
-  const additionalCosts = 
-    (systemCosts.healthAndSafetyCost ?? 0) +
-    (systemCosts.waterPointsCost ?? 0) +
-    (systemCosts.cctvCost ?? 0) +
-    (systemCosts.mvSwitchGearCost ?? 0);
-
-  const baseCost = 
-    (solarCapacity * solarCostPerKwp) + 
-    (batteryCapacity * batteryCostPerKwh);
-  
-  const subtotalBeforeFees = baseCost + additionalCosts;
-
-  // Percentage-based fees (applied to subtotal)
-  const professionalFees = subtotalBeforeFees * ((systemCosts.professionalFeesPercent ?? 0) / 100);
-  const projectManagementFees = subtotalBeforeFees * ((systemCosts.projectManagementPercent ?? 0) / 100);
-
-  // Subtotal with fees
-  const subtotalWithFees = subtotalBeforeFees + professionalFees + projectManagementFees;
-
-  // Contingency (applied to subtotal + fees)
-  const contingency = subtotalWithFees * ((systemCosts.contingencyPercent ?? 0) / 100);
-
-  // Total Capital Cost
-  const systemCost = subtotalWithFees + contingency;
+  const { totalCapitalCost: systemCost } = calculateTotalSystemCost(systemCosts, solarCapacity, batteryCapacity);
   
   const netAnnualSavings = annualSavings - maintenancePerYear;
   const paybackYears = netAnnualSavings > 0 
@@ -308,22 +285,7 @@ export function calculateFinancialsFromAnnual(
     : 0;
 
   // === Investment analysis ===
-  const additionalCosts =
-    (systemCosts.healthAndSafetyCost ?? 0) +
-    (systemCosts.waterPointsCost ?? 0) +
-    (systemCosts.cctvCost ?? 0) +
-    (systemCosts.mvSwitchGearCost ?? 0);
-
-  const baseCost =
-    (solarCapacity * solarCostPerKwp) +
-    (batteryCapacity * batteryCostPerKwh);
-
-  const subtotalBeforeFees = baseCost + additionalCosts;
-  const professionalFees = subtotalBeforeFees * ((systemCosts.professionalFeesPercent ?? 0) / 100);
-  const projectManagementFees = subtotalBeforeFees * ((systemCosts.projectManagementPercent ?? 0) / 100);
-  const subtotalWithFees = subtotalBeforeFees + professionalFees + projectManagementFees;
-  const contingency = subtotalWithFees * ((systemCosts.contingencyPercent ?? 0) / 100);
-  const systemCost = subtotalWithFees + contingency;
+  const { totalCapitalCost: systemCost } = calculateTotalSystemCost(systemCosts, solarCapacity, batteryCapacity);
 
   const netAnnualSavings = annualSavings - maintenancePerYear;
   const paybackYears = netAnnualSavings > 0
@@ -401,47 +363,21 @@ export function getDefaultSystemCosts(): SystemCosts {
   return buildSystemCostsFromVariables();
 }
 
-// Legacy export for backwards compatibility (reads from Settings at call time)
-export const DEFAULT_SYSTEM_COSTS: SystemCosts = {
-  get solarCostPerKwp() { return getDefaultSystemCosts().solarCostPerKwp; },
-  get batteryCostPerKwh() { return getDefaultSystemCosts().batteryCostPerKwh; },
-  solarMaintenancePercentage: 3.5, // Keep as project-level override
-  batteryMaintenancePercentage: 1.5, // Keep as project-level override
-  maintenancePerYear: 0,
-  
-  // Additional Fixed Costs (project-level)
-  healthAndSafetyCost: 0,
-  waterPointsCost: 0,
-  cctvCost: 0,
-  mvSwitchGearCost: 0,
-  
-  // Insurance - reads from Settings
-  insuranceCostPerYear: 0,
-  get insuranceRatePercent() { return getDefaultSystemCosts().insuranceRatePercent; },
-  
-  // Percentage-based Fees - reads from Settings
-  get professionalFeesPercent() { return getDefaultSystemCosts().professionalFeesPercent; },
-  get projectManagementPercent() { return getDefaultSystemCosts().projectManagementPercent; },
-  get contingencyPercent() { return getDefaultSystemCosts().contingencyPercent; },
-  
-  // Replacement Costs - reads from Settings
-  get replacementYear() { return getDefaultSystemCosts().replacementYear; },
-  get equipmentCostPercent() { return getDefaultSystemCosts().equipmentCostPercent; },
-  get moduleSharePercent() { return getDefaultSystemCosts().moduleSharePercent; },
-  get inverterSharePercent() { return getDefaultSystemCosts().inverterSharePercent; },
-  get solarModuleReplacementPercent() { return getDefaultSystemCosts().solarModuleReplacementPercent; },
-  get inverterReplacementPercent() { return getDefaultSystemCosts().inverterReplacementPercent; },
-  get batteryReplacementPercent() { return getDefaultSystemCosts().batteryReplacementPercent; },
-  
-  // Financial Return Parameters - reads from Settings
-  get costOfCapital() { return getDefaultSystemCosts().costOfCapital; },
-  get cpi() { return getDefaultSystemCosts().cpi; },
-  get electricityInflation() { return getDefaultSystemCosts().electricityInflation; },
-  get projectDurationYears() { return getDefaultSystemCosts().projectDurationYears; },
-  get lcoeDiscountRate() { return getDefaultSystemCosts().lcoeDiscountRate; },
-  get mirrFinanceRate() { return getDefaultSystemCosts().mirrFinanceRate; },
-  get mirrReinvestmentRate() { return getDefaultSystemCosts().mirrReinvestmentRate; },
-};
+// Cached lazy singleton — avoids getter-per-property overhead on every access
+let _cachedDefaults: SystemCosts | null = null;
+let _cacheTimestamp = 0;
+const CACHE_TTL_MS = 5000; // Refresh every 5 seconds
+
+export const DEFAULT_SYSTEM_COSTS: SystemCosts = new Proxy({} as SystemCosts, {
+  get(_target, prop: string) {
+    const now = Date.now();
+    if (!_cachedDefaults || now - _cacheTimestamp > CACHE_TTL_MS) {
+      _cachedDefaults = getDefaultSystemCosts();
+      _cacheTimestamp = now;
+    }
+    return (_cachedDefaults as any)[prop];
+  },
+});
 
 /**
  * Eskom 2025/2026 Tariff Reference
