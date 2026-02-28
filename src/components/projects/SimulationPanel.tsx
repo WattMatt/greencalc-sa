@@ -20,9 +20,7 @@ import { ANNUAL_HOURS_24H, ANNUAL_HOURS_SOLAR } from "@/lib/tariffCalculations";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { format, formatDistanceToNow } from "date-fns";
-import { useSolcastForecast } from "@/hooks/useSolcastForecast";
-import { usePVGISProfile, PVGISTMYResponse, PVGISMonthlyResponse } from "@/hooks/usePVGISProfile";
-import { convertTMYToSolarGeneration } from "@/utils/calculators/tmySolarConversion";
+import { useSolarProfiles, type SolarDataSource } from "./simulation/useSolarProfiles";
 import { restoreSimulationState, type SimulationStateSetters } from "./simulation/restoreSimulationState";
 
 import { SavedSimulations } from "./SavedSimulations";
@@ -33,11 +31,8 @@ import {
   PVSystemConfig,
   PVSystemConfigData,
   getDefaultPVConfig,
-  generateSolarProfile,
-  generateAverageSolcastProfile,
   SA_SOLAR_LOCATIONS,
   calculateSystemEfficiency,
-  HourlyIrradianceData
 } from "./PVSystemConfig";
 import {
   runAnnualEnergySimulation,
@@ -94,20 +89,14 @@ import { type BlendedRateType } from "./TariffSelector";
 import { 
   type LossCalculationMode, 
   type PVsystLossChainConfig, 
-  type AnnualPVsystResult,
   DEFAULT_PVSYST_CONFIG,
-  calculateHourlyPVsystOutput,
-  calculatePVsystLossChain,
-  calculateAnnualPVsystOutput
 } from "@/lib/pvsystLossChain";
 import { PVsystLossChainConfig as PVsystLossChainConfigPanel } from "./PVsystLossChainConfig";
 import { useLoadProfileData } from "./load-profile/hooks/useLoadProfileData";
-import { useSolcastPVProfile } from "./load-profile/hooks/useSolcastPVProfile";
 import { Tenant as FullTenant, ShopType as FullShopType } from "./load-profile/types";
 import { ConfigCarousel, CarouselPane } from "./simulation/ConfigCarousel";
 
-// Solar data source type
-type SolarDataSource = "solcast" | "pvgis_monthly" | "pvgis_tmy";
+// SolarDataSource type imported from useSolarProfiles
 
 // Use full Tenant and ShopType from load-profile types for compatibility with useLoadProfileData
 
@@ -133,19 +122,7 @@ export interface SimulationPanelRef {
 
 const DEFAULT_PROFILE = Array(24).fill(4.17);
 
-// Longitude values for SA cities (matching SA_SOLAR_LOCATIONS)
-const SA_LOCATION_LONGITUDES: Record<string, number> = {
-  johannesburg: 28.0,
-  capetown: 18.4,
-  durban: 31.0,
-  pretoria: 28.2,
-  bloemfontein: 26.2,
-  port_elizabeth: 25.6,
-  upington: 21.3,
-  polokwane: 29.4,
-  nelspruit: 30.9,
-  kimberley: 24.8,
-};
+// SA_LOCATION_LONGITUDES moved to useSolarProfiles
 
 // DifferenceIndicator moved to SimulationChartTabs.tsx
 
@@ -385,85 +362,24 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     }
   }, [systemCosts.cpi]);
 
-  // Solcast forecast hook
-  const { data: solcastData, isLoading: solcastLoading, error: solcastError, fetchForecast } = useSolcastForecast();
-  
-  // PVGIS data hook
+  // ── Solar profiles hook (data fetching, profile generation, PVsyst) ──
   const {
-    tmyData: pvgisTmyData,
-    monthlyData: pvgisMonthlyData,
-    isLoadingTMY: pvgisLoadingTMY,
-    isLoadingMonthly: pvgisLoadingMonthly,
-    fetchTMY,
-    fetchMonthlyRadiation,
-  } = usePVGISProfile();
-
-  // Get location coordinates from PV config location or project
-  const selectedLocation = SA_SOLAR_LOCATIONS[pvConfig.location];
-  const hasCoordinates = selectedLocation?.lat !== undefined || (project?.latitude && project?.longitude);
-  const effectiveLat = project?.latitude ?? selectedLocation?.lat;
-  const effectiveLng = project?.longitude ?? SA_LOCATION_LONGITUDES[pvConfig.location] ?? 28.0;
-
-  // Fetch Solcast data when selected and location is available
-  useEffect(() => {
-    if (solarDataSource === "solcast" && hasCoordinates && !solcastData && !solcastLoading && !solcastError) {
-      fetchForecast({
-        latitude: effectiveLat,
-        longitude: effectiveLng,
-        hours: 168,
-        period: 'PT60M'
-      });
-    }
-  }, [solarDataSource, hasCoordinates, effectiveLat, effectiveLng, solcastError]);
-
-  // Fetch PVGIS TMY data when selected
-  useEffect(() => {
-    if (solarDataSource === "pvgis_tmy" && hasCoordinates && !pvgisTmyData && !pvgisLoadingTMY) {
-      fetchTMY({ latitude: effectiveLat, longitude: effectiveLng, projectId });
-    }
-  }, [solarDataSource, hasCoordinates, effectiveLat, effectiveLng, pvgisTmyData, pvgisLoadingTMY, projectId]);
-
-  // Fetch PVGIS Monthly data when selected
-  useEffect(() => {
-    if (solarDataSource === "pvgis_monthly" && hasCoordinates && !pvgisMonthlyData && !pvgisLoadingMonthly) {
-      fetchMonthlyRadiation({ latitude: effectiveLat, longitude: effectiveLng, projectId });
-    }
-  }, [solarDataSource, hasCoordinates, effectiveLat, effectiveLng, pvgisMonthlyData, pvgisLoadingMonthly, projectId]);
-
-  // Process Solcast data into hourly average profile
-  const solcastHourlyProfile = useMemo<HourlyIrradianceData[] | undefined>(() => {
-    if (!solcastData?.hourly || solcastData.hourly.length === 0) return undefined;
-    return generateAverageSolcastProfile(solcastData.hourly);
-  }, [solcastData]);
-
-  // Generate PVGIS hourly profiles from TMY/Monthly data
-  const pvgisHourlyProfile = useMemo<HourlyIrradianceData[] | undefined>(() => {
-    const activeData = solarDataSource === "pvgis_tmy" ? pvgisTmyData : pvgisMonthlyData;
-    if (!activeData?.typicalDay?.hourlyGhi) return undefined;
-    
-    // Convert PVGIS typicalDay to HourlyIrradianceData format
-    return activeData.typicalDay.hourlyGhi.map((ghi, hour) => ({
-      hour,
-      ghi,
-      dni: activeData.typicalDay.hourlyDni?.[hour] ?? 0,
-      dhi: activeData.typicalDay.hourlyDhi?.[hour] ?? 0,
-      temp: activeData.typicalDay.hourlyTemp?.[hour] ?? 25,
-    }));
-  }, [solarDataSource, pvgisTmyData, pvgisMonthlyData]);
-
-  // Solcast PV Profile hook for consistent chart rendering (matches Load Profile tab)
-  const {
-    pvProfile: solcastPvProfileData,
-    useSolcast: useSolcastForCharts,
-    toggleSolcast: toggleSolcastForCharts,
-  } = useSolcastPVProfile({
-    latitude: effectiveLat,
-    longitude: effectiveLng,
-    enabled: solarDataSource === "solcast",
+    solcastData, solcastLoading,
+    pvgisTmyData, pvgisMonthlyData, pvgisLoadingTMY, pvgisLoadingMonthly,
+    solarProfile, solarProfileSolcast, solarProfileGenericSimplified,
+    solcastPvProfileData,
+    annualPVsystResult,
+    tmyDcProfile8760, tmySolarProfile8760, tmyInverterLossMultiplier,
+    selectedLocation, effectiveLat, effectiveLng,
+    isLoadingData, hasRealData, activeDataSourceLabel,
+    reductionFactor,
+  } = useSolarProfiles({
+    pvConfig, moduleMetrics, solarDataSource, lossCalculationMode, pvsystConfig,
+    productionReductionPercent, inverterConfig, project, projectId, includesSolar,
   });
+  const solarProfileGeneric = solarProfileGenericSimplified;
 
   // ── STABLE engine data source (all days / all months) ──
-  // This feeds the 8,760-hour annual engine so it never re-runs when navigating days.
   const ALL_DAYS = useMemo(() => new Set([0, 1, 2, 3, 4, 5, 6]), []);
   const ALL_MONTHS = useMemo(() => new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]), []);
 
@@ -488,7 +404,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   });
 
   // ── Per-day chart data source (changes on navigation) ──
-  // Only used for chart display — NOT for the engine.
   const {
     chartData: loadProfileChartData,
     totalDaily: loadProfileTotalDaily,
@@ -516,6 +431,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     batteryDischargePower,
     solcastProfile: solarDataSource === "solcast" ? solcastPvProfileData : undefined,
   });
+
+  // ── Tariff queries ──
   const { data: tariffRates } = useQuery({
     queryKey: ["tariff-rates", project.tariff_id],
     queryFn: async () => {
@@ -524,7 +441,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         .select("*")
         .eq("tariff_plan_id", project.tariff_id);
       if (error) throw error;
-      // Map new schema to legacy interface expected by downstream code
       return (data || []).map((r: any) => ({
         ...r,
         rate_per_kwh: r.charge === 'energy' ? r.amount : 0,
@@ -544,7 +460,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         .eq("id", project.tariff_id)
         .single();
       if (error) throw error;
-      // Also fetch rates to extract fixed charges
       const { data: rates } = await supabase
         .from("tariff_rates")
         .select("*")
@@ -564,8 +479,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     enabled: !!project.tariff_id,
   });
 
-
-
   // Calculate 3-Year O&M with CPI escalation for financial metrics
   const threeYearOM = useMemo(() => {
     const cpi = systemCosts.cpi ?? 6.0;
@@ -575,150 +488,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     const batteryMaintenance = includesBattery 
       ? batteryCost * ((systemCosts.batteryMaintenancePercentage ?? 1.5) / 100) 
       : 0;
-    
-    // Year 1 + Year 2 (with CPI) + Year 3 (with 2 years CPI compounded)
     const cpiMultiplier = 1 + Math.pow(1 + cpi / 100, 1) + Math.pow(1 + cpi / 100, 2);
-    const threeYearTotal = (solarMaintenance + batteryMaintenance) * cpiMultiplier;
-    
-    return threeYearTotal;
+    return (solarMaintenance + batteryMaintenance) * cpiMultiplier;
   }, [systemCosts, solarCapacity, batteryCapacity, includesBattery]);
 
-  // Use STABLE (all-days/all-months) load profile for the engine — never changes on day navigation
+  // Use STABLE load profile for engine
   const loadProfile = useMemo(() => {
     return stableChartData.map(d => d.total);
   }, [stableChartData]);
-
-  // Production reduction factor for conservative estimates
-  const reductionFactor = 1 - (productionReductionPercent / 100);
-
-  // Generate solar profiles - both with real data and generic (for comparison)
-  // Simplified mode uses the existing PVWatts-style calculation, with reduction applied
-  const solarProfileSolcastSimplified = useMemo(() => {
-    if (!solcastHourlyProfile) return null;
-    const baseProfile = generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, solcastHourlyProfile);
-    return baseProfile.map(v => v * reductionFactor);
-  }, [pvConfig, moduleMetrics.actualDcCapacityKwp, solcastHourlyProfile, reductionFactor]);
-
-  const solarProfilePVGISSimplified = useMemo(() => {
-    if (!pvgisHourlyProfile) return null;
-    const baseProfile = generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, pvgisHourlyProfile);
-    return baseProfile.map(v => v * reductionFactor);
-  }, [pvConfig, moduleMetrics.actualDcCapacityKwp, pvgisHourlyProfile, reductionFactor]);
-
-  const solarProfileGenericSimplified = useMemo(() => {
-    const baseProfile = generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, undefined);
-    return baseProfile.map(v => v * reductionFactor);
-  }, [pvConfig, moduleMetrics.actualDcCapacityKwp, reductionFactor]);
-
-  // Calculate annual GHI from PVGIS monthly data (for annual PVsyst calculation)
-  const annualGHI = useMemo(() => {
-    const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    
-    if (solarDataSource === "pvgis_monthly" && pvgisMonthlyData?.monthly) {
-      // Sum up (avgDailyGhi * daysInMonth) for each month
-      return pvgisMonthlyData.monthly.reduce((sum, m) => {
-        const days = daysInMonth[m.month - 1] || 30;
-        return sum + (m.avgDailyGhi * days);
-      }, 0);
-    }
-    
-    if (solarDataSource === "pvgis_tmy" && pvgisTmyData?.summary?.annualGhiKwh) {
-      return pvgisTmyData.summary.annualGhiKwh;
-    }
-    
-    // Fallback to daily GHI × 365
-    if (pvgisHourlyProfile) {
-      const dailySum = pvgisHourlyProfile.reduce((sum, h) => sum + h.ghi / 1000, 0); // Convert W/m² to kWh/m²
-      return dailySum * 365;
-    }
-    
-    // Use location default
-    return selectedLocation.ghi * 365;
-  }, [solarDataSource, pvgisMonthlyData, pvgisTmyData, pvgisHourlyProfile, selectedLocation.ghi]);
-
-  // PVsyst ANNUAL calculation result (matching Excel methodology)
-  const annualPVsystResult = useMemo<AnnualPVsystResult | null>(() => {
-    if (lossCalculationMode !== "pvsyst") {
-      return null;
-    }
-    
-    // DC capacity for specific yield calculation
-    const dcCapacityKwp = moduleMetrics.actualDcCapacityKwp;
-    
-    // Create config with actual module-derived values - explicitly include lossesAfterInverter
-    const configWithModuleData: PVsystLossChainConfig = {
-      ...pvsystConfig,
-      stcEfficiency: moduleMetrics.stcEfficiency,
-      collectorAreaM2: moduleMetrics.collectorAreaM2,
-      lossesAfterInverter: {
-        ...DEFAULT_PVSYST_CONFIG.lossesAfterInverter,
-        ...pvsystConfig.lossesAfterInverter,
-      },
-    };
-    
-    // Calculate annual output using Excel methodology
-    const result = calculateAnnualPVsystOutput(
-      annualGHI,
-      moduleMetrics.collectorAreaM2,
-      moduleMetrics.stcEfficiency,
-      dcCapacityKwp,
-      configWithModuleData,
-      false  // Debug logging disabled in production
-    );
-    
-    return result;
-  }, [lossCalculationMode, annualGHI, moduleMetrics, pvsystConfig, inverterConfig]);
-
-  // PVsyst HOURLY calculation for daily profile chart (derived from annual proportionally)
-  const solarProfilePVsyst = useMemo(() => {
-    // Get hourly GHI profile for daily shape
-    const activeProfile = solarDataSource === "solcast" 
-      ? solcastHourlyProfile 
-      : pvgisHourlyProfile;
-    
-    if (lossCalculationMode !== "pvsyst" || !activeProfile || !annualPVsystResult) {
-      return null;
-    }
-    
-    // Calculate daily E_Grid from annual result
-    const dailyEGrid = annualPVsystResult.eGrid / 365;
-    
-    // Get the hourly GHI shape (normalized to total = 1)
-    const hourlyGhi = activeProfile.map(h => h.ghi);
-    const totalDailyGhi = hourlyGhi.reduce((a, b) => a + b, 0);
-    
-    if (totalDailyGhi <= 0) {
-      return Array(24).fill(0);
-    }
-    
-    // Distribute daily E_Grid according to hourly GHI shape, with reduction applied
-    const hourlyProfile = hourlyGhi.map(ghi => (ghi / totalDailyGhi) * dailyEGrid * reductionFactor);
-    
-    return hourlyProfile;
-  }, [lossCalculationMode, solarDataSource, solcastHourlyProfile, pvgisHourlyProfile, annualPVsystResult, reductionFactor]);
-
-  // Active solar profile based on data source and loss calculation mode
-  const solarProfile = useMemo(() => {
-    // If PVsyst mode and we have a valid profile, use it
-    if (lossCalculationMode === "pvsyst" && solarProfilePVsyst) {
-      return solarProfilePVsyst;
-    }
-    
-    // Otherwise use simplified mode
-    switch (solarDataSource) {
-      case "solcast":
-        return solarProfileSolcastSimplified ?? solarProfileGenericSimplified;
-      case "pvgis_monthly":
-      case "pvgis_tmy":
-        return solarProfilePVGISSimplified ?? solarProfileGenericSimplified;
-      default:
-        return solarProfileGenericSimplified;
-    }
-  }, [lossCalculationMode, solarDataSource, solarProfilePVsyst, solarProfileSolcastSimplified, solarProfilePVGISSimplified, solarProfileGenericSimplified]);
-
-  // For comparison charts, use simplified versions
-  const solarProfileSolcast = solarProfileSolcastSimplified;
-  const solarProfileGeneric = solarProfileGenericSimplified;
 
   // ========================================
   // PHASE 1: Energy Simulation (tariff-independent)
@@ -740,48 +517,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     representativeSeason: 'low' as const,
   }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig, touSettingsData]);
 
-  // Extract solar from STABLE chart data for engine input — decoupled from day navigation
+  // Extract solar from STABLE chart data for engine input
   const chartSolarProfile = useMemo(() => {
     return stableChartData.map(d => d.pvGeneration || 0);
   }, [stableChartData]);
 
   const effectiveSolarProfile = includesSolar ? chartSolarProfile : loadProfile.map(() => 0);
-
-  // Compute 8,760-hour TMY solar profile when TMY source is active and data is available
-  const tmyConversionResult = useMemo(() => {
-    if (solarDataSource !== "pvgis_tmy" || !pvgisTmyData?.hourlyGhi8760 || !includesSolar) {
-      return undefined;
-    }
-    if (lossCalculationMode !== "pvsyst") {
-      return undefined; // Only supported in PVsyst mode (needs loss chain config)
-    }
-
-    const configWithModuleData: PVsystLossChainConfig = {
-      ...pvsystConfig,
-      stcEfficiency: moduleMetrics.stcEfficiency,
-      collectorAreaM2: moduleMetrics.collectorAreaM2,
-      lossesAfterInverter: {
-        ...DEFAULT_PVSYST_CONFIG.lossesAfterInverter,
-        ...pvsystConfig.lossesAfterInverter,
-      },
-    };
-
-    const inverterTotalKw = inverterConfig.inverterSize * inverterConfig.inverterCount;
-
-    return convertTMYToSolarGeneration({
-      hourlyGhiWm2: pvgisTmyData.hourlyGhi8760,
-      collectorAreaM2: moduleMetrics.collectorAreaM2,
-      stcEfficiency: moduleMetrics.stcEfficiency,
-      pvsystConfig: configWithModuleData,
-      reductionFactor: 1 - (productionReductionPercent / 100),
-      maxAcOutputKw: inverterTotalKw,
-    });
-  }, [solarDataSource, pvgisTmyData, includesSolar, lossCalculationMode, pvsystConfig, moduleMetrics, productionReductionPercent, inverterConfig.inverterSize, inverterConfig.inverterCount]);
-
-  // Extract DC and AC arrays from TMY conversion result
-  const tmyDcProfile8760 = tmyConversionResult?.dcOutput;
-  const tmySolarProfile8760 = tmyConversionResult?.acOutput;
-  const tmyInverterLossMultiplier = tmyConversionResult?.inverterLossMultiplier ?? 1;
 
   // 8,760-hour annual simulation — single source of truth for all kWh and financial data
   const annualEnergyResults = useMemo(() =>
@@ -1137,48 +878,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     autoSave: triggerSave,
   }), [triggerSave]);
 
-  // Get the active data source's peak sun hours for display (must be before early return)
-  const activeDataSourceLabel = useMemo(() => {
-    if (solarDataSource === "solcast" && solcastData?.summary?.average_daily_ghi_kwh_m2) {
-      return `Solcast: ${solcastData.summary.average_daily_ghi_kwh_m2.toFixed(1)} kWh/m²/day`;
-    }
-    if (solarDataSource === "pvgis_monthly" && pvgisMonthlyData?.summary?.peakSunHours) {
-      return `PVGIS 19-Yr: ${pvgisMonthlyData.summary.peakSunHours.toFixed(1)} kWh/m²/day`;
-    }
-    if (solarDataSource === "pvgis_tmy" && pvgisTmyData?.summary?.peakSunHours) {
-      return `PVGIS TMY: ${pvgisTmyData.summary.peakSunHours.toFixed(1)} kWh/m²/day`;
-    }
-    return `${selectedLocation?.ghi || 5.0} kWh/m²/day`;
-  }, [solarDataSource, solcastData, pvgisMonthlyData, pvgisTmyData, selectedLocation?.ghi]);
-
-  // Empty states
-  if (tenants.length === 0) {
-    return (
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground text-center">
-            Add tenants first to run energy simulations
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  // activeDataSourceLabel, isLoadingData, hasRealData now come from useSolarProfiles
 
   // Connection size and max solar limit
   const connectionSizeKva = project.connection_size_kva ? Number(project.connection_size_kva) : null;
   const maxSolarKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
   const solarExceedsLimit = maxSolarKva && solarCapacity > maxSolarKva;
-
   const systemEfficiency = calculateSystemEfficiency(pvConfig);
-
-  // Data source indicator
-  const isLoadingData = solarDataSource === "solcast" ? solcastLoading 
-    : solarDataSource === "pvgis_tmy" ? pvgisLoadingTMY 
-    : pvgisLoadingMonthly;
-  
-  const hasRealData = solarDataSource === "solcast" ? !!solcastHourlyProfile
-    : !!pvgisHourlyProfile;
 
 
   return (
