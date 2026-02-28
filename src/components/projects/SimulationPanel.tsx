@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { format, formatDistanceToNow } from "date-fns";
 import { useSolarProfiles, type SolarDataSource } from "./simulation/useSolarProfiles";
 import { restoreSimulationState, type SimulationStateSetters } from "./simulation/restoreSimulationState";
+import { useSimulationEngine } from "./simulation/useSimulationEngine";
 
 import { SavedSimulations } from "./SavedSimulations";
 import { SimulationKPICards } from "./simulation/SimulationKPICards";
@@ -35,9 +36,6 @@ import {
   calculateSystemEfficiency,
 } from "./PVSystemConfig";
 import {
-  runAnnualEnergySimulation,
-  calculateFinancialsFromAnnual,
-  DEFAULT_SYSTEM_COSTS,
   type TariffData,
 } from "./simulation";
 import {
@@ -54,7 +52,6 @@ import { getTOUSettingsFromStorage, useTOUSettings } from "@/hooks/useTOUSetting
 /** Convert a TOU period name to hour windows, derived from stored TOU settings */
 function touPeriodToWindows(period: TOUPeriod): TimeWindow[] {
   const settings = getTOUSettingsFromStorage();
-  // Derive windows from the low-season weekday map (primary reference)
   const hourMap = settings.lowSeason.weekday;
   const windows: TimeWindow[] = [];
   let start: number | null = null;
@@ -75,7 +72,6 @@ import {
   AdvancedFinancialResults,
 } from "./simulation/AdvancedSimulationTypes";
 import { AdvancedSimulationConfigPanel } from "./simulation/AdvancedSimulationConfig";
-import { runAdvancedSimulation } from "./simulation/AdvancedSimulationEngine";
 import { AdvancedResultsDisplay } from "./simulation/AdvancedResultsDisplay";
 import { AdvancedConfigComparison } from "./simulation/AdvancedConfigComparison";
 import { LoadSheddingAnalysisPanel } from "./simulation/LoadSheddingAnalysisPanel";
@@ -84,21 +80,15 @@ import { InverterSizeModuleConfig } from "./InverterSizeModuleConfig";
 import { InverterSliderPanel } from "./InverterSliderPanel";
 import { getModulePresetById, getDefaultModulePreset, calculateModuleMetrics } from "./SolarModulePresets";
 import { SystemCostsData } from "./SystemCostsManager";
-import { calculateAnnualBlendedRates } from "@/lib/tariffCalculations";
-import { type BlendedRateType } from "./TariffSelector";
+import type { BlendedRateType } from "./TariffSelector";
 import { 
   type LossCalculationMode, 
   type PVsystLossChainConfig, 
   DEFAULT_PVSYST_CONFIG,
 } from "@/lib/pvsystLossChain";
 import { PVsystLossChainConfig as PVsystLossChainConfigPanel } from "./PVsystLossChainConfig";
-import { useLoadProfileData } from "./load-profile/hooks/useLoadProfileData";
 import { Tenant as FullTenant, ShopType as FullShopType } from "./load-profile/types";
 import { ConfigCarousel, CarouselPane } from "./simulation/ConfigCarousel";
-
-// SolarDataSource type imported from useSolarProfiles
-
-// Use full Tenant and ShopType from load-profile types for compatibility with useLoadProfileData
 
 interface SimulationPanelProps {
   projectId: string;
@@ -122,10 +112,6 @@ export interface SimulationPanelRef {
 
 const DEFAULT_PROFILE = Array(24).fill(4.17);
 
-// SA_LOCATION_LONGITUDES moved to useSolarProfiles
-
-// DifferenceIndicator moved to SimulationChartTabs.tsx
-
 export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, includesSolar = true, onRequestEnableFeature, blendedRateType = 'solarHours', onBlendedRateTypeChange, useHourlyTouRates = true, onUseHourlyTouRatesChange }, ref) => {
   const queryClient = useQueryClient();
   const { touSettings: touSettingsData } = useTOUSettings();
@@ -144,14 +130,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       if (error) throw error;
       return data;
     },
-    staleTime: 0, // Always fetch fresh data
+    staleTime: 0,
   });
 
-  // Extract saved values or use defaults - computed once query completes
   const savedResultsJson = lastSavedSimulation?.results_json as any;
 
-  // Helper: read cached simulation data synchronously for useState initializers
-  // This prevents the "flash of defaults" on hot reload
   const getCachedSimulation = () => {
     const cached = queryClient.getQueryData<any>(["last-simulation", projectId]);
     return cached ? { sim: cached, json: cached?.results_json as any } : null;
@@ -193,7 +176,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return c?.json?.batteryMaxSoC ?? 0;
   });
    
-   // Battery dispatch strategy
    const [batteryStrategy, setBatteryStrategy] = useState<BatteryDispatchStrategy>(() => {
      const c = getCachedSimulation();
      return c?.json?.batteryStrategy ?? 'none';
@@ -203,7 +185,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
      return c?.json?.dispatchConfig ?? getDefaultDispatchConfig('none');
    });
    
-   // TOU period selections for TOU Arbitrage mode
    const [chargeTouPeriod, setChargeTouPeriod] = useState<TOUPeriod | undefined>(() => {
      const c = getCachedSimulation();
      return c?.json?.chargeTouPeriod ?? undefined;
@@ -227,14 +208,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
      }));
    }, []);
 
-  // DoD is derived from SoC limits
   const batteryDoD = batteryMaxSoC - batteryMinSoC;
-
-  // Derived DC values used by all downstream calculations
-  const batteryCapacity = batteryDoD > 0 ? Math.round(batteryAcCapacity / (batteryDoD / 100)) : 0; // DC kWh
-  const batteryChargePower = Math.round(batteryAcCapacity * batteryChargeCRate * 10) / 10; // kW
-  const batteryDischargePower = Math.round(batteryAcCapacity * batteryDischargeCRate * 10) / 10; // kW
-  const batteryPower = Math.max(batteryChargePower, batteryDischargePower); // Legacy: max for display
+  const batteryCapacity = batteryDoD > 0 ? Math.round(batteryAcCapacity / (batteryDoD / 100)) : 0;
+  const batteryChargePower = Math.round(batteryAcCapacity * batteryChargeCRate * 10) / 10;
+  const batteryDischargePower = Math.round(batteryAcCapacity * batteryDischargeCRate * 10) / 10;
+  const batteryPower = Math.max(batteryChargePower, batteryDischargePower);
   const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [solarDataSource, setSolarDataSource] = useState<SolarDataSource>("pvgis_monthly");
@@ -243,19 +221,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
   const [inverterConfig, setInverterConfig] = useState<InverterConfig>(getDefaultInverterConfig);
   
-  // Override states for editable energy output metrics
   const [dailyOutputOverride, setDailyOutputOverride] = useState<number | null>(null);
   const [specificYieldOverride, setSpecificYieldOverride] = useState<number | null>(null);
-  
-  // Production reduction percentage (conservative safety margin)
   const [productionReductionPercent, setProductionReductionPercent] = useState(15);
   
-  // Track the loaded simulation name for UI feedback
   const [loadedSimulationName, setLoadedSimulationName] = useState<string | null>(null);
   const [loadedSimulationDate, setLoadedSimulationDate] = useState<string | null>(null);
   const hasInitializedFromSaved = useRef(false);
   
-  // Shared state setters for restoreSimulationState utility
   const stateSetters: SimulationStateSetters = useMemo(() => ({
     setSolarCapacity, setBatteryAcCapacity, setBatteryMinSoC, setBatteryMaxSoC,
     setBatteryChargeCRate, setBatteryDischargeCRate, setBatteryStrategy, setDispatchConfig,
@@ -264,17 +237,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     setAdvancedConfig, setLoadedSimulationName, setLoadedSimulationDate,
     onSystemCostsChange,
   }), [onSystemCostsChange]);
-  
-  // Auto-save tracking (extracted to useAutoSave hook — wired below after financialResults)
 
-  // Day-of-year index (0-364) for navigating the 365-day annual simulation
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [showAnnualAverage, setShowAnnualAverage] = useState(true);
-  
-  // Lazy comparison: only run comparison simulations when tab is first viewed
   const [comparisonTabViewed, setComparisonTabViewed] = useState(false);
 
-  // Day-of-year navigation helper
   const navigateDayIndex = useCallback((direction: "prev" | "next") => {
     setSelectedDayIndex(prev => {
       if (direction === "prev") return Math.max(0, prev - 1);
@@ -282,20 +249,18 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     });
   }, []);
 
-  // Derive date label and metadata from dayIndex
   const dayDateInfo = useMemo(() => {
-    const date = new Date(2026, 0, 1 + selectedDayIndex); // 2026: Jan 1 is Thursday
-    const dayOfWeek = date.getDay(); // 0=Sun..6=Sat
-    const month = date.getMonth(); // 0-indexed
+    const date = new Date(2026, 0, 1 + selectedDayIndex);
+    const dayOfWeek = date.getDay();
+    const month = date.getMonth();
     const dayLabel = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
-    const dayName = date.toLocaleDateString('en-GB', { weekday: 'long' }); // Monday, Tuesday, etc.
+    const dayName = date.toLocaleDateString('en-GB', { weekday: 'long' });
     const dayTypeName = dayOfWeek === 0 ? 'Sunday' : dayOfWeek === 6 ? 'Saturday' : 'Weekday';
     return { dayLabel, dayName, dayOfWeek, month, dayTypeName, dayNumber: selectedDayIndex + 1 };
   }, [selectedDayIndex]);
 
   // Auto-load the last saved simulation when data arrives (only once per projectId)
   useEffect(() => {
-    // Reset initialization flag when projectId changes
     hasInitializedFromSaved.current = false;
   }, [projectId]);
 
@@ -326,14 +291,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         lossCalculationMode: savedResultsJson?.lossCalculationMode,
         productionReductionPercent: savedResultsJson?.productionReductionPercent,
         advancedConfig: savedResultsJson?.advancedConfig,
-        // System costs NOT restored here — ProjectDetail handles initial load
       }, stateSetters, includesBattery);
     }
   }, [isFetched, lastSavedSimulation, savedResultsJson, includesBattery, stateSetters]);
 
-
-
-  // Calculate module metrics for PVsyst calculations (needed before solar profile generation)
+  // Calculate module metrics for PVsyst calculations
   const moduleMetrics = useMemo(() => {
     const selectedModule = inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule
       ? inverterConfig.customModule
@@ -348,7 +310,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return metrics;
   }, [inverterConfig]);
 
-
   // Sync CPI from systemCosts to advancedConfig for O&M escalation
   useEffect(() => {
     if (systemCosts.cpi !== advancedConfig.financial.inflationRate) {
@@ -362,7 +323,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     }
   }, [systemCosts.cpi]);
 
-  // ── Solar profiles hook (data fetching, profile generation, PVsyst) ──
+  // ── Solar profiles hook ──
   const {
     solcastData, solcastLoading,
     pvgisTmyData, pvgisMonthlyData, pvgisLoadingTMY, pvgisLoadingMonthly,
@@ -379,464 +340,56 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   });
   const solarProfileGeneric = solarProfileGenericSimplified;
 
-  // ── STABLE engine data source (all days / all months) ──
-  const ALL_DAYS = useMemo(() => new Set([0, 1, 2, 3, 4, 5, 6]), []);
-  const ALL_MONTHS = useMemo(() => new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]), []);
-
+  // ── Simulation engine hook (energy, financial, chart data) ──
   const {
-    chartData: stableChartData,
-  } = useLoadProfileData({
-    tenants,
-    shopTypes,
-    selectedDays: ALL_DAYS,
-    selectedMonths: ALL_MONTHS,
-    displayUnit: "kw",
-    powerFactor: 0.9,
-    showPVProfile: includesSolar && solarCapacity > 0,
-    maxPvAcKva: inverterConfig.inverterSize * inverterConfig.inverterCount,
-    dcCapacityKwp: moduleMetrics.actualDcCapacityKwp,
-    dcAcRatio: inverterConfig.dcAcRatio,
-    showBattery: includesBattery && batteryCapacity > 0,
-    batteryCapacity,
-    batteryPower: batteryChargePower,
-    batteryDischargePower,
-    solcastProfile: solarDataSource === "solcast" ? solcastPvProfileData : undefined,
-  });
-
-  // ── Per-day chart data source (changes on navigation) ──
-  const {
-    chartData: loadProfileChartData,
-    totalDaily: loadProfileTotalDaily,
-    peakHour: loadProfilePeakHour,
-    loadFactor: loadProfileLoadFactor,
-    isWeekend: loadProfileIsWeekend,
+    energyConfig,
+    loadProfile,
+    loadProfileChartData,
+    loadProfileTotalDaily,
+    loadProfilePeakHour,
+    loadProfileLoadFactor,
+    loadProfileIsWeekend,
     tenantsWithScada,
     tenantsEstimated,
-  } = useLoadProfileData({
-    tenants,
-    shopTypes,
-    selectedDays: showAnnualAverage 
-      ? new Set([0, 1, 2, 3, 4, 5, 6]) 
-      : new Set([dayDateInfo.dayOfWeek]),
-    selectedMonths: showAnnualAverage ? new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) : new Set([dayDateInfo.month]),
-    displayUnit: "kw",
-    powerFactor: 0.9,
-    showPVProfile: includesSolar && solarCapacity > 0,
-    maxPvAcKva: inverterConfig.inverterSize * inverterConfig.inverterCount,
-    dcCapacityKwp: moduleMetrics.actualDcCapacityKwp,
-    dcAcRatio: inverterConfig.dcAcRatio,
-    showBattery: includesBattery && batteryCapacity > 0,
-    batteryCapacity,
-    batteryPower: batteryChargePower,
-    batteryDischargePower,
-    solcastProfile: solarDataSource === "solcast" ? solcastPvProfileData : undefined,
+    annualEnergyResults,
+    annualEnergyResultsGeneric,
+    annualEnergyResultsSolcast,
+    representativeDay,
+    touPeriodsForDay,
+    tariffData,
+    tariffRates,
+    tariff,
+    annualBlendedRates,
+    selectedBlendedRate,
+    hasFinancialData,
+    financialResults,
+    financialResultsGeneric,
+    financialResultsSolcast,
+    basicFinancialMetrics,
+    threeYearOM,
+    advancedResults,
+    unifiedPaybackPeriod,
+    isAdvancedEnabled,
+    simulationChartData,
+  } = useSimulationEngine({
+    projectId, project, tenants, shopTypes,
+    solarCapacity, batteryCapacity, batteryAcCapacity, batteryPower,
+    batteryChargePower, batteryDischargePower,
+    batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig,
+    includesSolar, includesBattery,
+    inverterConfig, moduleMetrics,
+    solarDataSource, solcastPvProfileData,
+    solarProfile, solarProfileSolcast, solarProfileGeneric: solarProfileGenericSimplified,
+    tmySolarProfile8760, tmyDcProfile8760, tmyInverterLossMultiplier,
+    annualPVsystResult, reductionFactor,
+    selectedDayIndex, showAnnualAverage,
+    dayDateInfo: { dayOfWeek: dayDateInfo.dayOfWeek, month: dayDateInfo.month },
+    comparisonTabViewed,
+    systemCosts, blendedRateType, useHourlyTouRates,
+    advancedConfig, touSettingsData, touPeriodToWindows,
   });
 
-  // ── Tariff queries ──
-  const { data: tariffRates } = useQuery({
-    queryKey: ["tariff-rates", project.tariff_id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tariff_rates")
-        .select("*")
-        .eq("tariff_plan_id", project.tariff_id);
-      if (error) throw error;
-      return (data || []).map((r: any) => ({
-        ...r,
-        rate_per_kwh: r.charge === 'energy' ? r.amount : 0,
-        time_of_use: r.tou === 'all' ? 'Any' : r.tou === 'peak' ? 'Peak' : r.tou === 'standard' ? 'Standard' : 'Off-Peak',
-        season: r.season === 'all' ? 'All Year' : r.season === 'high' ? 'High/Winter' : 'Low/Summer',
-      }));
-    },
-    enabled: !!project.tariff_id,
-  });
-
-  const { data: tariff } = useQuery({
-    queryKey: ["tariff", project.tariff_id],
-    queryFn: async () => {
-      const { data: plan, error } = await supabase
-        .from("tariff_plans")
-        .select("*")
-        .eq("id", project.tariff_id)
-        .single();
-      if (error) throw error;
-      const { data: rates } = await supabase
-        .from("tariff_rates")
-        .select("*")
-        .eq("tariff_plan_id", project.tariff_id);
-      const basicCharge = (rates || []).find((r: any) => r.charge === 'basic')?.amount || 0;
-      const demandCharge = (rates || []).find((r: any) => r.charge === 'demand')?.amount || 0;
-      const networkCharge = (rates || []).find((r: any) => r.charge === 'network_access')?.amount || 0;
-      return {
-        ...plan,
-        fixed_monthly_charge: basicCharge,
-        demand_charge_per_kva: demandCharge,
-        network_access_charge: networkCharge,
-        legacy_charge_per_kwh: 0,
-        tariff_type: (plan as any)?.structure || 'flat',
-      };
-    },
-    enabled: !!project.tariff_id,
-  });
-
-  // Calculate 3-Year O&M with CPI escalation for financial metrics
-  const threeYearOM = useMemo(() => {
-    const cpi = systemCosts.cpi ?? 6.0;
-    const solarCost = solarCapacity * (systemCosts.solarCostPerKwp ?? 8500);
-    const batteryCost = batteryCapacity * (systemCosts.batteryCostPerKwh ?? 3500);
-    const solarMaintenance = solarCost * ((systemCosts.solarMaintenancePercentage ?? 3.5) / 100);
-    const batteryMaintenance = includesBattery 
-      ? batteryCost * ((systemCosts.batteryMaintenancePercentage ?? 1.5) / 100) 
-      : 0;
-    const cpiMultiplier = 1 + Math.pow(1 + cpi / 100, 1) + Math.pow(1 + cpi / 100, 2);
-    return (solarMaintenance + batteryMaintenance) * cpiMultiplier;
-  }, [systemCosts, solarCapacity, batteryCapacity, includesBattery]);
-
-  // Use STABLE load profile for engine
-  const loadProfile = useMemo(() => {
-    return stableChartData.map(d => d.total);
-  }, [stableChartData]);
-
-  // ========================================
-  // PHASE 1: Energy Simulation (tariff-independent)
-  // ========================================
-  const effectiveSolarCapacity = includesSolar ? solarCapacity : 0;
-
-  const energyConfig = useMemo(() => ({
-    solarCapacity: effectiveSolarCapacity,
-    batteryCapacity,
-    batteryPower,
-    batteryChargePower,
-    batteryDischargePower,
-    batteryMinSoC: batteryMinSoC / 100,
-    batteryMaxSoC: batteryMaxSoC / 100,
-    dispatchStrategy: batteryStrategy,
-    dispatchConfig,
-    touPeriodToWindows,
-    touSettings: touSettingsData,
-    representativeSeason: 'low' as const,
-  }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig, touSettingsData]);
-
-  // Extract solar from STABLE chart data for engine input
-  const chartSolarProfile = useMemo(() => {
-    return stableChartData.map(d => d.pvGeneration || 0);
-  }, [stableChartData]);
-
-  const effectiveSolarProfile = includesSolar ? chartSolarProfile : loadProfile.map(() => 0);
-
-  // 8,760-hour annual simulation — single source of truth for all kWh and financial data
-  const annualEnergyResults = useMemo(() =>
-    runAnnualEnergySimulation(loadProfile, effectiveSolarProfile, energyConfig, touSettingsData, tmySolarProfile8760),
-    [loadProfile, effectiveSolarProfile, energyConfig, touSettingsData, tmySolarProfile8760]
-  );
-
-  // Deferred comparison simulations — only run when Data Comparison tab is first opened
-  const annualEnergyResultsGeneric = useMemo(() =>
-    comparisonTabViewed ? runAnnualEnergySimulation(loadProfile, solarProfileGeneric, energyConfig, touSettingsData) : null,
-    [comparisonTabViewed, loadProfile, solarProfileGeneric, energyConfig, touSettingsData]
-  );
-
-  const annualEnergyResultsSolcast = useMemo(() =>
-    comparisonTabViewed && solarProfileSolcast ? runAnnualEnergySimulation(loadProfile, solarProfileSolcast, energyConfig, touSettingsData) : null,
-    [comparisonTabViewed, loadProfile, solarProfileSolcast, energyConfig, touSettingsData]
-  );
-
-  // Extract the specific 24h slice for the selected day index from annual data
-  const dailySlice = useMemo(() => {
-    if (!annualEnergyResults?.hourlyData) return [];
-    return annualEnergyResults.hourlyData.filter(h => h.dayIndex === selectedDayIndex);
-  }, [annualEnergyResults, selectedDayIndex]);
-
-  // Annual average: average all 365 days by hour-of-day
-  const annualAverageSlice = useMemo(() => {
-    if (!annualEnergyResults?.hourlyData) return [];
-    // Group by hour (0-23) and average each field
-    return Array.from({ length: 24 }, (_, h) => {
-      const hourEntries = annualEnergyResults.hourlyData.filter(d => parseInt(d.hour) === h);
-      const count = hourEntries.length || 1;
-      const avg = (field: string) => hourEntries.reduce((sum, e) => sum + ((e as any)[field] || 0), 0) / count;
-      return {
-        hour: `${h.toString().padStart(2, '0')}:00`,
-        load: avg('load'),
-        solarUsed: avg('solarUsed'),
-        gridImport: avg('gridImport'),
-        gridExport: avg('gridExport'),
-        batteryCharge: avg('batteryCharge'),
-        batteryDischarge: avg('batteryDischarge'),
-        batterySOC: avg('batterySOC'),
-        netLoad: avg('netLoad'),
-        pvGeneration: avg('solar'),
-        batteryChargeFromGrid: avg('batteryChargeFromGrid'),
-        touPeriod: 'off-peak' as LoadProfileTOUPeriod, // placeholder for annual avg
-      };
-    });
-  }, [annualEnergyResults]);
-
-  // Build TOU periods override array (24 entries) from the current day's data
-  const touPeriodsForDay = useMemo((): LoadProfileTOUPeriod[] | undefined => {
-    if (showAnnualAverage) {
-      // Annual average spans all seasons/day-types — TOU backgrounds are hidden (showTOU=false)
-      return undefined;
-    }
-    if (dailySlice.length === 24) {
-      return dailySlice.map(h => h.touPeriod);
-    }
-    return undefined;
-  }, [showAnnualAverage, dailySlice]);
-
-  // The representative day data for chart rendering
-  const representativeDay = useMemo(() => {
-    if (showAnnualAverage) return annualAverageSlice;
-    return dailySlice;
-  }, [showAnnualAverage, annualAverageSlice, dailySlice]);
-
-  // ========================================
-  // PHASE 2: Financial Analysis (tariff-dependent)
-  // ========================================
-  // Calculate blended rates using the new accurate methodology with all unbundled charges
-  const annualBlendedRates = useMemo(() => 
-    calculateAnnualBlendedRates(tariffRates, { legacy_charge_per_kwh: tariff?.legacy_charge_per_kwh }),
-    [tariffRates, tariff?.legacy_charge_per_kwh]
-  );
-  
-  // Use the selected blended rate type (from Tariff tab or default to solarHours)
-  // Now supports all 6 rate options
-  const selectedBlendedRate = useMemo(() => {
-    if (!annualBlendedRates) return 2.5; // Fallback default
-    
-    switch (blendedRateType) {
-      case 'allHours':
-        return annualBlendedRates.allHours.annual;
-      case 'allHoursHigh':
-        return annualBlendedRates.allHours.high;
-      case 'allHoursLow':
-        return annualBlendedRates.allHours.low;
-      case 'solarHours':
-        return annualBlendedRates.solarHours.annual;
-      case 'solarHoursHigh':
-        return annualBlendedRates.solarHours.high;
-      case 'solarHoursLow':
-        return annualBlendedRates.solarHours.low;
-      default:
-        return annualBlendedRates.solarHours.annual;
-    }
-  }, [annualBlendedRates, blendedRateType]);
-  
-  const tariffData: TariffData = useMemo(() => ({
-    fixedMonthlyCharge: Number(tariff?.fixed_monthly_charge || 0),
-    demandChargePerKva: Number(tariff?.demand_charge_per_kva || 0),
-    networkAccessCharge: Number(tariff?.network_access_charge || 0),
-    // Use the selected blended rate (includes all unbundled charges)
-    averageRatePerKwh: selectedBlendedRate,
-    exportRatePerKwh: 0, // No feed-in tariff by default
-  }), [tariff, selectedBlendedRate]);
-
-  const financialResults = useMemo(() =>
-    calculateFinancialsFromAnnual(annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity),
-    [annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity]
-  );
-
-  const financialResultsGeneric = useMemo(() =>
-    calculateFinancialsFromAnnual(annualEnergyResultsGeneric, tariffData, systemCosts, solarCapacity, batteryCapacity),
-    [annualEnergyResultsGeneric, tariffData, systemCosts, solarCapacity, batteryCapacity]
-  );
-
-  const financialResultsSolcast = useMemo(() =>
-    annualEnergyResultsSolcast
-      ? calculateFinancialsFromAnnual(annualEnergyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity)
-      : null,
-    [annualEnergyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity]
-  );
-
-  // Calculate basic financial metrics (NPV, IRR, LCOE) using systemCosts parameters
-  const basicFinancialMetrics = useMemo(() => {
-    // Use financial parameters from systemCosts
-    const projectLifeYears = systemCosts.projectDurationYears ?? 20;
-    const discountRate = (systemCosts.lcoeDiscountRate ?? 9) / 100; // Convert from % to decimal
-    const financeRate = (systemCosts.mirrFinanceRate ?? 9) / 100;
-    const reinvestmentRate = (systemCosts.mirrReinvestmentRate ?? 10) / 100;
-    const annualSavings = financialResults.annualSavings;
-    const systemCost = financialResults.systemCost;
-    const annualGeneration = annualEnergyResults.totalAnnualSolar;
-    
-    // Build cash flows: Year 0 is negative (investment), Years 1-n are savings
-    const cashFlows = [-systemCost];
-    for (let y = 1; y <= projectLifeYears; y++) {
-      cashFlows.push(annualSavings);
-    }
-    
-    // NPV calculation using lcoeDiscountRate
-    let npv = -systemCost;
-    for (let y = 1; y <= projectLifeYears; y++) {
-      npv += annualSavings / Math.pow(1 + discountRate, y);
-    }
-    
-    // IRR calculation (Newton-Raphson approximation)
-    let irr = 0.1; // Start guess
-    for (let iter = 0; iter < 50; iter++) {
-      let npvAtRate = -systemCost;
-      let derivativeNpv = 0;
-      for (let y = 1; y <= projectLifeYears; y++) {
-        const discountFactor = Math.pow(1 + irr, y);
-        npvAtRate += annualSavings / discountFactor;
-        derivativeNpv -= y * annualSavings / Math.pow(1 + irr, y + 1);
-      }
-      if (Math.abs(derivativeNpv) < 1e-10) break;
-      const newIrr = irr - npvAtRate / derivativeNpv;
-      if (Math.abs(newIrr - irr) < 1e-6) break;
-      irr = newIrr;
-    }
-    
-    // MIRR calculation using mirrFinanceRate and mirrReinvestmentRate
-    // Future value of positive cash flows at reinvestment rate
-    let fvPositive = 0;
-    for (let y = 1; y <= projectLifeYears; y++) {
-      fvPositive += annualSavings * Math.pow(1 + reinvestmentRate, projectLifeYears - y);
-    }
-    // Present value of negative cash flows at finance rate (just the initial investment)
-    const pvNegative = systemCost; // Already discounted at t=0
-    const mirr = pvNegative > 0 ? Math.pow(fvPositive / pvNegative, 1 / projectLifeYears) - 1 : 0;
-    
-    // LCOE calculation (simplified: system cost / lifetime generation)
-    const lifetimeGeneration = annualGeneration * projectLifeYears * 0.9; // ~10% average degradation
-    const lcoe = lifetimeGeneration > 0 ? systemCost / lifetimeGeneration : 0;
-    
-    return {
-      npv,
-      irr: irr * 100, // Convert to percentage
-      mirr: mirr * 100,
-      lcoe,
-      projectLifeYears,
-      discountRate: discountRate * 100, // Convert back to percentage for display
-    };
-  }, [financialResults, annualEnergyResults, systemCosts]);
-
-
-
-  // Merge authoritative engine data onto chart data — pvGeneration comes from engine's solar dispatch
-  const simulationChartData = useMemo(() => {
-    if (!loadProfileChartData || !representativeDay.length) return loadProfileChartData;
-    return loadProfileChartData.map((hour, i) => {
-      const engineHour = representativeDay[i];
-      if (!engineHour) return hour;
-
-      // Use TMY DC data for pvDcOutput, pvClipping, and pv1to1Baseline when available
-      const inverterTotalKw = inverterConfig.inverterSize * inverterConfig.inverterCount;
-      const dcAcRatio = inverterConfig.dcAcRatio;
-      let pvDcOutput = hour.pvDcOutput;
-      let pvClipping = hour.pvClipping;
-      let pv1to1Baseline = hour.pv1to1Baseline;
-      if (tmyDcProfile8760 && !showAnnualAverage) {
-        const idx = selectedDayIndex * 24 + i;
-        pvDcOutput = tmyDcProfile8760[idx] || 0;
-        pvClipping = Math.max(0, pvDcOutput * tmyInverterLossMultiplier - inverterTotalKw);
-        // 1:1 baseline = DC output through inverter losses (no clipping) — what a 1:1 system would produce
-        pv1to1Baseline = dcAcRatio > 1 ? pvDcOutput * tmyInverterLossMultiplier : undefined;
-      } else if (tmyDcProfile8760 && showAnnualAverage) {
-        // Average all 365 days for this hour
-        let sum = 0;
-        for (let d = 0; d < 365; d++) {
-          sum += tmyDcProfile8760[d * 24 + i] || 0;
-        }
-        pvDcOutput = sum / 365;
-        pvClipping = Math.max(0, pvDcOutput * tmyInverterLossMultiplier - inverterTotalKw);
-        // 1:1 baseline = DC output through inverter losses (no clipping) — what a 1:1 system would produce
-        pv1to1Baseline = dcAcRatio > 1 ? pvDcOutput * tmyInverterLossMultiplier : undefined;
-      }
-
-      return {
-        ...hour,
-        pvGeneration: ('pvGeneration' in engineHour ? (engineHour as any).pvGeneration : (engineHour as any).solar) ?? hour.pvGeneration,
-        pvDcOutput,
-        pvClipping,
-        pv1to1Baseline,
-        batteryCharge: engineHour.batteryCharge,
-        batteryDischarge: engineHour.batteryDischarge,
-        batterySoC: (engineHour.batterySOC / 100) * batteryCapacity,
-        gridImport: engineHour.gridImport,
-        gridExport: engineHour.gridExport,
-        gridImportWithBattery: engineHour.gridImport,
-        netLoad: engineHour.netLoad,
-        solarUsed: engineHour.solarUsed,
-      };
-    });
-  }, [loadProfileChartData, representativeDay, tmyDcProfile8760, selectedDayIndex, showAnnualAverage, inverterConfig.inverterSize, inverterConfig.inverterCount, inverterConfig.dcAcRatio, tmyInverterLossMultiplier]);
-
-  // Check if financial analysis is available (moved up for use in advanced simulation)
-  const hasFinancialData = !!project.tariff_id;
-
-  // Check if any advanced features are enabled
-  const isAdvancedEnabled =
-    advancedConfig.seasonal.enabled ||
-    advancedConfig.degradation.enabled ||
-    advancedConfig.financial.enabled ||
-    advancedConfig.gridConstraints.enabled ||
-    advancedConfig.loadGrowth.enabled;
-
-  // Run advanced simulation when enabled
-  const advancedResults = useMemo<AdvancedFinancialResults | null>(() => {
-    if (!isAdvancedEnabled || !hasFinancialData) return null;
-
-    // Build a daily-equivalent adapter from annual results for backwards compatibility
-    const dailyAdapter = {
-      totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,
-      totalDailySolar: annualEnergyResults.totalAnnualSolar / 365,
-      totalGridImport: annualEnergyResults.totalAnnualGridImport / 365,
-      totalGridExport: annualEnergyResults.totalAnnualGridExport / 365,
-      totalSolarUsed: annualEnergyResults.totalAnnualSolarUsed / 365,
-      totalBatteryCharge: annualEnergyResults.totalAnnualBatteryCharge / 365,
-      totalBatteryDischarge: annualEnergyResults.totalAnnualBatteryDischarge / 365,
-      totalBatteryChargeFromGrid: annualEnergyResults.totalAnnualBatteryChargeFromGrid / 365,
-      selfConsumptionRate: annualEnergyResults.selfConsumptionRate,
-      solarCoverageRate: annualEnergyResults.solarCoverageRate,
-      peakLoad: annualEnergyResults.peakLoad,
-      peakGridImport: annualEnergyResults.peakGridImport,
-      peakReduction: annualEnergyResults.peakReduction,
-      batteryCycles: annualEnergyResults.batteryCycles,
-      batteryUtilization: 0,
-      revenueKwh: 0,
-      hourlyData: [],
-    };
-
-    return runAdvancedSimulation(
-      dailyAdapter,
-      tariffData,
-      systemCosts,
-      solarCapacity,
-      batteryCapacity,
-      advancedConfig,
-      tariffRates ?? undefined,
-      touSettingsData,
-      annualEnergyResults
-    );
-  }, [isAdvancedEnabled, hasFinancialData, annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData]);
-
-  // Compute unified payback period from advancedResults (same logic as AdvancedResultsDisplay)
-  // This ensures consistency between the MetricCard, Break-even badge, and Financial Return Outputs table
-  const unifiedPaybackPeriod = useMemo(() => {
-    if (!advancedResults) return null;
-    
-    // Use sensitivityResults if available (preferred source)
-    if (advancedResults.sensitivityResults?.expected.payback) {
-      return advancedResults.sensitivityResults.expected.payback;
-    }
-    
-    // Fallback: calculate interpolated payback from yearlyProjections
-    const projections = advancedResults.yearlyProjections;
-    const breakeven = projections.find(p => p.cumulativeCashFlow >= 0);
-    if (!breakeven) return null; // No payback within projection period
-    
-    // Interpolate for more accurate payback
-    const prevYear = projections[breakeven.year - 2];
-    if (!prevYear) return breakeven.year;
-    
-    const remaining = Math.abs(prevYear.cumulativeCashFlow);
-    const fraction = remaining / breakeven.netCashFlow;
-    
-    return breakeven.year - 1 + fraction;
-  }, [advancedResults]);
-
-  // Auto-save hook (extracted from inline mutation + debounce)
+  // Auto-save hook
   const { isAutoSaving, lastSavedAt, triggerSave } = useAutoSave({
     projectId,
     solarDataSource,
@@ -877,8 +430,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   useImperativeHandle(ref, () => ({
     autoSave: triggerSave,
   }), [triggerSave]);
-
-  // activeDataSourceLabel, isLoadingData, hasRealData now come from useSolarProfiles
 
   // Connection size and max solar limit
   const connectionSizeKva = project.connection_size_kva ? Number(project.connection_size_kva) : null;
@@ -1148,7 +699,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         </Card>
       </Collapsible>
 
-      {/* PVsyst Loss Chain Configuration - only show when in PVsyst mode */}
+      {/* PVsyst Loss Chain Configuration */}
       {lossCalculationMode === "pvsyst" && (
         <PVsystLossChainConfigPanel
           config={{ ...pvsystConfig, stcEfficiency: moduleMetrics.stcEfficiency }}
@@ -1191,8 +742,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         dischargeSources={dispatchConfig.dischargeSources}
         onDischargeSourcesChange={(sources) => setDispatchConfig(prev => ({ ...prev, dischargeSources: sources }))}
       />
-
-      {/* Note: System Costs are now configured exclusively in the Costs tab */}
 
       {/* System Configuration Carousel */}
       <ConfigCarousel
@@ -1237,7 +786,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Solar Module Config (no inverter size - moved to Inverters tab) */}
                   <div>
                     <InverterSizeModuleConfig
                       config={inverterConfig}
@@ -1245,7 +793,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       onSolarCapacityChange={setSolarCapacity}
                     />
                   </div>
-                  {/* Energy output estimate */}
                   <div className="pt-2 border-t space-y-2 text-[10px]">
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-muted-foreground text-[10px]">Expected daily output</Label>
@@ -1282,7 +829,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       </div>
                     </div>
                   </div>
-                  {/* Production Reduction */}
                   <div className="pt-2 border-t">
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-muted-foreground text-[10px]">Production reduction</Label>
@@ -1326,7 +872,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Row 1: AC Capacity (user input) */}
                   <div className="space-y-1">
                     <Label className="text-xs">AC Capacity (kWh)</Label>
                     <NumericInput
@@ -1339,8 +884,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       step={10}
                     />
                   </div>
-
-                  {/* Row 2: Charge Power, Discharge Power, DC Capacity (all computed) */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1">
                       <Label className="text-xs">Charge Power (kW)</Label>
@@ -1370,10 +913,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       />
                     </div>
                   </div>
-
-
-
-                  {/* Summary stats */}
                   <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
                     <div className="flex justify-between">
                       <span>Usable capacity</span>
@@ -1401,7 +940,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             disabledMessage: 'Select a tariff to enable financial analysis',
             content: (
               <div className="flex flex-col gap-4">
-                {/* Simulation Tariff Rate Selector */}
                 {hasFinancialData && annualBlendedRates && (
                   <Card className="border-primary/30">
                     <CardHeader className="pb-2">
@@ -1493,7 +1031,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     </CardContent>
                   </Card>
                 )}
-                {/* Financial Return Outputs */}
                 {hasFinancialData ? (
                   <Card>
                     <CardHeader className="pb-3">
@@ -1662,7 +1199,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         onRequestEnable={onRequestEnableFeature}
       />
 
-      {/* Energy Results Summary (always visible - tariff-independent) */}
+      {/* Energy Results Summary */}
       <SimulationKPICards
         annualLoad={annualEnergyResults.totalAnnualLoad}
         annualSolar={annualEnergyResults.totalAnnualSolar}
@@ -1673,8 +1210,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         annualPVsystResult={annualPVsystResult}
         reductionFactor={reductionFactor}
       />
-
-      {/* SavedSimulations moved to collapsible at top */}
 
       {/* Advanced Results Display */}
       {advancedResults && (
