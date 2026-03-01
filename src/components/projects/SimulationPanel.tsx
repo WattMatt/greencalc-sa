@@ -4,38 +4,37 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DischargeTOUSelection, DEFAULT_DISCHARGE_TOU_SELECTION } from "./load-profile/types";
+import { getTOUSettingsFromStorage, useTOUSettings } from "@/hooks/useTOUSettings";
+import { type BatteryDispatchStrategy, type DispatchConfig, type TimeWindow } from "./simulation/EnergySimulationEngine";
+import { PVSystemConfig, PVSystemConfigData, getDefaultPVConfig, calculateSystemEfficiency } from "./PVSystemConfig";
+import { type LossCalculationMode, type PVsystLossChainConfig, DEFAULT_PVSYST_CONFIG } from "@/lib/pvsystLossChain";
+import { PVsystLossChainConfig as PVsystLossChainConfigPanel } from "./PVsystLossChainConfig";
+import { AdvancedSimulationConfig, DEFAULT_ADVANCED_CONFIG } from "./simulation/AdvancedSimulationTypes";
+import { AdvancedSimulationConfigPanel } from "./simulation/AdvancedSimulationConfig";
+import { AdvancedResultsDisplay } from "./simulation/AdvancedResultsDisplay";
+import { InverterConfig, getDefaultInverterConfig } from "./InverterSizing";
+import { getModulePresetById, getDefaultModulePreset, calculateModuleMetrics } from "./SolarModulePresets";
+import { ConfigCarousel, CarouselPane } from "./simulation/ConfigCarousel";
 import { InverterPane } from "./simulation/InverterPane";
 import { SolarModulesPane } from "./simulation/SolarModulesPane";
 import { BatteryPane } from "./simulation/BatteryPane";
-import { DischargeTOUSelection, DEFAULT_DISCHARGE_TOU_SELECTION, TOUPeriod as LoadProfileTOUPeriod } from "./load-profile/types";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useSolarProfiles, type SolarDataSource } from "./simulation/useSolarProfiles";
-import { restoreSimulationState, type SimulationStateSetters } from "./simulation/restoreSimulationState";
-import { useSimulationEngine } from "./simulation/useSimulationEngine";
-import { SimulationToolbar } from "./simulation/SimulationToolbar";
-import { SavedConfigCollapsible } from "./simulation/SavedConfigCollapsible";
-import { getInitialSimulationValues } from "./simulation/useInitialSimulationState";
-
 import { SimulationKPICards } from "./simulation/SimulationKPICards";
 import { SimulationChartTabs } from "./simulation/SimulationChartTabs";
 import { FinancialConfigPane } from "./simulation/FinancialConfigPane";
+import { SimulationToolbar } from "./simulation/SimulationToolbar";
+import { SavedConfigCollapsible } from "./simulation/SavedConfigCollapsible";
+import { useSolarProfiles, type SolarDataSource } from "./simulation/useSolarProfiles";
+import { useSimulationEngine } from "./simulation/useSimulationEngine";
 import { useAutoSave } from "./simulation/useAutoSave";
-import {
-  PVSystemConfig,
-  PVSystemConfigData,
-  getDefaultPVConfig,
-  calculateSystemEfficiency,
-} from "./PVSystemConfig";
-import {
-  type BatteryDispatchStrategy,
-  type DispatchConfig,
-  type TimeWindow,
-  getDefaultDispatchConfig,
-} from "./simulation/EnergySimulationEngine";
+import { getInitialSimulationValues } from "./simulation/useInitialSimulationState";
+import { restoreSimulationState, type SimulationStateSetters } from "./simulation/restoreSimulationState";
+import type { SystemCostsData } from "./SystemCostsManager";
+import type { BlendedRateType } from "./TariffSelector";
+import type { Tenant as FullTenant, ShopType as FullShopType } from "./load-profile/types";
 
 type TOUPeriod = 'off-peak' | 'standard' | 'peak';
-
-import { getTOUSettingsFromStorage, useTOUSettings } from "@/hooks/useTOUSettings";
 
 /** Convert a TOU period name to hour windows, derived from stored TOU settings */
 function touPeriodToWindows(period: TOUPeriod): TimeWindow[] {
@@ -55,24 +54,8 @@ function touPeriodToWindows(period: TOUPeriod): TimeWindow[] {
   return windows.length > 0 ? windows : [{ start: 0, end: 0 }];
 }
 
-import {
-  AdvancedSimulationConfig,
-  DEFAULT_ADVANCED_CONFIG,
-} from "./simulation/AdvancedSimulationTypes";
-import { AdvancedSimulationConfigPanel } from "./simulation/AdvancedSimulationConfig";
-import { AdvancedResultsDisplay } from "./simulation/AdvancedResultsDisplay";
-import { InverterConfig, getDefaultInverterConfig } from "./InverterSizing";
-import { getModulePresetById, getDefaultModulePreset, calculateModuleMetrics } from "./SolarModulePresets";
-import { SystemCostsData } from "./SystemCostsManager";
-import type { BlendedRateType } from "./TariffSelector";
-import { 
-  type LossCalculationMode, 
-  type PVsystLossChainConfig, 
-  DEFAULT_PVSYST_CONFIG,
-} from "@/lib/pvsystLossChain";
-import { PVsystLossChainConfig as PVsystLossChainConfigPanel } from "./PVsystLossChainConfig";
-import { Tenant as FullTenant, ShopType as FullShopType } from "./load-profile/types";
-import { ConfigCarousel, CarouselPane } from "./simulation/ConfigCarousel";
+
+
 
 interface SimulationPanelProps {
   projectId: string;
