@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     const { data: claimsData, error: claimsErr } = await anonClient.auth.getClaims(token);
 
     // Allow service_role key, dedicated API key, OR authenticated user
-    const uploadApiKey = Deno.env.get("UPLOAD_API_KEY");
+    const uploadApiKey = Deno.env.get("Monthly_Generation_Upload");
     const isServiceRole = token === serviceRoleKey;
     const isApiKey = uploadApiKey && token === uploadApiKey;
     if (!isServiceRole && !isApiKey && (claimsErr || !claimsData?.claims?.sub)) {
