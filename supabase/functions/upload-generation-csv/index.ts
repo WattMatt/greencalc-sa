@@ -70,9 +70,11 @@ Deno.serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     const { data: claimsData, error: claimsErr } = await anonClient.auth.getClaims(token);
 
-    // Allow service_role key OR authenticated user
+    // Allow service_role key, dedicated API key, OR authenticated user
+    const uploadApiKey = Deno.env.get("UPLOAD_API_KEY");
     const isServiceRole = token === serviceRoleKey;
-    if (!isServiceRole && (claimsErr || !claimsData?.claims?.sub)) {
+    const isApiKey = uploadApiKey && token === uploadApiKey;
+    if (!isServiceRole && !isApiKey && (claimsErr || !claimsData?.claims?.sub)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
