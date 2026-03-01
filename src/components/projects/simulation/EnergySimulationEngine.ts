@@ -266,16 +266,40 @@ function isBatteryPriorityOverLoad(config?: DispatchConfig): boolean {
   return batteryIdx < loadIdx; // Lower index = higher priority
 }
 
+/**
+ * Pre-compute 24-hour permission lookup for a single day.
+ * Eliminates per-hour getChargePermissions/getDischargePermissions calls (24 → 1 per day).
+ */
+function precomputeDayPermissions(
+  config: DispatchConfig,
+  touResolver: (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[],
+): DispatchPermissions[] {
+  const perms: DispatchPermissions[] = new Array(24);
+  for (let h = 0; h < 24; h++) {
+    const cp = getChargePermissions(h, config, touResolver);
+    const dp = getDischargePermissions(h, config, touResolver);
+    perms[h] = {
+      pvChargeAllowed: cp.pvChargeAllowed,
+      gridChargeAllowed: cp.gridChargeAllowed,
+      loadDischargeAllowed: dp.loadDischargeAllowed,
+      batteryDischargeAllowed: dp.batteryDischargeAllowed,
+      gridExportAllowed: dp.gridExportAllowed,
+    };
+  }
+  return perms;
+}
+
 function dispatchSelfConsumption(
   s: HourState,
   permissions: DispatchPermissions,
   config?: DispatchConfig,
+  batteryFirst?: boolean,
 ): HourResult {
   const { load, solar, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
   const { pvChargeAllowed, loadDischargeAllowed, batteryDischargeAllowed, gridExportAllowed } = permissions;
 
-  // Check if battery should get solar before load
-  const batteryFirst = isBatteryPriorityOverLoad(config);
+  // Use pre-hoisted value; fall back to per-call check only for external callers
+  const bFirst = batteryFirst ?? isBatteryPriorityOverLoad(config);
 
   let solarUsed = 0;
   let solarDirectToLoad = 0;
@@ -285,7 +309,7 @@ function dispatchSelfConsumption(
   let batteryCharge = 0;
   let newBatteryState = batteryState;
 
-  if (batteryFirst && pvChargeAllowed) {
+  if (bFirst && pvChargeAllowed) {
     // Priority: Solar → Battery first, then remaining solar → Load
     const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryChargePower);
     batteryCharge = Math.min(solar, Math.max(0, batterySpace));
@@ -340,30 +364,25 @@ function dispatchSelfConsumption(
   return netBatteryFlows({ gridImport, gridExport, solarUsed, solarDirectToLoad, batteryCharge, batteryDischarge, batteryChargeFromGrid: 0, newBatteryState });
 }
 
-/** Net simultaneous battery charge and discharge to physically realistic single-direction flow */
+/** Net simultaneous battery charge and discharge to physically realistic single-direction flow.
+ *  Mutates the result in-place to avoid allocating new objects in the hot loop. */
 function netBatteryFlows(result: HourResult): HourResult {
   if (result.batteryCharge > 0 && result.batteryDischarge > 0) {
     const netCharge = result.batteryCharge - result.batteryDischarge;
     if (netCharge >= 0) {
       const offset = result.batteryDischarge;
-      return {
-        ...result,
-        solarUsed: result.solarUsed + offset,
-        solarDirectToLoad: result.solarDirectToLoad, // Preserve intentional value — do NOT inflate
-        batteryCharge: netCharge,
-        batteryDischarge: 0,
-        gridImport: Math.max(0, result.gridImport - offset),
-      };
+      result.solarUsed += offset;
+      // solarDirectToLoad preserved — do NOT inflate
+      result.batteryCharge = netCharge;
+      result.batteryDischarge = 0;
+      result.gridImport = Math.max(0, result.gridImport - offset);
     } else {
       const offset = result.batteryCharge;
-      return {
-        ...result,
-        solarUsed: result.solarUsed + offset,
-        solarDirectToLoad: result.solarDirectToLoad, // Preserve intentional value — do NOT inflate
-        batteryCharge: 0,
-        batteryDischarge: -netCharge,
-        gridImport: Math.max(0, result.gridImport - offset),
-      };
+      result.solarUsed += offset;
+      // solarDirectToLoad preserved — do NOT inflate
+      result.batteryCharge = 0;
+      result.batteryDischarge = -netCharge;
+      result.gridImport = Math.max(0, result.gridImport - offset);
     }
   }
   return result;
@@ -396,24 +415,21 @@ interface TouContext {
 function dispatchTouArbitrage(
   s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions,
   touContext?: TouContext,
+  batteryFirstOverride?: boolean,
 ): HourResult {
   const { load, solar, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
   const { pvChargeAllowed, gridChargeAllowed, loadDischargeAllowed, batteryDischargeAllowed, gridExportAllowed } = permissions;
 
-  // When chargeSources are configured, the permissions system already handles per-hour
-  // TOU filtering via isSourceActiveAtHour.  Treat charging as always structurally
-  // allowed here so we don't double-gate behind the legacy static chargeWindows.
   const hasChargeSources = config.chargeSources && config.chargeSources.some(s => s.enabled);
   const isChargeHour = hasChargeSources
-    ? (pvChargeAllowed || gridChargeAllowed) // Source-level permissions already applied
-    : isInAnyWindow(hour, config.chargeWindows); // Legacy static windows
+    ? (pvChargeAllowed || gridChargeAllowed)
+    : isInAnyWindow(hour, config.chargeWindows);
 
-  // Use TOU selection matrix when context is available; fall back to static windows
   const isDischargeHour = touContext
     ? isDischargePermittedByTouSelection(touContext.season, touContext.dayType, touContext.touPeriod, config.dischargeTouSelection)
     : isInAnyWindow(hour, config.dischargeWindows);
 
-  const batteryFirst = isBatteryPriorityOverLoad(config);
+  const batteryFirst = batteryFirstOverride ?? isBatteryPriorityOverLoad(config);
 
   let solarUsed = 0;
   let solarDirectToLoad = 0;
@@ -517,7 +533,7 @@ function dispatchTouArbitrage(
   } else {
     // Hour is neither a discharge nor charge hour per the TOU matrix — disable battery discharge
     // so the self-consumption fallback cannot bypass the user's TOU selection
-    return dispatchSelfConsumption(s, { ...permissions, batteryDischargeAllowed: false }, config);
+    return dispatchSelfConsumption(s, { ...permissions, batteryDischargeAllowed: false }, config, batteryFirst);
   }
 
   return netBatteryFlows({ gridImport, gridExport, solarUsed, solarDirectToLoad, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState });
@@ -581,8 +597,8 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig,
   return netBatteryFlows({ gridImport, gridExport, solarUsed, solarDirectToLoad: solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState });
 }
 
-function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions, touContext?: TouContext): HourResult {
-  return dispatchTouArbitrage(s, hour, config, permissions, touContext);
+function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions, touContext?: TouContext, batteryFirstOverride?: boolean): HourResult {
+  return dispatchTouArbitrage(s, hour, config, permissions, touContext, batteryFirstOverride);
 }
 
 // Deprecated functions (runEnergySimulation, scaleToAnnual, scaleToMonthly) removed.
@@ -761,6 +777,9 @@ export function runAnnualEnergySimulation(
   const minBatteryLevel = batteryCapacity * batteryMinSoC;
   const maxBatteryLevel = batteryCapacity * batteryMaxSoC;
 
+  // Hoist battery-priority check — constant for entire simulation
+  const batteryFirst = isBatteryPriorityOverLoad(effectiveDispatchConfig);
+
   // Accumulators
   let totalGridImport = 0;
   let totalGridExport = 0;
@@ -773,9 +792,18 @@ export function runAnnualEnergySimulation(
   let totalSolar = 0;
   let peakGridImport = 0;
 
+  // Reusable objects to avoid per-hour allocations
+  const hourState: HourState = {
+    load: 0, solar: 0, netLoad: 0, batteryState: 0,
+    minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower,
+  };
+
   for (const day of calendar) {
     // Build a per-day touPeriodToWindows function from this day's hourMap
     const dayTouResolver = makeTouPeriodToWindowsFromHourMap(day.hourMap);
+
+    // Pre-compute 24-hour permission lookup for this day (avoids 24 calls per day)
+    const dayPerms = precomputeDayPermissions(effectiveDispatchConfig, dayTouResolver);
 
     for (let h = 0; h < 24; h++) {
       const load = loadProfile[h] || 0;
@@ -784,37 +812,35 @@ export function runAnnualEnergySimulation(
         : (solarProfile[h] || 0);
       const netLoad = load - solar;
 
-      const hourState: HourState = {
-        load, solar, netLoad, batteryState,
-        minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower,
-      };
+      // Mutate reusable object instead of creating new one each hour
+      hourState.load = load;
+      hourState.solar = solar;
+      hourState.netLoad = netLoad;
+      hourState.batteryState = batteryState;
 
-      // Resolve permissions using this day's TOU context
-      const chargePerms = getChargePermissions(h, effectiveDispatchConfig, dayTouResolver);
-      const dischargePerms = getDischargePermissions(h, effectiveDispatchConfig, dayTouResolver);
-      const permissions: DispatchPermissions = { ...chargePerms, ...dischargePerms };
+      // Use pre-computed permissions for this hour
+      const perms = dayPerms[h];
 
       // Resolve TOU period BEFORE dispatch so it can inform discharge decisions
       const touPeriod: TOUPeriod = day.hourMap[h] || 'off-peak';
-      const touContext: TouContext = { season: day.season, dayType: day.dayType, touPeriod };
 
       let result: HourResult;
       switch (dispatchStrategy) {
         case 'none':
-          result = dispatchSelfConsumption(hourState, { ...permissions, batteryDischargeAllowed: false }, effectiveDispatchConfig);
+          result = dispatchSelfConsumption(hourState, { pvChargeAllowed: perms.pvChargeAllowed, gridChargeAllowed: perms.gridChargeAllowed, loadDischargeAllowed: perms.loadDischargeAllowed, batteryDischargeAllowed: false, gridExportAllowed: perms.gridExportAllowed }, effectiveDispatchConfig, batteryFirst);
           break;
         case 'tou-arbitrage':
-          result = dispatchTouArbitrage(hourState, h, effectiveDispatchConfig, permissions, touContext);
+          result = dispatchTouArbitrage(hourState, h, effectiveDispatchConfig, perms, { season: day.season, dayType: day.dayType, touPeriod }, batteryFirst);
           break;
         case 'peak-shaving':
-          result = dispatchPeakShaving(hourState, h, effectiveDispatchConfig, permissions);
+          result = dispatchPeakShaving(hourState, h, effectiveDispatchConfig, perms);
           break;
         case 'scheduled':
-          result = dispatchScheduled(hourState, h, effectiveDispatchConfig, permissions, touContext);
+          result = dispatchScheduled(hourState, h, effectiveDispatchConfig, perms, { season: day.season, dayType: day.dayType, touPeriod }, batteryFirst);
           break;
         case 'self-consumption':
         default:
-          result = dispatchSelfConsumption(hourState, permissions, effectiveDispatchConfig);
+          result = dispatchSelfConsumption(hourState, perms, effectiveDispatchConfig, batteryFirst);
           break;
       }
 
@@ -828,7 +854,7 @@ export function runAnnualEnergySimulation(
       totalBatteryChargeFromGrid += result.batteryChargeFromGrid;
       totalLoad += load;
       totalSolar += solar;
-      peakGridImport = Math.max(peakGridImport, result.gridImport);
+      if (result.gridImport > peakGridImport) peakGridImport = result.gridImport;
 
       hourlyData[hourlyIdx++] = {
         hour: HOUR_LABELS[h],
