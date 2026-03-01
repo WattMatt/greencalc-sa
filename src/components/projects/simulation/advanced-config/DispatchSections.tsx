@@ -145,6 +145,9 @@ interface BatteryCharacteristicsSectionProps {
   dischargeTouSelection?: DischargeTOUSelection;
   onDischargeTouSelectionChange?: (selection: DischargeTOUSelection) => void;
   touPeriodToWindows?: (period: TOUPeriod) => TimeWindow[];
+  standbyLossPercent?: number;
+  onStandbyLossPercentChange?: (value: number) => void;
+  batteryCapacityKwh?: number;
 }
 
 export function BatteryCharacteristicsSection({
@@ -153,6 +156,7 @@ export function BatteryCharacteristicsSection({
   batteryStrategy, onBatteryStrategyChange, dispatchConfig, onDispatchConfigChange,
   chargeTouPeriod, onChargeTouPeriodChange, dischargeTouSelection, onDischargeTouSelectionChange,
   touPeriodToWindows,
+  standbyLossPercent = 2, onStandbyLossPercentChange, batteryCapacityKwh = 0,
 }: BatteryCharacteristicsSectionProps) {
   const effectiveDispatchConfig = dispatchConfig ?? getDefaultDispatchConfig(batteryStrategy);
 
@@ -181,6 +185,25 @@ export function BatteryCharacteristicsSection({
           <Label className="text-xs">Max SoC (%)</Label>
           <NumericInput value={maxSoC} onChange={(v) => { const val = Math.max(0, Math.min(100, v)); onMaxSoCChange?.(val); if (val <= minSoC) onMinSoCChange?.(Math.max(0, val - 5)); }} fallback={100} integer className="h-8 text-xs" min={0} max={100} step={5} />
         </div>
+      </div>
+
+      {/* Standby / Parasitic Loss */}
+      <div className="space-y-1">
+        <Label className="text-xs">Standby Loss (%/month)</Label>
+        <NumericInput
+          value={standbyLossPercent}
+          onChange={(v) => onStandbyLossPercentChange?.(Math.max(0, Math.min(5, v)))}
+          fallback={2}
+          className="h-8 text-xs"
+          min={0}
+          max={5}
+          step={0.5}
+        />
+        {batteryCapacityKwh > 0 && (
+          <p className="text-[10px] text-muted-foreground">
+            ≈ {Math.round(batteryCapacityKwh * (standbyLossPercent / 100) * 12)} kWh/yr parasitic loss
+          </p>
+        )}
       </div>
 
       <Separator className="my-2" />
