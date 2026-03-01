@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.compile-latex]
 verify_jwt = false
+
+[functions.upload-generation-csv]
+verify_jwt = false
