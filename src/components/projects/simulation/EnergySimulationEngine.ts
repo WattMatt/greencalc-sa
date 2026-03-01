@@ -95,6 +95,8 @@ export interface EnergySimulationConfig {
   batteryMinSoC?: number; // Minimum state of charge (default 10%)
   batteryMaxSoC?: number; // Maximum state of charge (default 95%)
   batteryInitialSoC?: number; // Starting SoC (default 50%)
+  /** Parasitic standby loss as % of SoC per month (default 2). Accounts for cell self-discharge + BMS draw. */
+  batteryStandbyLossPercent?: number;
   dispatchStrategy?: BatteryDispatchStrategy;
   dispatchConfig?: DispatchConfig;
   /** Resolve a TOU period name ('off-peak'|'standard'|'peak') to TimeWindows */
@@ -633,6 +635,8 @@ export interface AnnualEnergySimulationResults {
   totalAnnualBatteryCharge: number;
   totalAnnualBatteryDischarge: number;
   totalAnnualBatteryChargeFromGrid: number;
+  /** Total kWh lost to battery parasitic/standby drain over the year */
+  totalAnnualParasiticLoss: number;
 
   // Efficiency metrics (annual)
   selfConsumptionRate: number;
@@ -757,9 +761,13 @@ export function runAnnualEnergySimulation(
     batteryMinSoC = 0.10,
     batteryMaxSoC = 0.95,
     batteryInitialSoC = 0.50,
+    batteryStandbyLossPercent = 2,
     dispatchStrategy = 'self-consumption',
     dispatchConfig,
   } = config;
+
+  // Hourly parasitic loss fraction: convert %/month → fraction/hour (720 hours/month)
+  const hourlyParasiticFraction = batteryCapacity > 0 ? (batteryStandbyLossPercent / 100) / 720 : 0;
 
   const batteryChargePower = configChargePower ?? batteryPower;
   const batteryDischargePower = configDischargePower ?? batteryPower;
@@ -790,6 +798,7 @@ export function runAnnualEnergySimulation(
   let totalBatteryChargeFromGrid = 0;
   let totalLoad = 0;
   let totalSolar = 0;
+  let totalParasiticLoss = 0;
   let peakGridImport = 0;
 
   // Reusable objects to avoid per-hour allocations
@@ -845,6 +854,14 @@ export function runAnnualEnergySimulation(
       }
 
       batteryState = result.newBatteryState;
+
+      // Apply parasitic standby loss after dispatch
+      if (hourlyParasiticFraction > 0 && batteryState > minBatteryLevel) {
+        const parasiticLoss = batteryState * hourlyParasiticFraction;
+        batteryState = Math.max(batteryState - parasiticLoss, minBatteryLevel);
+        totalParasiticLoss += parasiticLoss;
+      }
+
       totalGridImport += result.gridImport;
       totalGridExport += result.gridExport;
       totalSolarUsed += result.solarUsed;
@@ -894,6 +911,7 @@ export function runAnnualEnergySimulation(
     totalAnnualBatteryCharge: totalBatteryCharge,
     totalAnnualBatteryDischarge: totalBatteryDischarge,
     totalAnnualBatteryChargeFromGrid: totalBatteryChargeFromGrid,
+    totalAnnualParasiticLoss: totalParasiticLoss,
     selfConsumptionRate,
     solarCoverageRate,
     peakLoad,
