@@ -1,133 +1,123 @@
 
 
-## Remote CSV Upload API for Generation Data
+## Generation Tab Code Review and Optimisation
 
-### Overview
+### Issues Found
 
-Create a backend function called `upload-generation-csv` that accepts a CSV file (as text content) along with metadata, parses it server-side using the same column-mapping logic as the UI, and upserts the results into `generation_records`, `generation_daily_records`, `generation_readings`, and `generation_source_guarantees`.
+**1. Heavy Code Duplication: ActualGenerationCard and BuildingLoadCard**
 
-This gives you a single HTTP endpoint you can call from any server script (cron job, Python, Node, curl, etc.).
+These two files are ~90% identical (314 vs 322 lines). The only differences are:
+- Column name: `actual_kwh` vs `building_load_kwh`
+- Card title and icon
+- Council meter type flag on source guarantees
+- Slightly different reading upsert logic (BuildingLoadCard preserves `actual_kwh` when upserting)
 
-### API Design
+**Fix:** Extract a shared `GenerationDataCard` component that accepts a `dataType: "solar" | "council"` prop. All save, reset, and CSV upload logic is parameterised by this single flag. Reduces ~640 lines to ~350.
 
-**Endpoint:** `POST /functions/v1/upload-generation-csv`
+---
 
-**Headers:**
-- `Authorization: Bearer <your_service_role_key_or_user_jwt>`
-- `Content-Type: application/json`
+**2. Duplicate `MonthData` Interface (4 files)**
 
-**Request Body:**
-```text
-{
-  "project_id": "uuid-of-the-project",
-  "year": 2026,
-  "type": "solar" | "council",          // solar = actual generation, council = building load
-  "source_label": "Inverter-A",          // name for the data source (used as source tag)
-  "csv_content": "Date,Time,kW\n...",    // raw CSV text
-  "date_col": 0,                         // column index for date
-  "value_col": 2,                        // column index for kW/kWh values
-  "time_col": 1,                         // column index for time (optional, -1 to skip)
-  "is_kw": true,                         // true = values are kW (convert using interval), false = already kWh
-  "mode": "accumulate" | "replace"       // accumulate adds to existing; replace overwrites the month
-}
-```
+The `MonthData` interface is independently defined in `ActualGenerationCard.tsx`, `BuildingLoadCard.tsx`, `GuaranteedGenerationCard.tsx`, `PerformanceChart.tsx`, and `PerformanceSummaryTable.tsx` — each with slightly different fields. Some include `building_load_kwh`, others do not.
 
-**Response:**
-```text
-{
-  "success": true,
-  "months_affected": [1, 2, 3],
-  "total_kwh_added": 12345.67,
-  "readings_count": 8760,
-  "daily_records": 90
-}
-```
+**Fix:** Define a single canonical `MonthData` type in `GenerationTab.tsx` (which already has the superset) and export it. All child components import from there.
 
-### Server-Side Logic
+---
 
-The edge function will:
+**3. Duplicate Paginated Readings Fetch (2 components)**
 
-1. **Validate** the request (project_id exists, columns are in range, CSV has data).
-2. **Parse** the CSV using the same date-extraction and interval-detection logic from `CSVPreviewDialog.tsx` — ported to Deno/TypeScript.
-3. **Aggregate** into monthly totals, daily totals, and individual timestamp readings.
-4. **Upsert** into the four tables using the service role key (bypasses RLS):
-   - `generation_records` — monthly totals (actual_kwh or building_load_kwh depending on `type`)
-   - `generation_daily_records` — daily totals
-   - `generation_readings` — raw timestamped readings
-   - `generation_source_guarantees` — auto-create source entry with meter_type = "solar" or "council"
-5. **Return** a summary of what was written.
+Both `PerformanceChart.tsx` (line 87-111) and `PerformanceSummaryTable.tsx` (line 144-167) independently paginate through `generation_readings` with identical logic. For a month with 30-min intervals across multiple sources, this can be 5,000+ rows fetched twice.
 
-### Authentication
+**Fix:** Create a shared `useGenerationReadings(projectId, year, month)` hook that handles the paginated fetch. Both components consume the same cached query via TanStack Query (same query key = single fetch).
 
-The function will use `verify_jwt = false` in config.toml and validate the caller via `getClaims()`. For server-to-server calls using the service role key, it will check for the `service_role` claim. This means your server script can authenticate with the service role key directly.
+---
 
-### Example Usage (curl)
+**4. Duplicate CSV Parsing Utilities (3 locations)**
 
-```text
-curl -X POST \
-  https://zhhcwtftckdwfoactkea.supabase.co/functions/v1/upload-generation-csv \
-  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "project_id": "f663da5d-...",
-    "year": 2026,
-    "type": "solar",
-    "source_label": "Inverter-A",
-    "csv_content": "Date,Time,kW\n2026-01-01,00:00,150\n2026-01-01,00:30,145\n...",
-    "date_col": 0,
-    "value_col": 2,
-    "time_col": 1,
-    "is_kw": true,
-    "mode": "accumulate"
-  }'
-```
+`extractDateInfo`, `extractTimestamp`, `timeDiffMinutes`, and `strip` are duplicated across:
+- `CSVPreviewDialog.tsx` (lines 40-74)
+- `csvUtils.ts` (lines 35-121)  
+- `supabase/functions/upload-generation-csv/index.ts` (lines 14-43)
 
-### Example Usage (Python)
+**Fix:** Consolidate into `csvUtils.ts` as the single source of truth. Import from there in `CSVPreviewDialog.tsx`. The edge function copy is acceptable (Deno can't import from `src/`).
 
-```text
-import requests, json
+---
 
-url = "https://<project-ref>.supabase.co/functions/v1/upload-generation-csv"
-headers = {
-    "Authorization": "Bearer <SERVICE_ROLE_KEY>",
-    "Content-Type": "application/json"
-}
+**5. Unused Import: `parseCSVFiles`**
 
-with open("inverter_data.csv") as f:
-    csv_text = f.read()
+Both `ActualGenerationCard.tsx` (line 8) and `BuildingLoadCard.tsx` (line 8) import `parseCSVFiles` from `csvUtils.ts`, but neither calls it — the `CSVPreviewDialog` handles all parsing now.
 
-resp = requests.post(url, headers=headers, json={
-    "project_id": "f663da5d-...",
-    "year": 2026,
-    "type": "solar",
-    "source_label": "Inverter-A",
-    "csv_content": csv_text,
-    "date_col": 0,
-    "value_col": 2,
-    "time_col": 1,
-    "is_kw": True,
-    "mode": "accumulate"
-})
-print(resp.json())
-```
+**Fix:** Remove the unused imports. Evaluate whether `csvUtils.ts`'s `parseCSVFiles` function itself is still used anywhere; if not, mark it as legacy or remove.
 
-### Implementation Details
+---
 
-**New file:** `supabase/functions/upload-generation-csv/index.ts`
+**6. Stale Date Filter in PerformanceChart**
 
-The function will:
-- Use `npm:@supabase/supabase-js` with the service role key for DB writes (bypasses RLS)
-- Port the date parsing (`extractDateInfo`, `extractTimestamp`, `timeDiffMinutes`) from `CSVPreviewDialog.tsx`
-- Batch upserts in groups of 500 rows for `generation_readings` (same as the UI does)
-- Support both `accumulate` mode (add to existing values) and `replace` mode (overwrite monthly values)
-- Handle the `council` type by writing to `building_load_kwh` columns instead of `actual_kwh`
+`dateStart` and `dateEnd` are initialised from `startDate`/`endDate` (derived from `month`/`year`), but when the user changes month or year via the parent selectors, these state values are never reset. The chart shows stale data until the user manually adjusts the date inputs.
 
-**Config update:** `supabase/config.toml` — add `[functions.upload-generation-csv]` with `verify_jwt = false`
+**Fix:** Add a `useEffect` that resets `dateStart` and `dateEnd` whenever `startDate` or `endDate` changes.
 
-### Files Changed
+---
 
-| File | Change |
+**7. PerformanceChart.tsx is 656 Lines**
+
+Chart data aggregation (lines 223-300), Y-axis max calculation (lines 338-398), and per-source reading aggregation (lines 164-200) are all inline. This makes the component hard to maintain.
+
+**Fix:** Extract:
+- `useChartAggregation(readings, timeframe, showSources, ...)` — returns `chartData`
+- `useYAxisMax(filteredReadings, timeframe, ...)` — returns `yAxisMax`
+- Move helper functions (`parseLocal`, `formatTimeLabel`, `daysInMonth`) to a shared `generationUtils.ts`
+
+---
+
+**8. PerformanceSummaryTable.tsx is 776 Lines**
+
+The main `useMemo` (lines 218-439) contains ~220 lines of downtime calculation, source mapping, and reading aggregation. Four tab renders are all inline.
+
+**Fix:** Extract:
+- `useDailyPerformanceData(readings, sourceGuarantees, ...)` — returns `dailyRows`, `sourceDayMap`, etc.
+- Optionally extract each tab's table into a sub-component (`ProductionTab`, `DownTimeTab`, `RevenueTab`, `PerformanceTab`)
+
+---
+
+**9. N+1 Database Writes in CSV Save**
+
+`saveCSVTotals` in both cards performs individual `upsert` calls inside loops — one per month, one per daily record, plus batch inserts for readings. For a 3-month CSV with 90 daily records, this is ~100 sequential DB calls.
+
+**Fix:** Batch the monthly and daily upserts where possible. For daily records, collect all upsert payloads and use a single `.upsert()` call with an array. For monthly records (typically 1-3), the overhead is minor but can still be batched.
+
+---
+
+### Proposed File Changes
+
+| File | Action |
 |---|---|
-| `supabase/functions/upload-generation-csv/index.ts` | New edge function with CSV parsing and DB upsert logic |
-| `supabase/config.toml` | Add function config entry |
+| `GenerationTab.tsx` | Export `MonthData` type; remove duplicate interface from children |
+| `ActualGenerationCard.tsx` | Replace with thin wrapper around new `GenerationDataCard` |
+| `BuildingLoadCard.tsx` | Replace with thin wrapper around new `GenerationDataCard` |
+| `GenerationDataCard.tsx` | **New** — unified card component parameterised by `dataType` |
+| `hooks/useGenerationReadings.ts` | **New** — shared paginated readings fetch hook |
+| `generationUtils.ts` | **New** — shared helpers (`parseLocal`, `formatTimeLabel`, `daysInMonth`, etc.) |
+| `csvUtils.ts` | Add missing exports (`extractDateInfo`, `extractTimestamp`, `strip`); remove or mark `parseCSVFiles` as legacy |
+| `CSVPreviewDialog.tsx` | Import parsing utils from `csvUtils.ts` instead of inline |
+| `PerformanceChart.tsx` | Use shared readings hook; extract aggregation logic; add date filter reset effect |
+| `PerformanceSummaryTable.tsx` | Use shared readings hook; extract daily performance computation |
+
+### Priority Order
+
+1. Fix stale date filter (quick, high-impact bug fix)
+2. Remove unused `parseCSVFiles` imports
+3. Consolidate `MonthData` type
+4. Create shared readings hook (eliminates duplicate fetches)
+5. Unify ActualGenerationCard + BuildingLoadCard
+6. Extract chart aggregation logic
+7. Extract summary table computation logic
+8. Batch DB writes in CSV save
+
+### Estimated Impact
+
+- ~400 lines of duplicated code removed
+- One fewer redundant network fetch per page load
+- Stale date filter bug fixed
+- Clearer separation of calculation logic from UI (per project conventions)
 
