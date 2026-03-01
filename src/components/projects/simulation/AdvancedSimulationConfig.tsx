@@ -1,36 +1,34 @@
-import React, { useState, useCallback, Fragment } from "react";
-import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles, Save, Trash2, User, GripVertical } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { BatteryDispatchStrategy, DispatchConfig, TimeWindow, ChargeSource, DischargeSource } from "./EnergySimulationEngine";
-import { getDefaultDispatchConfig, DEFAULT_CHARGE_SOURCES, DEFAULT_DISCHARGE_SOURCES } from "./EnergySimulationEngine";
-import { DischargeTOUSelection, DEFAULT_DISCHARGE_TOU_SELECTION } from "@/components/projects/load-profile/types";
+import React, { useState } from "react";
+import { ChevronDown, ChevronUp, Settings2, Sparkles, Save, Trash2, User, Sun, Battery, TrendingUp, Zap, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import { NumericInput } from "@/components/ui/numeric-input";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import type { BatteryDispatchStrategy, DispatchConfig, TimeWindow, DischargeSource } from "./EnergySimulationEngine";
+import { DEFAULT_DISCHARGE_SOURCES } from "./EnergySimulationEngine";
+import { DischargeTOUSelection } from "@/components/projects/load-profile/types";
 import {
   AdvancedSimulationConfig,
   DEFAULT_ADVANCED_CONFIG,
-  SeasonalConfig,
-  DegradationConfig,
-  AdvancedFinancialConfig,
-  GridConstraintsConfig,
-  LoadGrowthConfig,
   SIMULATION_PRESETS,
   PresetName,
 } from "./AdvancedSimulationTypes";
 import { useSimulationPresets, SimulationPreset } from "@/hooks/useSimulationPresets";
+
+import {
+  CollapsibleSection,
+  SeasonalSection,
+  DegradationSection,
+  FinancialSection,
+  GridConstraintsSection,
+  LoadGrowthSection,
+  SolarCharacteristicsSection,
+  BatteryCharacteristicsSection,
+} from "./advanced-config";
 
 type TOUPeriod = 'off-peak' | 'standard' | 'peak';
 
@@ -47,7 +45,6 @@ interface AdvancedSimulationConfigProps {
   onBatteryMinSoCChange?: (value: number) => void;
   batteryMaxSoC?: number;
   onBatteryMaxSoCChange?: (value: number) => void;
-  // Dispatch strategy props
   batteryStrategy?: BatteryDispatchStrategy;
   onBatteryStrategyChange?: (strategy: BatteryDispatchStrategy) => void;
   dispatchConfig?: DispatchConfig;
@@ -57,72 +54,43 @@ interface AdvancedSimulationConfigProps {
   dischargeTouSelection?: DischargeTOUSelection;
   onDischargeTouSelectionChange?: (selection: DischargeTOUSelection) => void;
   touPeriodToWindows?: (period: TOUPeriod) => TimeWindow[];
-  // Discharge sources props
   dischargeSources?: DischargeSource[];
   onDischargeSourcesChange?: (sources: DischargeSource[]) => void;
 }
 
-export function AdvancedSimulationConfigPanel({ 
-  config, 
-  onChange,
-  includesBattery = false,
-  batteryChargeCRate,
-  onBatteryChargeCRateChange,
-  batteryDischargeCRate,
-  onBatteryDischargeCRateChange,
-  batteryDoD,
-  batteryMinSoC,
-  onBatteryMinSoCChange,
-  batteryMaxSoC,
-  onBatteryMaxSoCChange,
-  batteryStrategy,
-  onBatteryStrategyChange,
-  dispatchConfig,
-  onDispatchConfigChange,
-  chargeTouPeriod,
-  onChargeTouPeriodChange,
-  dischargeTouSelection,
-  onDischargeTouSelectionChange,
-  touPeriodToWindows,
-  dischargeSources,
-  onDischargeSourcesChange,
+export function AdvancedSimulationConfigPanel({
+  config, onChange, includesBattery = false,
+  batteryChargeCRate, onBatteryChargeCRateChange,
+  batteryDischargeCRate, onBatteryDischargeCRateChange,
+  batteryDoD, batteryMinSoC, onBatteryMinSoCChange,
+  batteryMaxSoC, onBatteryMaxSoCChange,
+  batteryStrategy, onBatteryStrategyChange,
+  dispatchConfig, onDispatchConfigChange,
+  chargeTouPeriod, onChargeTouPeriodChange,
+  dischargeTouSelection, onDischargeTouSelectionChange,
+  touPeriodToWindows, dischargeSources, onDischargeSourcesChange,
 }: AdvancedSimulationConfigProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [presetDescription, setPresetDescription] = useState("");
-  
   const { presets, isLoading, createPreset, deletePreset } = useSimulationPresets();
-  
+
   const enabledCount = [
-    config.seasonal.enabled,
-    config.degradation.enabled,
-    config.financial.enabled,
-    config.gridConstraints.enabled,
-    config.loadGrowth.enabled,
+    config.seasonal.enabled, config.degradation.enabled,
+    config.financial.enabled, config.gridConstraints.enabled, config.loadGrowth.enabled,
   ].filter(Boolean).length;
 
   const handleSavePreset = () => {
     if (!presetName.trim()) return;
-    
-    createPreset.mutate({
-      name: presetName.trim(),
-      description: presetDescription.trim() || undefined,
-      config,
-    }, {
-      onSuccess: () => {
-        setSaveDialogOpen(false);
-        setPresetName("");
-        setPresetDescription("");
-      },
+    createPreset.mutate({ name: presetName.trim(), description: presetDescription.trim() || undefined, config }, {
+      onSuccess: () => { setSaveDialogOpen(false); setPresetName(""); setPresetDescription(""); },
     });
   };
 
   const handleDeletePreset = (preset: SimulationPreset, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm(`Delete preset "${preset.name}"?`)) {
-      deletePreset.mutate(preset.id);
-    }
+    if (confirm(`Delete preset "${preset.name}"?`)) deletePreset.mutate(preset.id);
   };
 
   return (
@@ -134,11 +102,7 @@ export function AdvancedSimulationConfigPanel({
               <div className="flex items-center gap-2">
                 <Settings2 className="h-4 w-4 text-muted-foreground" />
                 <CardTitle className="text-sm font-medium">Advanced Simulation</CardTitle>
-                {enabledCount > 0 && (
-                  <Badge variant="secondary" className="text-xs">
-                    {enabledCount} active
-                  </Badge>
-                )}
+                {enabledCount > 0 && <Badge variant="secondary" className="text-xs">{enabledCount} active</Badge>}
               </div>
               <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
                 {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -146,7 +110,7 @@ export function AdvancedSimulationConfigPanel({
             </div>
           </CardHeader>
         </CollapsibleTrigger>
-        
+
         <CollapsibleContent>
           <CardContent className="space-y-4 pt-0">
             {/* Built-in Presets */}
@@ -161,36 +125,16 @@ export function AdvancedSimulationConfigPanel({
                   return (
                     <Tooltip key={key}>
                       <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onChange(preset.config);
-                          }}
-                        >
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); onChange(preset.config); }}>
                           {preset.name}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-xs">
-                        <p className="text-xs">{preset.description}</p>
-                      </TooltipContent>
+                      <TooltipContent side="bottom" className="max-w-xs"><p className="text-xs">{preset.description}</p></TooltipContent>
                     </Tooltip>
                   );
                 })}
               </TooltipProvider>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-muted-foreground ml-auto"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(DEFAULT_ADVANCED_CONFIG);
-                }}
-              >
-                Reset
-              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground ml-auto" onClick={(e) => { e.stopPropagation(); onChange(DEFAULT_ADVANCED_CONFIG); }}>Reset</Button>
             </div>
 
             {/* Custom Presets */}
@@ -200,87 +144,44 @@ export function AdvancedSimulationConfigPanel({
                   <User className="h-4 w-4 text-muted-foreground" />
                   <Label className="text-sm font-medium">My Presets:</Label>
                 </div>
-                
                 <TooltipProvider>
                   {presets.map((preset) => (
                     <Tooltip key={preset.id}>
                       <TooltipTrigger asChild>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-7 text-xs gap-1 group"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onChange(preset.config as AdvancedSimulationConfig);
-                          }}
-                        >
+                        <Button variant="secondary" size="sm" className="h-7 text-xs gap-1 group" onClick={(e) => { e.stopPropagation(); onChange(preset.config as AdvancedSimulationConfig); }}>
                           {preset.name}
-                          <Trash2 
-                            className="h-3 w-3 opacity-0 group-hover:opacity-100 text-destructive transition-opacity"
-                            onClick={(e) => handleDeletePreset(preset, e)}
-                          />
+                          <Trash2 className="h-3 w-3 opacity-0 group-hover:opacity-100 text-destructive transition-opacity" onClick={(e) => handleDeletePreset(preset, e)} />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-xs">
-                        <p className="text-xs">{preset.description || "Custom preset"}</p>
-                      </TooltipContent>
+                      <TooltipContent side="bottom" className="max-w-xs"><p className="text-xs">{preset.description || "Custom preset"}</p></TooltipContent>
                     </Tooltip>
                   ))}
                 </TooltipProvider>
-
-                {presets.length === 0 && (
-                  <span className="text-xs text-muted-foreground">No saved presets yet</span>
-                )}
-                
+                {presets.length === 0 && <span className="text-xs text-muted-foreground">No saved presets yet</span>}
                 <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1 ml-auto"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Save className="h-3 w-3" />
-                      Save Current
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1 ml-auto" onClick={(e) => e.stopPropagation()}>
+                      <Save className="h-3 w-3" />Save Current
                     </Button>
                   </DialogTrigger>
                   <DialogContent onClick={(e) => e.stopPropagation()}>
                     <DialogHeader>
                       <DialogTitle>Save Preset</DialogTitle>
-                      <DialogDescription>
-                        Save your current configuration as a reusable preset.
-                      </DialogDescription>
+                      <DialogDescription>Save your current configuration as a reusable preset.</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
                         <Label htmlFor="preset-name">Preset Name</Label>
-                        <Input
-                          id="preset-name"
-                          placeholder="e.g., High Solar Scenario"
-                          value={presetName}
-                          onChange={(e) => setPresetName(e.target.value)}
-                          maxLength={50}
-                        />
+                        <Input id="preset-name" placeholder="e.g., High Solar Scenario" value={presetName} onChange={(e) => setPresetName(e.target.value)} maxLength={50} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="preset-description">Description (optional)</Label>
-                        <Input
-                          id="preset-description"
-                          placeholder="Brief description of this configuration"
-                          value={presetDescription}
-                          onChange={(e) => setPresetDescription(e.target.value)}
-                          maxLength={200}
-                        />
+                        <Input id="preset-description" placeholder="Brief description" value={presetDescription} onChange={(e) => setPresetDescription(e.target.value)} maxLength={200} />
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button 
-                        onClick={handleSavePreset}
-                        disabled={!presetName.trim() || createPreset.isPending}
-                      >
+                      <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+                      <Button onClick={handleSavePreset} disabled={!presetName.trim() || createPreset.isPending}>
                         {createPreset.isPending ? "Saving..." : "Save Preset"}
                       </Button>
                     </DialogFooter>
@@ -289,1130 +190,54 @@ export function AdvancedSimulationConfigPanel({
               </div>
             )}
 
-            {/* Solar Characteristics - Discharge Sources */}
+            {/* Section panels */}
             <CollapsibleSection icon={<Sun className="h-4 w-4 text-amber-500" />} title="Solar Characteristics">
-              <SolarCharacteristicsSection
-                dischargeSources={dischargeSources ?? DEFAULT_DISCHARGE_SOURCES}
-                onDischargeSourcesChange={onDischargeSourcesChange}
-              />
+              <SolarCharacteristicsSection dischargeSources={dischargeSources ?? DEFAULT_DISCHARGE_SOURCES} onDischargeSourcesChange={onDischargeSourcesChange} />
             </CollapsibleSection>
 
-            {/* Battery Characteristics */}
             {includesBattery && (
               <CollapsibleSection icon={<Battery className="h-4 w-4 text-primary" />} title="Battery Characteristics">
                 <BatteryCharacteristicsSection
-                  chargeCRate={batteryChargeCRate}
-                  onChargeCRateChange={onBatteryChargeCRateChange}
-                  dischargeCRate={batteryDischargeCRate}
-                  onDischargeCRateChange={onBatteryDischargeCRateChange}
-                  doD={batteryDoD}
-                  minSoC={batteryMinSoC}
-                  onMinSoCChange={onBatteryMinSoCChange}
-                  maxSoC={batteryMaxSoC}
-                  onMaxSoCChange={onBatteryMaxSoCChange}
-                  batteryStrategy={batteryStrategy}
-                  onBatteryStrategyChange={onBatteryStrategyChange}
-                  dispatchConfig={dispatchConfig}
-                  onDispatchConfigChange={onDispatchConfigChange}
-                  chargeTouPeriod={chargeTouPeriod}
-                  onChargeTouPeriodChange={onChargeTouPeriodChange}
-                  dischargeTouSelection={dischargeTouSelection}
-                  onDischargeTouSelectionChange={onDischargeTouSelectionChange}
+                  chargeCRate={batteryChargeCRate!} onChargeCRateChange={onBatteryChargeCRateChange}
+                  dischargeCRate={batteryDischargeCRate!} onDischargeCRateChange={onBatteryDischargeCRateChange}
+                  doD={batteryDoD!} minSoC={batteryMinSoC!} onMinSoCChange={onBatteryMinSoCChange}
+                  maxSoC={batteryMaxSoC!} onMaxSoCChange={onBatteryMaxSoCChange}
+                  batteryStrategy={batteryStrategy} onBatteryStrategyChange={onBatteryStrategyChange}
+                  dispatchConfig={dispatchConfig} onDispatchConfigChange={onDispatchConfigChange}
+                  chargeTouPeriod={chargeTouPeriod} onChargeTouPeriodChange={onChargeTouPeriodChange}
+                  dischargeTouSelection={dischargeTouSelection} onDischargeTouSelectionChange={onDischargeTouSelectionChange}
                   touPeriodToWindows={touPeriodToWindows}
                 />
               </CollapsibleSection>
             )}
 
-            {/* Seasonal Variation */}
-            <CollapsibleSection 
-              icon={<Sun className="h-4 w-4 text-amber-500" />} 
-              title="Seasonal Variation"
-              toggleEnabled={config.seasonal.enabled}
-              onToggleEnabled={(enabled) => onChange({ ...config, seasonal: { ...config.seasonal, enabled } })}
-            >
-              {config.seasonal.enabled && (
-                <SeasonalSection 
-                  config={config.seasonal}
-                  onChange={(seasonal) => onChange({ ...config, seasonal })}
-                />
-              )}
+            <CollapsibleSection icon={<Sun className="h-4 w-4 text-amber-500" />} title="Seasonal Variation"
+              toggleEnabled={config.seasonal.enabled} onToggleEnabled={(enabled) => onChange({ ...config, seasonal: { ...config.seasonal, enabled } })}>
+              {config.seasonal.enabled && <SeasonalSection config={config.seasonal} onChange={(seasonal) => onChange({ ...config, seasonal })} />}
             </CollapsibleSection>
-            
-            {/* Degradation Modeling */}
-            <CollapsibleSection 
-              icon={<Battery className="h-4 w-4 text-primary" />} 
-              title="Degradation Modeling"
-              toggleEnabled={config.degradation.enabled}
-              onToggleEnabled={(enabled) => onChange({ ...config, degradation: { ...config.degradation, enabled } })}
-            >
-              {config.degradation.enabled && (
-                <DegradationSection
-                  config={config.degradation}
-                  onChange={(degradation) => onChange({ ...config, degradation })}
-                  projectLifetime={config.financial.projectLifetimeYears || 20}
-                  includesBattery={includesBattery}
-                />
-              )}
+
+            <CollapsibleSection icon={<Battery className="h-4 w-4 text-primary" />} title="Degradation Modeling"
+              toggleEnabled={config.degradation.enabled} onToggleEnabled={(enabled) => onChange({ ...config, degradation: { ...config.degradation, enabled } })}>
+              {config.degradation.enabled && <DegradationSection config={config.degradation} onChange={(degradation) => onChange({ ...config, degradation })} projectLifetime={config.financial.projectLifetimeYears || 20} includesBattery={includesBattery} />}
             </CollapsibleSection>
-            
-            {/* Financial Sophistication */}
-            <CollapsibleSection 
-              icon={<TrendingUp className="h-4 w-4 text-primary" />} 
-              title="Financial Sophistication"
-              toggleEnabled={config.financial.enabled}
-              onToggleEnabled={(enabled) => onChange({ ...config, financial: { ...config.financial, enabled } })}
-            >
-              {config.financial.enabled && (
-                <FinancialSection
-                  config={config.financial}
-                  onChange={(financial) => onChange({ ...config, financial })}
-                />
-              )}
+
+            <CollapsibleSection icon={<TrendingUp className="h-4 w-4 text-primary" />} title="Financial Sophistication"
+              toggleEnabled={config.financial.enabled} onToggleEnabled={(enabled) => onChange({ ...config, financial: { ...config.financial, enabled } })}>
+              {config.financial.enabled && <FinancialSection config={config.financial} onChange={(financial) => onChange({ ...config, financial })} />}
             </CollapsibleSection>
-            
-            {/* Grid Constraints */}
-            <CollapsibleSection 
-              icon={<Zap className="h-4 w-4 text-yellow-500" />} 
-              title="Grid Constraints"
-              toggleEnabled={config.gridConstraints.enabled}
-              onToggleEnabled={(enabled) => onChange({ ...config, gridConstraints: { ...config.gridConstraints, enabled } })}
-            >
-              {config.gridConstraints.enabled && (
-                <GridConstraintsSection
-                  config={config.gridConstraints}
-                  onChange={(gridConstraints) => onChange({ ...config, gridConstraints })}
-                />
-              )}
+
+            <CollapsibleSection icon={<Zap className="h-4 w-4 text-yellow-500" />} title="Grid Constraints"
+              toggleEnabled={config.gridConstraints.enabled} onToggleEnabled={(enabled) => onChange({ ...config, gridConstraints: { ...config.gridConstraints, enabled } })}>
+              {config.gridConstraints.enabled && <GridConstraintsSection config={config.gridConstraints} onChange={(gridConstraints) => onChange({ ...config, gridConstraints })} />}
             </CollapsibleSection>
-            
-            {/* Load Growth */}
-            <CollapsibleSection 
-              icon={<Building2 className="h-4 w-4 text-purple-500" />} 
-              title="Load Growth"
-              toggleEnabled={config.loadGrowth.enabled}
-              onToggleEnabled={(enabled) => onChange({ ...config, loadGrowth: { ...config.loadGrowth, enabled } })}
-            >
-              {config.loadGrowth.enabled && (
-                <LoadGrowthSection
-                  config={config.loadGrowth}
-                  onChange={(loadGrowth) => onChange({ ...config, loadGrowth })}
-                />
-              )}
+
+            <CollapsibleSection icon={<Building2 className="h-4 w-4 text-purple-500" />} title="Load Growth"
+              toggleEnabled={config.loadGrowth.enabled} onToggleEnabled={(enabled) => onChange({ ...config, loadGrowth: { ...config.loadGrowth, enabled } })}>
+              {config.loadGrowth.enabled && <LoadGrowthSection config={config.loadGrowth} onChange={(loadGrowth) => onChange({ ...config, loadGrowth })} />}
             </CollapsibleSection>
           </CardContent>
         </CollapsibleContent>
       </Card>
     </Collapsible>
-  );
-}
-
-// ============= Collapsible Section Wrapper =============
-
-function CollapsibleSection({ 
-  icon, 
-  title, 
-  badge,
-  toggleEnabled,
-  onToggleEnabled,
-  children,
-  defaultOpen = false,
-}: { 
-  icon: React.ReactNode;
-  title: string;
-  badge?: boolean;
-  toggleEnabled?: boolean;
-  onToggleEnabled?: (enabled: boolean) => void;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="rounded-lg border bg-card">
-        <div className="flex items-center justify-between p-3">
-          <CollapsibleTrigger asChild>
-            <button className="flex items-center gap-2 hover:opacity-80 transition-opacity flex-1">
-              {icon}
-              <Label className="text-sm font-medium cursor-pointer">{title}</Label>
-              {badge && <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Active</Badge>}
-              {isOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
-            </button>
-          </CollapsibleTrigger>
-          {onToggleEnabled !== undefined && (
-            <Switch
-              checked={toggleEnabled}
-              onCheckedChange={onToggleEnabled}
-            />
-          )}
-        </div>
-        <CollapsibleContent>
-          <div className="px-3 pb-3">
-            {children}
-          </div>
-        </CollapsibleContent>
-      </div>
-    </Collapsible>
-  );
-}
-
-// ============= Section Components =============
-
-function SeasonalSection({ 
-  config, 
-  onChange 
-}: { 
-  config: SeasonalConfig; 
-  onChange: (config: SeasonalConfig) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="text-xs text-muted-foreground">
-        Monthly irradiance factors adjust solar generation throughout the year
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs">High Demand Load Factor</Label>
-          <div className="flex items-center gap-2">
-            <Slider
-              value={[config.highDemandLoadMultiplier * 100]}
-              onValueChange={([v]) => onChange({ ...config, highDemandLoadMultiplier: v / 100 })}
-              min={90}
-              max={130}
-              step={1}
-              className="flex-1"
-            />
-            <span className="text-xs w-12 text-right">{(config.highDemandLoadMultiplier * 100).toFixed(0)}%</span>
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Low Demand Load Factor</Label>
-          <div className="flex items-center gap-2">
-            <Slider
-              value={[config.lowDemandLoadMultiplier * 100]}
-              onValueChange={([v]) => onChange({ ...config, lowDemandLoadMultiplier: v / 100 })}
-              min={70}
-              max={110}
-              step={1}
-              className="flex-1"
-            />
-            <span className="text-xs w-12 text-right">{(config.lowDemandLoadMultiplier * 100).toFixed(0)}%</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DegradationSection({ 
-  config, 
-  onChange,
-  projectLifetime = 20,
-  includesBattery = false
-}: { 
-  config: DegradationConfig; 
-  onChange: (config: DegradationConfig) => void;
-  projectLifetime?: number;
-  includesBattery?: boolean;
-}) {
-  const [panelApplyRate, setPanelApplyRate] = useState(config.panelSimpleRate ?? 0.5);
-  const [batteryApplyRate, setBatteryApplyRate] = useState(config.batterySimpleRate ?? 3.0);
-  
-  // Ensure arrays are the right length
-  const ensureArrayLength = (arr: number[], length: number, defaultValue: number): number[] => {
-    const newArr = [...arr];
-    while (newArr.length < length) newArr.push(defaultValue);
-    return newArr.slice(0, length);
-  };
-  
-  const panelRates = ensureArrayLength(config.panelYearlyRates || [], projectLifetime, config.panelSimpleRate || 0.5);
-  const batteryRates = ensureArrayLength(config.batteryYearlyRates || [], projectLifetime, config.batterySimpleRate || 3.0);
-  
-  const handlePanelYearChange = (index: number, value: number) => {
-    const newRates = [...panelRates];
-    newRates[index] = value;
-    onChange({ ...config, panelYearlyRates: newRates });
-  };
-  
-  const handleBatteryYearChange = (index: number, value: number) => {
-    const newRates = [...batteryRates];
-    newRates[index] = value;
-    onChange({ ...config, batteryYearlyRates: newRates });
-  };
-  
-  const applyPanelRateToAll = () => {
-    onChange({ ...config, panelYearlyRates: Array(projectLifetime).fill(panelApplyRate) });
-  };
-  
-  const applyBatteryRateToAll = () => {
-    onChange({ ...config, batteryYearlyRates: Array(projectLifetime).fill(batteryApplyRate) });
-  };
-
-  return (
-    <div className="space-y-4">
-      {/* Side-by-side layout: Panel (left) and Battery (right) - or full width if no battery */}
-      <div className={includesBattery ? "grid grid-cols-2 gap-4" : ""}>
-            {/* Panel Degradation - LEFT (or full width) */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">Panel Degradation</Label>
-                <RadioGroup
-                  value={config.panelDegradationMode || 'simple'}
-                  onValueChange={(mode: 'simple' | 'yearly') => onChange({ ...config, panelDegradationMode: mode })}
-                  className="flex items-center gap-2"
-                >
-                  <div className="flex items-center gap-1">
-                    <RadioGroupItem value="simple" id="panel-simple" className="h-3 w-3" />
-                    <Label htmlFor="panel-simple" className="text-[10px] cursor-pointer">Simple</Label>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <RadioGroupItem value="yearly" id="panel-yearly" className="h-3 w-3" />
-                    <Label htmlFor="panel-yearly" className="text-[10px] cursor-pointer">Yearly</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-              
-              {(config.panelDegradationMode || 'simple') === 'simple' ? (
-                <div className="flex items-center gap-2">
-                  <Slider
-                    value={[(config.panelSimpleRate ?? 0.5) * 10]}
-                    onValueChange={([v]) => onChange({ ...config, panelSimpleRate: v / 10 })}
-                    min={2}
-                    max={15}
-                    step={1}
-                    className="flex-1"
-                  />
-                  <NumericInput
-                    value={config.panelSimpleRate ?? 0.5}
-                    onChange={(v) => onChange({ ...config, panelSimpleRate: v })}
-                    fallback={0.5}
-                    className="w-14 h-7 text-xs text-right"
-                    step={0.1}
-                    min={0}
-                    max={5}
-                  />
-                  <span className="text-[10px] text-muted-foreground">%/yr</span>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <ScrollArea className="h-48 rounded border bg-muted/20 p-2">
-                    <div className="grid grid-cols-4 gap-1">
-                      {panelRates.map((rate, idx) => (
-                        <div key={idx} className="flex items-center gap-1">
-                          <span className="text-[9px] text-muted-foreground w-5">Y{idx + 1}</span>
-                          <NumericInput
-                            value={rate}
-                            onChange={(v) => handlePanelYearChange(idx, v)}
-                            className="h-6 text-[10px] text-center p-1"
-                            step={0.1}
-                            min={0}
-                            max={10}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Set rate:</Label>
-                    <NumericInput
-                      value={panelApplyRate}
-                      onChange={setPanelApplyRate}
-                      fallback={0.5}
-                      className="w-20 h-6 text-[10px] text-center"
-                      step={0.1}
-                      min={0}
-                      max={10}
-                    />
-                    <span className="text-[10px] text-muted-foreground">%</span>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="h-6 text-[10px]"
-                      onClick={applyPanelRateToAll}
-                    >
-                      Apply to all
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Battery Degradation - RIGHT (only if battery is included) */}
-            {includesBattery && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-medium">Battery Degradation</Label>
-                  <RadioGroup
-                    value={config.batteryDegradationMode || 'simple'}
-                    onValueChange={(mode: 'simple' | 'yearly') => onChange({ ...config, batteryDegradationMode: mode })}
-                    className="flex items-center gap-2"
-                  >
-                    <div className="flex items-center gap-1">
-                      <RadioGroupItem value="simple" id="battery-simple" className="h-3 w-3" />
-                      <Label htmlFor="battery-simple" className="text-[10px] cursor-pointer">Simple</Label>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <RadioGroupItem value="yearly" id="battery-yearly" className="h-3 w-3" />
-                      <Label htmlFor="battery-yearly" className="text-[10px] cursor-pointer">Yearly</Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-                
-                {(config.batteryDegradationMode || 'simple') === 'simple' ? (
-                  <div className="flex items-center gap-2">
-                    <Slider
-                      value={[(config.batterySimpleRate ?? 3.0) * 10]}
-                      onValueChange={([v]) => onChange({ ...config, batterySimpleRate: v / 10 })}
-                      min={10}
-                      max={60}
-                      step={5}
-                      className="flex-1"
-                    />
-                    <NumericInput
-                      value={config.batterySimpleRate ?? 3.0}
-                      onChange={(v) => onChange({ ...config, batterySimpleRate: v })}
-                      fallback={3.0}
-                      className="w-14 h-7 text-xs text-right"
-                      step={0.5}
-                      min={0}
-                      max={10}
-                    />
-                    <span className="text-[10px] text-muted-foreground">%/yr</span>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <ScrollArea className="h-48 rounded border bg-muted/20 p-2">
-                      <div className="grid grid-cols-4 gap-1">
-                        {batteryRates.map((rate, idx) => (
-                          <div key={idx} className="flex items-center gap-1">
-                            <span className="text-[9px] text-muted-foreground w-5">Y{idx + 1}</span>
-                            <NumericInput
-                              value={rate}
-                              onChange={(v) => handleBatteryYearChange(idx, v)}
-                              className="h-6 text-[10px] text-center p-1"
-                              step={0.5}
-                              min={0}
-                              max={15}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                    <div className="flex items-center gap-1">
-                      <NumericInput
-                        value={batteryApplyRate}
-                        onChange={setBatteryApplyRate}
-                        fallback={3.0}
-                        className="w-14 h-6 text-[10px] text-center"
-                        step={0.5}
-                        min={0}
-                        max={15}
-                      />
-                      <span className="text-[10px] text-muted-foreground">%</span>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="h-6 text-[10px] flex-1"
-                        onClick={applyBatteryRateToAll}
-                      >
-                        Apply to all years
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          
-          {/* Battery EOL Capacity - only show if battery is included */}
-          {includesBattery && (
-            <div className="flex items-center gap-2">
-              <Label className="text-xs flex-1">Battery End-of-Life Capacity</Label>
-              <NumericInput
-                value={config.batteryEolCapacity}
-                onChange={(v) => onChange({ ...config, batteryEolCapacity: v })}
-                fallback={70}
-                integer
-                className="w-16 h-7 text-xs text-right"
-                min={50}
-                max={90}
-              />
-              <span className="text-xs text-muted-foreground">%</span>
-            </div>
-          )}
-    </div>
-  );
-}
-
-function FinancialSection({ 
-  config, 
-  onChange 
-}: { 
-  config: AdvancedFinancialConfig; 
-  onChange: (config: AdvancedFinancialConfig) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs">Tariff Escalation (%/yr)</Label>
-          <NumericInput
-            value={config.tariffEscalationRate}
-            onChange={(v) => onChange({ ...config, tariffEscalationRate: v })}
-            min={0}
-            max={25}
-            step={0.5}
-            className="h-8 text-xs"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Inflation Rate (%)</Label>
-          <NumericInput
-            value={config.inflationRate}
-            onChange={(v) => onChange({ ...config, inflationRate: v })}
-            min={0}
-            max={15}
-            step={0.5}
-            className="h-8 text-xs"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Discount Rate (%)</Label>
-          <NumericInput
-            value={config.discountRate}
-            onChange={(v) => onChange({ ...config, discountRate: v })}
-            min={0}
-            max={20}
-            step={0.5}
-            className="h-8 text-xs"
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs">Project Lifetime (years)</Label>
-          <NumericInput
-            value={config.projectLifetimeYears}
-            onChange={(v) => onChange({ ...config, projectLifetimeYears: v })}
-            fallback={25}
-            integer
-            min={10}
-            max={30}
-            className="h-8 text-xs"
-          />
-        </div>
-        <div className="flex items-center justify-between pt-4">
-          <Label className="text-xs">Sensitivity Analysis</Label>
-          <Switch
-            checked={config.sensitivityEnabled}
-            onCheckedChange={(sensitivityEnabled) => onChange({ ...config, sensitivityEnabled })}
-          />
-        </div>
-      </div>
-      {config.sensitivityEnabled && (
-        <div className="space-y-1">
-          <Label className="text-xs">Variation Range (%)</Label>
-          <div className="flex items-center gap-2">
-            <Slider
-              value={[config.sensitivityVariation]}
-              onValueChange={([v]) => onChange({ ...config, sensitivityVariation: v })}
-              min={5}
-              max={40}
-              step={5}
-              className="flex-1"
-            />
-            <span className="text-xs w-12 text-right">±{config.sensitivityVariation}%</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GridConstraintsSection({ 
-  config, 
-  onChange 
-}: { 
-  config: GridConstraintsConfig; 
-  onChange: (config: GridConstraintsConfig) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <Label className="text-xs">Export Limit</Label>
-        <Switch
-          checked={config.exportLimitEnabled}
-          onCheckedChange={(exportLimitEnabled) => onChange({ ...config, exportLimitEnabled })}
-        />
-      </div>
-      {config.exportLimitEnabled && (
-        <div className="space-y-1">
-          <Label className="text-xs">Max Export (kW)</Label>
-          <NumericInput
-            value={config.maxExportKw}
-            onChange={(v) => onChange({ ...config, maxExportKw: v })}
-            min={0}
-            step={10}
-            className="h-8 text-xs"
-          />
-        </div>
-      )}
-      <div className="flex items-center justify-between">
-        <Label className="text-xs">Wheeling Charges</Label>
-        <Switch
-          checked={config.wheelingEnabled}
-          onCheckedChange={(wheelingEnabled) => onChange({ ...config, wheelingEnabled })}
-        />
-      </div>
-      {config.wheelingEnabled && (
-        <div className="space-y-1">
-          <Label className="text-xs">Wheeling Charge (R/kWh)</Label>
-          <NumericInput
-            value={config.wheelingChargePerKwh}
-            onChange={(v) => onChange({ ...config, wheelingChargePerKwh: v })}
-            min={0}
-            step={0.05}
-            className="h-8 text-xs"
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LoadGrowthSection({ 
-  config, 
-  onChange 
-}: { 
-  config: LoadGrowthConfig; 
-  onChange: (config: LoadGrowthConfig) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="space-y-1">
-        <Label className="text-xs">Annual Growth Rate (%)</Label>
-        <div className="flex items-center gap-2">
-          <Slider
-            value={[config.annualGrowthRate * 10]}
-            onValueChange={([v]) => onChange({ ...config, annualGrowthRate: v / 10 })}
-            min={0}
-            max={100}
-            step={5}
-            className="flex-1"
-          />
-          <span className="text-xs w-12 text-right">{config.annualGrowthRate.toFixed(1)}%</span>
-        </div>
-      </div>
-      <div className="flex items-center justify-between">
-        <Label className="text-xs">New Tenant Projection</Label>
-        <Switch
-          checked={config.newTenantEnabled}
-          onCheckedChange={(newTenantEnabled) => onChange({ ...config, newTenantEnabled })}
-        />
-      </div>
-      {config.newTenantEnabled && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Year Joining</Label>
-            <NumericInput
-              value={config.newTenantYear}
-              onChange={(v) => onChange({ ...config, newTenantYear: v })}
-              fallback={1}
-              integer
-              min={1}
-              max={25}
-              className="h-8 text-xs"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Monthly Load (kWh)</Label>
-            <NumericInput
-              value={config.newTenantLoadKwh}
-              onChange={(v) => onChange({ ...config, newTenantLoadKwh: v })}
-              min={0}
-              step={500}
-              className="h-8 text-xs"
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============= Charge Strategy List (drag-to-reorder) =============
-
-const CHARGE_SOURCE_LABELS: Record<string, string> = {
-  pv: 'PV (Solar)',
-  grid: 'Grid',
-  generator: 'Generator',
-};
-
-function ChargeSourcesList({
-  sources,
-  onChange,
-}: {
-  sources: ChargeSource[];
-  onChange: (sources: ChargeSource[]) => void;
-}) {
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-
-  const moveItem = (fromIdx: number, toIdx: number) => {
-    if (fromIdx === toIdx) return;
-    const next = [...sources];
-    const [moved] = next.splice(fromIdx, 1);
-    next.splice(toIdx, 0, moved);
-    onChange(next);
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label className="text-xs font-medium">Charge Strategy</Label>
-        <span className="text-[10px] text-muted-foreground">Top = highest priority</span>
-      </div>
-      <div className="rounded border bg-muted/30 divide-y divide-border">
-        {sources.map((source, idx) => (
-          <div
-            key={source.id}
-            draggable
-            onDragStart={() => setDragIdx(idx)}
-            onDragOver={(e) => { e.preventDefault(); }}
-            onDrop={() => {
-              if (dragIdx !== null) moveItem(dragIdx, idx);
-              setDragIdx(null);
-            }}
-            onDragEnd={() => setDragIdx(null)}
-            className={`px-2 py-1.5 text-xs cursor-grab active:cursor-grabbing transition-opacity ${
-              dragIdx === idx ? 'opacity-50' : ''
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <GripVertical className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-              <Checkbox
-                checked={source.enabled}
-                onCheckedChange={(v) => {
-                  const next = sources.map((s, i) => i === idx ? { ...s, enabled: !!v } : s);
-                  onChange(next);
-                }}
-                className="h-3.5 w-3.5"
-              />
-              <span className={`shrink-0 ${source.enabled ? '' : 'text-muted-foreground'}`}>{CHARGE_SOURCE_LABELS[source.id] || source.id}</span>
-              {source.enabled && (
-                <>
-                  <span className="text-[9px] text-muted-foreground shrink-0 ml-1">Charge during</span>
-                  {([
-                    { value: 'off-peak' as const, label: 'Off-Peak' },
-                    { value: 'standard' as const, label: 'Standard' },
-                    { value: 'peak' as const, label: 'Peak' },
-                  ]).map((period) => {
-                    // No defaults — only explicitly configured periods are shown
-                    const periods = source.chargeTouPeriods ?? (source.chargeTouPeriod ? [source.chargeTouPeriod] : []);
-                    const checked = periods.includes(period.value);
-                    return (
-                      <label key={period.value} className="flex items-center gap-1 text-[10px] cursor-pointer shrink-0">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(v) => {
-                            let next: ('off-peak' | 'standard' | 'peak')[];
-                            if (v) {
-                              next = [...periods, period.value];
-                            } else {
-                              next = periods.filter(p => p !== period.value);
-                            }
-                            const updated = sources.map((s, i) => i === idx ? { ...s, chargeTouPeriods: next } : s);
-                            onChange(updated);
-                          }}
-                          className="h-3 w-3"
-                        />
-                        {period.label}
-                      </label>
-                    );
-                  })}
-                </>
-              )}
-              <Badge variant="outline" className="ml-auto text-[9px] px-1 py-0">{idx + 1}</Badge>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============= Discharge Sources List (drag-to-reorder) =============
-
-const DISCHARGE_SOURCE_LABELS: Record<string, string> = {
-  load: 'Load',
-  battery: 'Battery',
-  'grid-export': 'Grid Export',
-};
-
-function DischargeSourcesList({
-  sources,
-  onChange,
-}: {
-  sources: DischargeSource[];
-  onChange?: (sources: DischargeSource[]) => void;
-}) {
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-
-  const moveItem = (fromIdx: number, toIdx: number) => {
-    if (fromIdx === toIdx) return;
-    const next = [...sources];
-    const [moved] = next.splice(fromIdx, 1);
-    next.splice(toIdx, 0, moved);
-    onChange?.(next);
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label className="text-xs font-medium">Discharge Strategy</Label>
-        <span className="text-[10px] text-muted-foreground">Top = highest priority</span>
-      </div>
-      <div className="rounded border bg-muted/30 divide-y divide-border">
-        {sources.map((source, idx) => (
-          <div
-            key={source.id}
-            draggable
-            onDragStart={() => setDragIdx(idx)}
-            onDragOver={(e) => { e.preventDefault(); }}
-            onDrop={() => {
-              if (dragIdx !== null) moveItem(dragIdx, idx);
-              setDragIdx(null);
-            }}
-            onDragEnd={() => setDragIdx(null)}
-            className={`px-2 py-1.5 text-xs cursor-grab active:cursor-grabbing transition-opacity ${
-              dragIdx === idx ? 'opacity-50' : ''
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <GripVertical className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-              <Checkbox
-                checked={source.enabled}
-                onCheckedChange={(v) => {
-                  const next = sources.map((s, i) => i === idx ? { ...s, enabled: !!v } : s);
-                  onChange?.(next);
-                }}
-                className="h-3.5 w-3.5"
-              />
-              <span className={`shrink-0 ${source.enabled ? '' : 'text-muted-foreground'}`}>{DISCHARGE_SOURCE_LABELS[source.id] || source.id}</span>
-              {source.enabled && (
-                <>
-                  <span className="text-[9px] text-muted-foreground shrink-0 ml-1">Discharge during</span>
-                  {([
-                    { value: 'off-peak' as const, label: 'Off-Peak' },
-                    { value: 'standard' as const, label: 'Standard' },
-                    { value: 'peak' as const, label: 'Peak' },
-                  ]).map((period) => {
-                    const periods = source.dischargeTouPeriods ?? ['peak'];
-                    const checked = periods.includes(period.value);
-                    return (
-                      <label key={period.value} className="flex items-center gap-1 text-[10px] cursor-pointer shrink-0">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(v) => {
-                            let next: ('off-peak' | 'standard' | 'peak')[];
-                            if (v) {
-                              next = [...periods, period.value];
-                            } else {
-                              next = periods.filter(p => p !== period.value);
-                            }
-                            const updated = sources.map((s, i) => i === idx ? { ...s, dischargeTouPeriods: next } : s);
-                            onChange?.(updated);
-                          }}
-                          className="h-3 w-3"
-                        />
-                        {period.label}
-                      </label>
-                    );
-                  })}
-                </>
-              )}
-              <Badge variant="outline" className="ml-auto text-[9px] px-1 py-0">{idx + 1}</Badge>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============= Solar Characteristics Section =============
-
-function SolarCharacteristicsSection({
-  dischargeSources,
-  onDischargeSourcesChange,
-}: {
-  dischargeSources: DischargeSource[];
-  onDischargeSourcesChange?: (sources: DischargeSource[]) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <DischargeSourcesList
-        sources={dischargeSources}
-        onChange={onDischargeSourcesChange}
-      />
-    </div>
-  );
-}
-
-// ============= Battery Characteristics Section =============
-
-function BatteryCharacteristicsSection({
-  chargeCRate,
-  onChargeCRateChange,
-  dischargeCRate,
-  onDischargeCRateChange,
-  doD,
-  minSoC,
-  onMinSoCChange,
-  maxSoC,
-  onMaxSoCChange,
-  batteryStrategy,
-  onBatteryStrategyChange,
-  dispatchConfig,
-  onDispatchConfigChange,
-  chargeTouPeriod,
-  onChargeTouPeriodChange,
-  dischargeTouSelection,
-  onDischargeTouSelectionChange,
-  touPeriodToWindows,
-}: {
-  chargeCRate: number;
-  onChargeCRateChange?: (value: number) => void;
-  dischargeCRate: number;
-  onDischargeCRateChange?: (value: number) => void;
-  doD: number;
-  minSoC: number;
-  onMinSoCChange?: (value: number) => void;
-  maxSoC: number;
-  onMaxSoCChange?: (value: number) => void;
-  batteryStrategy?: BatteryDispatchStrategy;
-  onBatteryStrategyChange?: (strategy: BatteryDispatchStrategy) => void;
-  dispatchConfig?: DispatchConfig;
-  onDispatchConfigChange?: (config: DispatchConfig) => void;
-  chargeTouPeriod?: TOUPeriod;
-  onChargeTouPeriodChange?: (period: TOUPeriod) => void;
-  dischargeTouSelection?: DischargeTOUSelection;
-  onDischargeTouSelectionChange?: (selection: DischargeTOUSelection) => void;
-  touPeriodToWindows?: (period: TOUPeriod) => TimeWindow[];
-}) {
-  const effectiveDispatchConfig = dispatchConfig ?? getDefaultDispatchConfig(batteryStrategy);
-
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs">Charging C-Rate</Label>
-          <NumericInput
-            value={chargeCRate}
-            onChange={(v) => onChargeCRateChange?.(Math.max(0.01, Math.min(5, v)))}
-            fallback={0.5}
-            className="h-8 text-xs"
-            min={0.01}
-            max={5}
-            step={0.01}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Discharging C-Rate</Label>
-          <NumericInput
-            value={dischargeCRate}
-            onChange={(v) => onDischargeCRateChange?.(Math.max(0.01, Math.min(5, v)))}
-            fallback={0.5}
-            className="h-8 text-xs"
-            min={0.01}
-            max={5}
-            step={0.01}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Depth of Discharge (%)</Label>
-          <Input
-            type="number"
-            value={maxSoC - minSoC}
-            readOnly
-            disabled
-            className="h-8 text-xs bg-muted"
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs">Min SoC (%)</Label>
-          <NumericInput
-            value={minSoC}
-            onChange={(v) => {
-              const val = Math.max(0, Math.min(100, v));
-              onMinSoCChange?.(val);
-              if (val >= maxSoC) onMaxSoCChange?.(Math.min(100, val + 5));
-            }}
-            integer
-            className="h-8 text-xs"
-            min={0}
-            max={100}
-            step={5}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Max SoC (%)</Label>
-          <NumericInput
-            value={maxSoC}
-            onChange={(v) => {
-              const val = Math.max(0, Math.min(100, v));
-              onMaxSoCChange?.(val);
-              if (val <= minSoC) onMinSoCChange?.(Math.max(0, val - 5));
-            }}
-            fallback={100}
-            integer
-            className="h-8 text-xs"
-            min={0}
-            max={100}
-            step={5}
-          />
-        </div>
-      </div>
-
-      {/* Charge Strategy – independent of dispatch strategy, reorderable */}
-      <Separator className="my-2" />
-      <ChargeSourcesList
-        sources={effectiveDispatchConfig.chargeSources ?? DEFAULT_CHARGE_SOURCES}
-        onChange={(sources) => {
-          const allowGrid = sources.find(s => s.id === 'grid')?.enabled ?? false;
-          onDispatchConfigChange?.({ ...effectiveDispatchConfig, chargeSources: sources, allowGridCharging: allowGrid });
-        }}
-      />
-
-      {/* Discharge Strategy */}
-      <Separator className="my-2" />
-      <div className="space-y-3">
-        <div className="space-y-1">
-          <Label className="text-xs">Discharge Strategy</Label>
-          <Select
-            value={batteryStrategy}
-            onValueChange={(v: BatteryDispatchStrategy) => {
-              onBatteryStrategyChange?.(v);
-              const newConfig = getDefaultDispatchConfig(v);
-              // Preserve charge strategy — discharge strategy must never influence it
-              const preservedChargeConfig = {
-                chargeSources: effectiveDispatchConfig.chargeSources,
-                chargeWindows: effectiveDispatchConfig.chargeWindows,
-                allowGridCharging: effectiveDispatchConfig.allowGridCharging,
-              };
-              if (v === 'tou-arbitrage' && touPeriodToWindows) {
-                const sel = dischargeTouSelection ?? DEFAULT_DISCHARGE_TOU_SELECTION;
-                const windows: TimeWindow[] = [];
-                // Collect windows from all 4 groups
-                for (const season of ['highSeason', 'lowSeason'] as const) {
-                  for (const dayType of ['weekday', 'weekend'] as const) {
-                    const flags = sel[season][dayType];
-                    if (flags.peak) windows.push(...touPeriodToWindows('peak'));
-                    if (flags.standard) windows.push(...touPeriodToWindows('standard'));
-                    if (flags.offPeak) windows.push(...touPeriodToWindows('off-peak'));
-                  }
-                }
-                // Deduplicate windows
-                const uniqueWindows = windows.filter((w, i, arr) =>
-                  arr.findIndex(x => x.start === w.start && x.end === w.end) === i
-                );
-                onDispatchConfigChange?.({
-                  ...newConfig,
-                  ...preservedChargeConfig,
-                  dischargeWindows: uniqueWindows.length > 0 ? uniqueWindows : [{ start: 0, end: 0 }],
-                  dischargeTouSelection: sel,
-                });
-              } else {
-                onDispatchConfigChange?.({
-                  ...newConfig,
-                  ...preservedChargeConfig,
-                });
-              }
-            }}
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Self-Consumption</SelectItem>
-              <SelectItem value="tou-arbitrage">TOU Arbitrage</SelectItem>
-              <SelectItem value="peak-shaving">Peak Shaving</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* TOU Arbitrage discharge period selection – full 4×3 matrix */}
-        {batteryStrategy === 'tou-arbitrage' && (() => {
-          const sel = dischargeTouSelection ?? DEFAULT_DISCHARGE_TOU_SELECTION;
-          const periods = [
-            { key: 'peak' as const, label: 'Peak', color: 'hsl(0 72% 51%)' },
-            { key: 'standard' as const, label: 'Standard', color: 'hsl(38 92% 50%)' },
-            { key: 'offPeak' as const, label: 'Off-Peak', color: 'hsl(160 84% 39%)' },
-          ];
-          const rows: { seasonKey: 'highSeason' | 'lowSeason'; dayKey: 'weekday' | 'weekend'; label: string; seasonLabel?: string; seasonColor?: string }[] = [
-            { seasonKey: 'highSeason', dayKey: 'weekday', label: 'Weekday', seasonLabel: 'High-Demand', seasonColor: 'hsl(230 70% 50%)' },
-            { seasonKey: 'highSeason', dayKey: 'weekend', label: 'Weekend' },
-            { seasonKey: 'lowSeason', dayKey: 'weekday', label: 'Weekday', seasonLabel: 'Low-Demand', seasonColor: 'hsl(270 50% 60%)' },
-            { seasonKey: 'lowSeason', dayKey: 'weekend', label: 'Weekend' },
-          ];
-
-          const handleToggle = (seasonKey: 'highSeason' | 'lowSeason', dayKey: 'weekday' | 'weekend', periodKey: 'peak' | 'standard' | 'offPeak', checked: boolean) => {
-            const newSel: DischargeTOUSelection = {
-              highSeason: {
-                weekday: { ...sel.highSeason.weekday },
-                weekend: { ...sel.highSeason.weekend },
-              },
-              lowSeason: {
-                weekday: { ...sel.lowSeason.weekday },
-                weekend: { ...sel.lowSeason.weekend },
-              },
-            };
-            newSel[seasonKey][dayKey][periodKey] = checked;
-            onDischargeTouSelectionChange?.(newSel);
-          };
-
-          return (
-            <div className="space-y-2 p-2 rounded bg-muted/30">
-              <Label className="text-xs font-medium">Discharge During</Label>
-              <div className="grid grid-cols-[auto_auto_1fr_1fr_1fr] gap-x-2 gap-y-1 text-xs items-center">
-                {/* Header row */}
-                <div />
-                <div />
-                {periods.map(p => (
-                  <div key={p.key} className="text-center font-medium" style={{ color: p.color }}>
-                    {p.label}
-                  </div>
-                ))}
-                {/* Data rows */}
-                {rows.map((row) => (
-                  <React.Fragment key={`${row.seasonKey}-${row.dayKey}`}>
-                    {row.seasonLabel ? (
-                      <span className="font-semibold pr-1" style={{ color: row.seasonColor }}>
-                        {row.seasonLabel}
-                      </span>
-                    ) : (
-                      <span />
-                    )}
-                    <span className="text-muted-foreground">{row.label}</span>
-                    {periods.map(p => {
-                      const checked = sel[row.seasonKey][row.dayKey][p.key];
-                      return (
-                        <div key={p.key} className="flex justify-center items-center">
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(v) => handleToggle(row.seasonKey, row.dayKey, p.key, !!v)}
-                            className="h-3.5 w-3.5"
-                          />
-                        </div>
-                      );
-                    })}
-                  </React.Fragment>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-    </div>
   );
 }
