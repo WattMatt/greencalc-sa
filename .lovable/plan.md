@@ -1,44 +1,49 @@
 
 
-## Two Changes: Remove Self-Discharge Slider + Wire Up Battery Degradation
+## Reset Battery Capacity After Replacement
 
-### 1. Remove Self-Discharge Rate (%/month) Control
+### The Problem
 
-The "Standby Loss (%/month)" slider in the Battery Characteristics dropdown will be removed. The auxiliary power draw (W) — which models the dominant real-world parasitic loss — stays.
+Currently, `getBatteryCapacityRemaining(year, degradation)` calculates cumulative degradation from Year 1 through the entire project lifetime. When a battery replacement occurs (e.g., at Year 10), the capacity just keeps declining. It should reset to 100% and begin degrading again from that point.
 
-**Files:**
-- `DispatchSections.tsx` — Remove the "Standby Loss (%/month)" NumericInput and its annual loss display
-- `EnergySimulationEngine.ts` — Remove `batteryStandbyLossPercent` from config, remove the `hourlyParasiticFraction` calculation and its application in the hourly loop (keep only the auxiliary draw logic)
-- `useSimulationEngine.ts` — Remove `batteryStandbyLossPercent` from the config interface and memo
-- `AdvancedSimulationConfig.tsx` — Remove the prop threading for standby loss
-- `SimulationPanel.tsx` — Remove the `batteryStandbyLossPercent` state
+### The Fix
 
-### 2. Fix Battery Degradation — Actually Apply It
+**One file changed:** `src/components/projects/simulation/AdvancedSimulationEngine.ts`
 
-Currently, `getBatteryCapacityRemaining(year, degradation)` is called in the 20-year loop but its result is only stored for display. The battery discharge volumes are scaled only by `panelEfficiency`, not by battery capacity remaining. This means a battery configured to lose 3%/year still delivers full discharge every year in the financial model.
+**1. Update `getBatteryCapacityRemaining` to accept a replacement year parameter**
 
-**Fix in `AdvancedSimulationEngine.ts` (the 20-year loop, ~line 486-490):**
+The function will check if the current year is past the replacement year. If so, it calculates degradation relative to the replacement year (i.e., years since replacement) instead of Year 1.
 
-Currently:
 ```text
-batteryDischargeKwh = baseBatteryDischargeKwh * (panelEfficiency / 100)
+getBatteryCapacityRemaining(year, config, replacementYear?)
 ```
 
-Will become:
+Logic:
+- If `year <= replacementYear` (or no replacement): degrade normally from Year 1
+- If `year > replacementYear`: reset effective age to `year - replacementYear`, apply degradation from that point (so Year 11 with replacement at Year 10 behaves like Year 2 — one year of degradation from 100%)
+
+**2. Pass `replacementYear` into the 20-year loop call**
+
+In the main simulation loop (~line 475), pass the replacement year so the capacity correctly resets:
+
 ```text
-batteryDischargeKwh = baseBatteryDischargeKwh * (panelEfficiency / 100) * (batteryRemaining / 100)
+const replacementYear = systemCosts.replacementYear ?? 10;
+const batteryRemaining = getBatteryCapacityRemaining(year, degradation, replacementYear);
 ```
 
-This applies the battery's reduced capacity to the discharge volume each year. A battery at 85% remaining capacity in Year 6 will deliver 85% of its baseline annual discharge. The same factor will also be applied to the battery's contribution in the revenue calculation to ensure financial projections reflect reduced battery performance over time.
+### Example
 
-### Summary of File Changes
+With 3%/year degradation and replacement at Year 10:
+- Year 1: 100% (no degradation in Year 1)
+- Year 5: 88% (4 years of 3%)
+- Year 10: 73% (9 years of 3%)
+- Year 11: 100% (replaced, reset, no degradation in first year after replacement)
+- Year 15: 88% (4 years of 3% since replacement)
+- Year 20: 73% (9 years of 3% since replacement)
 
-| File | Change |
-|---|---|
-| `EnergySimulationEngine.ts` | Remove self-discharge % config and hourly loop logic |
-| `AdvancedSimulationEngine.ts` | Apply `batteryRemaining / 100` factor to battery discharge in the 20-year loop |
-| `DispatchSections.tsx` | Remove "Standby Loss (%/month)" UI control |
-| `useSimulationEngine.ts` | Remove standby loss from config interface and memo |
-| `AdvancedSimulationConfig.tsx` | Remove standby loss prop threading |
-| `SimulationPanel.tsx` | Remove standby loss state |
+### Technical Details
+
+The `batteryReplacementPercent` cost (default 30%) already exists in the financial model at the replacement year. This change makes the capacity model consistent with that cost — you pay for a replacement and actually get new capacity back.
+
+Only `AdvancedSimulationEngine.ts` needs modification: the `getBatteryCapacityRemaining` function (lines 188-217) and the call site in the 20-year loop (line 475).
 
