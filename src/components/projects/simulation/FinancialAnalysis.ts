@@ -116,12 +116,26 @@ export interface FinancialResults {
  * Uses pre-summed annual totals directly — no daily scaling.
  */
 export function calculateFinancialsFromAnnual(
-  annualResults: AnnualEnergySimulationResultsInput,
+  annualResults: AnnualEnergySimulationResultsInput | null | undefined,
   tariff: TariffData,
   systemCosts: SystemCosts,
   solarCapacity: number,
   batteryCapacity: number
 ): FinancialResults {
+  // Guard against null/undefined annualResults (engine not yet run)
+  if (!annualResults) {
+    const { totalCapitalCost: systemCost } = calculateTotalSystemCost(systemCosts, solarCapacity, batteryCapacity);
+    return {
+      gridOnlyDailyCost: 0, gridOnlyMonthlyCost: 0, gridOnlyAnnualCost: 0,
+      solarDailyCost: 0, solarMonthlyCost: 0, solarAnnualCost: 0,
+      dailyExportRevenue: 0, annualExportRevenue: 0,
+      dailySavings: 0, monthlySavings: 0, annualSavings: 0, savingsPercentage: 0,
+      systemCost, paybackYears: Infinity, roi: 0,
+      gridOnlyEnergyCost: 0, gridOnlyDemandCost: 0, gridOnlyFixedCost: 0,
+      solarEnergyCost: 0, solarDemandCost: 0, solarFixedCost: 0,
+    };
+  }
+
   const {
     totalAnnualLoad,
     totalAnnualGridImport,
