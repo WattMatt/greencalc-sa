@@ -95,8 +95,8 @@ export interface EnergySimulationConfig {
   batteryMinSoC?: number; // Minimum state of charge (default 10%)
   batteryMaxSoC?: number; // Maximum state of charge (default 95%)
   batteryInitialSoC?: number; // Starting SoC (default 50%)
-  /** Parasitic standby loss as % of SoC per month (default 2). Accounts for cell self-discharge + BMS draw. */
-  batteryStandbyLossPercent?: number;
+  /** Auxiliary power draw in watts (BMS, cooling, monitoring). Applied as constant hourly drain. */
+  batteryAuxPowerW?: number;
   dispatchStrategy?: BatteryDispatchStrategy;
   dispatchConfig?: DispatchConfig;
   /** Resolve a TOU period name ('off-peak'|'standard'|'peak') to TimeWindows */
@@ -761,13 +761,13 @@ export function runAnnualEnergySimulation(
     batteryMinSoC = 0.10,
     batteryMaxSoC = 0.95,
     batteryInitialSoC = 0.50,
-    batteryStandbyLossPercent = 2,
+    batteryAuxPowerW = 0,
     dispatchStrategy = 'self-consumption',
     dispatchConfig,
   } = config;
 
-  // Hourly parasitic loss fraction: convert %/month → fraction/hour (720 hours/month)
-  const hourlyParasiticFraction = batteryCapacity > 0 ? (batteryStandbyLossPercent / 100) / 720 : 0;
+  // Auxiliary power draw: convert W to kWh per hour
+  const auxDrainKwhPerHour = batteryCapacity > 0 ? batteryAuxPowerW / 1000 : 0;
 
   const batteryChargePower = configChargePower ?? batteryPower;
   const batteryDischargePower = configDischargePower ?? batteryPower;
@@ -855,10 +855,10 @@ export function runAnnualEnergySimulation(
 
       batteryState = result.newBatteryState;
 
-      // Apply parasitic standby loss after dispatch
-      if (hourlyParasiticFraction > 0 && batteryState > minBatteryLevel) {
-        const parasiticLoss = batteryState * hourlyParasiticFraction;
-        batteryState = Math.max(batteryState - parasiticLoss, minBatteryLevel);
+      // Apply auxiliary power draw (constant kW drain from BMS/cooling/monitoring)
+      if (auxDrainKwhPerHour > 0 && batteryState > minBatteryLevel) {
+        const parasiticLoss = Math.min(auxDrainKwhPerHour, batteryState - minBatteryLevel);
+        batteryState -= parasiticLoss;
         totalParasiticLoss += parasiticLoss;
       }
 

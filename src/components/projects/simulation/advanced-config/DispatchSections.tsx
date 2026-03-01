@@ -145,8 +145,8 @@ interface BatteryCharacteristicsSectionProps {
   dischargeTouSelection?: DischargeTOUSelection;
   onDischargeTouSelectionChange?: (selection: DischargeTOUSelection) => void;
   touPeriodToWindows?: (period: TOUPeriod) => TimeWindow[];
-  standbyLossPercent?: number;
-  onStandbyLossPercentChange?: (value: number) => void;
+  auxPowerW?: number;
+  onAuxPowerWChange?: (value: number) => void;
   batteryCapacityKwh?: number;
 }
 
@@ -156,7 +156,7 @@ export function BatteryCharacteristicsSection({
   batteryStrategy, onBatteryStrategyChange, dispatchConfig, onDispatchConfigChange,
   chargeTouPeriod, onChargeTouPeriodChange, dischargeTouSelection, onDischargeTouSelectionChange,
   touPeriodToWindows,
-  standbyLossPercent = 2, onStandbyLossPercentChange, batteryCapacityKwh = 0,
+  auxPowerW = 0, onAuxPowerWChange, batteryCapacityKwh = 0,
 }: BatteryCharacteristicsSectionProps) {
   const effectiveDispatchConfig = dispatchConfig ?? getDefaultDispatchConfig(batteryStrategy);
 
@@ -187,23 +187,22 @@ export function BatteryCharacteristicsSection({
         </div>
       </div>
 
-      {/* Standby / Parasitic Loss */}
+      {/* Auxiliary Power Draw (BMS, cooling, monitoring) */}
       <div className="space-y-1">
-        <Label className="text-xs">Standby Loss (%/month)</Label>
+        <Label className="text-xs">Auxiliary Power Draw (W)</Label>
         <NumericInput
-          value={standbyLossPercent}
-          onChange={(v) => onStandbyLossPercentChange?.(Math.max(0, Math.min(5, v)))}
-          fallback={2}
+          value={auxPowerW}
+          onChange={(v) => onAuxPowerWChange?.(Math.max(0, Math.min(5000, v)))}
+          fallback={0}
           className="h-8 text-xs"
           min={0}
-          max={5}
-          step={0.5}
+          max={5000}
+          step={50}
         />
-        {batteryCapacityKwh > 0 && (
-          <p className="text-[10px] text-muted-foreground">
-            ≈ {Math.round(batteryCapacityKwh * (standbyLossPercent / 100) * 12)} kWh/yr parasitic loss
-          </p>
-        )}
+        <p className="text-[10px] text-muted-foreground">
+          BMS, cooling, monitoring • ≈ {Math.round(auxPowerW / 1000 * 8760)} kWh/yr drain
+          {batteryCapacityKwh > 0 && ` • ${((auxPowerW / 1000 * 12 / batteryCapacityKwh) * 100).toFixed(1)}% SoC loss over 12h idle`}
+        </p>
       </div>
 
       <Separator className="my-2" />

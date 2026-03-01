@@ -485,7 +485,7 @@ export function runAdvancedSimulation(
     
     // Apply degradation proportionally
     const solarDirectKwh = baseSolarDirectKwh * (panelEfficiency / 100);
-    const batteryDischargeKwh = baseBatteryDischargeKwh * (panelEfficiency / 100);
+    const batteryDischargeKwh = baseBatteryDischargeKwh * (panelEfficiency / 100) * (batteryRemaining / 100);
     const exportKwh = baseExportKwh * (panelEfficiency / 100);
     const revenueKwh = baseRevenueKwh * (panelEfficiency / 100);
     
@@ -531,7 +531,7 @@ export function runAdvancedSimulation(
       solarDirectIncomeR = hourlyIncomeResult.annualSolarDirectIncome * (panelEfficiency / 100) * energyRateIndex;
       solarDirectRateR = hourlyIncomeResult.derivedSolarDirectRate * energyRateIndex;
 
-      batteryDischargeIncomeR = hourlyIncomeResult.annualBatteryDischargeIncome * (panelEfficiency / 100) * energyRateIndex;
+      batteryDischargeIncomeR = hourlyIncomeResult.annualBatteryDischargeIncome * (panelEfficiency / 100) * (batteryRemaining / 100) * energyRateIndex;
       batteryDischargeRateR = hourlyIncomeResult.derivedBatteryDischargeRate * energyRateIndex;
 
       exportIncomeR = hourlyIncomeResult.annualExportIncome * (panelEfficiency / 100) * energyRateIndex;
@@ -544,7 +544,7 @@ export function runAdvancedSimulation(
 
       // Grid charge cost using TOU-weighted rate
       const baseBatteryChargeFromGridKwh = hourlyIncomeResult.totalAnnualGridChargeKwh;
-      batteryChargeFromGridKwh = baseBatteryChargeFromGridKwh * (panelEfficiency / 100);
+      batteryChargeFromGridKwh = baseBatteryChargeFromGridKwh * (panelEfficiency / 100) * (batteryRemaining / 100);
       gridChargeCostR = batteryChargeFromGridKwh * hourlyIncomeResult.derivedGridChargeRate * energyRateIndex;
     } else {
       // Legacy: single blended rate
@@ -561,7 +561,7 @@ export function runAdvancedSimulation(
       exportIncomeR = exportKwh * exportRateR;
 
       const baseBatteryChargeFromGridKwh = annualEnergyResults?.totalAnnualBatteryChargeFromGrid ?? (baseEnergyResults.totalBatteryChargeFromGrid ?? 0) * 365;
-      batteryChargeFromGridKwh = baseBatteryChargeFromGridKwh * (panelEfficiency / 100);
+      batteryChargeFromGridKwh = baseBatteryChargeFromGridKwh * (panelEfficiency / 100) * (batteryRemaining / 100);
       gridChargeCostR = batteryChargeFromGridKwh * baseEnergyRate * energyRateIndex;
     }
 

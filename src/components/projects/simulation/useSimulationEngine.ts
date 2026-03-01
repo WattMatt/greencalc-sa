@@ -44,7 +44,7 @@ export interface SimulationEngineConfig {
   batteryMinSoC: number;         // 0-100
   batteryMaxSoC: number;         // 0-100
   batteryStrategy: BatteryDispatchStrategy;
-  batteryStandbyLossPercent: number;
+  batteryAuxPowerW: number;
   dispatchConfig: DispatchConfig;
 
   // Flags
@@ -217,13 +217,13 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     batteryDischargePower,
     batteryMinSoC: batteryMinSoC / 100,
     batteryMaxSoC: batteryMaxSoC / 100,
-    batteryStandbyLossPercent: cfg.batteryStandbyLossPercent,
+    batteryAuxPowerW: cfg.batteryAuxPowerW,
     dispatchStrategy: batteryStrategy,
     dispatchConfig,
     touPeriodToWindows,
     touSettings: touSettingsData,
     representativeSeason: 'low' as const,
-  }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, cfg.batteryStandbyLossPercent, batteryStrategy, dispatchConfig, touSettingsData]);
+  }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, cfg.batteryAuxPowerW, batteryStrategy, dispatchConfig, touSettingsData]);
 
   const chartSolarProfile = useMemo(() => stableChartData.map(d => d.pvGeneration || 0), [stableChartData]);
   const effectiveSolarProfile = includesSolar ? chartSolarProfile : loadProfile.map(() => 0);
