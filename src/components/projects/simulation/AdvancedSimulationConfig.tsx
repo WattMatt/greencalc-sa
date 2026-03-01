@@ -56,8 +56,8 @@ interface AdvancedSimulationConfigProps {
   touPeriodToWindows?: (period: TOUPeriod) => TimeWindow[];
   dischargeSources?: DischargeSource[];
   onDischargeSourcesChange?: (sources: DischargeSource[]) => void;
-  batteryStandbyLossPercent?: number;
-  onBatteryStandbyLossPercentChange?: (value: number) => void;
+  batteryAuxPowerW?: number;
+  onBatteryAuxPowerWChange?: (value: number) => void;
   batteryCapacityKwh?: number;
 }
 
@@ -72,7 +72,7 @@ export function AdvancedSimulationConfigPanel({
   chargeTouPeriod, onChargeTouPeriodChange,
   dischargeTouSelection, onDischargeTouSelectionChange,
   touPeriodToWindows, dischargeSources, onDischargeSourcesChange,
-  batteryStandbyLossPercent, onBatteryStandbyLossPercentChange, batteryCapacityKwh,
+  batteryAuxPowerW, onBatteryAuxPowerWChange, batteryCapacityKwh,
 }: AdvancedSimulationConfigProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -211,8 +211,8 @@ export function AdvancedSimulationConfigPanel({
                   chargeTouPeriod={chargeTouPeriod} onChargeTouPeriodChange={onChargeTouPeriodChange}
                   dischargeTouSelection={dischargeTouSelection} onDischargeTouSelectionChange={onDischargeTouSelectionChange}
                   touPeriodToWindows={touPeriodToWindows}
-                  standbyLossPercent={batteryStandbyLossPercent ?? 2}
-                  onStandbyLossPercentChange={onBatteryStandbyLossPercentChange}
+                  auxPowerW={batteryAuxPowerW ?? 0}
+                  onAuxPowerWChange={onBatteryAuxPowerWChange}
                   batteryCapacityKwh={batteryCapacityKwh}
                 />
               </CollapsibleSection>

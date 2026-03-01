@@ -117,7 +117,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [dispatchConfig, setDispatchConfig] = useState<DispatchConfig>(initial.dispatchConfig);
   const [chargeTouPeriod, setChargeTouPeriod] = useState<TOUPeriod | undefined>(initial.chargeTouPeriod);
   const [dischargeTouSelection, setDischargeTouSelection] = useState<DischargeTOUSelection>(initial.dischargeTouSelection);
-  const [batteryStandbyLossPercent, setBatteryStandbyLossPercent] = useState(2);
+  const [batteryAuxPowerW, setBatteryAuxPowerW] = useState(0);
 
   const handleDischargeTouSelectionChange = useCallback((selection: DischargeTOUSelection) => {
     setDischargeTouSelection(selection);
@@ -249,7 +249,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     projectId, project, tenants, shopTypes,
     solarCapacity, batteryCapacity, batteryAcCapacity, batteryPower,
     batteryChargePower, batteryDischargePower,
-    batteryMinSoC, batteryMaxSoC, batteryStrategy, batteryStandbyLossPercent, dispatchConfig,
+    batteryMinSoC, batteryMaxSoC, batteryStrategy, batteryAuxPowerW, dispatchConfig,
     includesSolar, includesBattery,
     inverterConfig, moduleMetrics,
     solarDataSource, solcastPvProfileData,
@@ -417,8 +417,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         touPeriodToWindows={touPeriodToWindows}
         dischargeSources={dispatchConfig.dischargeSources}
         onDischargeSourcesChange={(sources) => setDispatchConfig(prev => ({ ...prev, dischargeSources: sources }))}
-        batteryStandbyLossPercent={batteryStandbyLossPercent}
-        onBatteryStandbyLossPercentChange={setBatteryStandbyLossPercent}
+        batteryAuxPowerW={batteryAuxPowerW}
+        onBatteryAuxPowerWChange={setBatteryAuxPowerW}
         batteryCapacityKwh={batteryCapacity}
       />
 
