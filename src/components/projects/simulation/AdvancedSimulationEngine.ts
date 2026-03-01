@@ -765,24 +765,45 @@ export function runAdvancedSimulation(
     };
   }
   
-  // Calculate column totals for transparency (matches cashflow table)
+  // Calculate column totals in a single pass (replaces 14 separate .reduce() calls)
+  let ctSolarDirectKwh = 0, ctSolarDirectIncome = 0, ctBatteryDischargeKwh = 0, ctBatteryDischargeIncome = 0;
+  let ctExportKwh = 0, ctExportIncome = 0, ctDemandIncome = 0, ctInsurance = 0;
+  let ctGridChargeCost = 0, ctOM = 0, ctReplacements = 0, ctCosts = 0, ctNetCashflow = 0;
+
+  for (let i = 0; i < yearlyProjections.length; i++) {
+    const p = yearlyProjections[i];
+    ctSolarDirectKwh += p.solarDirectKwh || 0;
+    ctSolarDirectIncome += p.solarDirectIncomeR || 0;
+    ctBatteryDischargeKwh += p.batteryDischargeKwh || 0;
+    ctBatteryDischargeIncome += p.batteryDischargeIncomeR || 0;
+    ctExportKwh += p.exportKwh || 0;
+    ctExportIncome += p.exportIncomeR || 0;
+    ctDemandIncome += p.demandIncomeR || 0;
+    ctInsurance += p.insuranceCostR || 0;
+    ctGridChargeCost += p.gridChargeCostR || 0;
+    ctOM += p.maintenanceCost;
+    ctReplacements += p.replacementCost || 0;
+    ctCosts += p.totalCostR || 0;
+    ctNetCashflow += p.netCashFlow;
+  }
+
   const columnTotals: ColumnTotals = {
     totalEnergyYield: lifetimeGeneration,
     npvEnergyYield,
-    totalSolarDirectKwh: yearlyProjections.reduce((s, p) => s + (p.solarDirectKwh || 0), 0),
-    totalSolarDirectIncome: yearlyProjections.reduce((s, p) => s + (p.solarDirectIncomeR || 0), 0),
-    totalBatteryDischargeKwh: yearlyProjections.reduce((s, p) => s + (p.batteryDischargeKwh || 0), 0),
-    totalBatteryDischargeIncome: yearlyProjections.reduce((s, p) => s + (p.batteryDischargeIncomeR || 0), 0),
-    totalExportKwh: yearlyProjections.reduce((s, p) => s + (p.exportKwh || 0), 0),
-    totalExportIncome: yearlyProjections.reduce((s, p) => s + (p.exportIncomeR || 0), 0),
-    totalDemandIncome: yearlyProjections.reduce((s, p) => s + (p.demandIncomeR || 0), 0),
+    totalSolarDirectKwh: ctSolarDirectKwh,
+    totalSolarDirectIncome: ctSolarDirectIncome,
+    totalBatteryDischargeKwh: ctBatteryDischargeKwh,
+    totalBatteryDischargeIncome: ctBatteryDischargeIncome,
+    totalExportKwh: ctExportKwh,
+    totalExportIncome: ctExportIncome,
+    totalDemandIncome: ctDemandIncome,
     totalIncome: lifetimeSavings,
-    totalInsurance: yearlyProjections.reduce((s, p) => s + (p.insuranceCostR || 0), 0),
-    totalGridChargeCost: yearlyProjections.reduce((s, p) => s + (p.gridChargeCostR || 0), 0),
-    totalOM: yearlyProjections.reduce((s, p) => s + p.maintenanceCost, 0),
-    totalReplacements: yearlyProjections.reduce((s, p) => s + (p.replacementCost || 0), 0),
-    totalCosts: yearlyProjections.reduce((s, p) => s + (p.totalCostR || 0), 0),
-    totalNetCashflow: yearlyProjections.reduce((s, p) => s + p.netCashFlow, 0),
+    totalInsurance: ctInsurance,
+    totalGridChargeCost: ctGridChargeCost,
+    totalOM: ctOM,
+    totalReplacements: ctReplacements,
+    totalCosts: ctCosts,
+    totalNetCashflow: ctNetCashflow,
   };
 
   return {
