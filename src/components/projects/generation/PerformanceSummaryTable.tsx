@@ -7,16 +7,9 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { DowntimeCommentCell } from "./DowntimeCommentCell";
 import { DowntimeSlotCell } from "./DowntimeSlotCell";
-
-interface MonthData {
-  month: number;
-  name: string;
-  fullName: string;
-  actual_kwh: number | null;
-  guaranteed_kwh: number | null;
-  expected_kwh: number | null;
-  building_load_kwh: number | null;
-}
+import { useGenerationReadings } from "@/hooks/useGenerationReadings";
+import { daysInMonth, formatNum, formatRand } from "./generationUtils";
+import type { MonthData } from "./GenerationTab";
 
 interface PerformanceSummaryTableProps {
   projectId: string;
@@ -26,20 +19,6 @@ interface PerformanceSummaryTableProps {
 }
 
 const TABS = ["Production", "Down Time", "Revenue", "Performance"] as const;
-
-function daysInMonth(month: number, year: number) {
-  return new Date(year, month, 0).getDate();
-}
-
-function formatNum(val: number | null | undefined): string {
-  if (val == null) return "—";
-  return val.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatRand(val: number | null | undefined): string {
-  if (val == null) return "—";
-  return "R " + val.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 function getDayOfWeek(year: number, month: number, day: number): string {
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -137,34 +116,8 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
 
   const totalDays = daysInMonth(month, year);
 
-  const startDate = `${year}-${String(month).padStart(2, "0")}-01T00:00:00`;
-  const endDate = `${year}-${String(month).padStart(2, "0")}-${String(totalDays).padStart(2, "0")}T23:59:59`;
-
-  // Fetch all generation_readings for this month
-  const { data: readings } = useQuery({
-    queryKey: ["generation-readings-daily", projectId, year, month],
-    queryFn: async () => {
-      const allReadings: { timestamp: string; actual_kwh: number | null; building_load_kwh: number | null; source: string | null }[] = [];
-      const pageSize = 1000;
-      let from = 0;
-      let hasMore = true;
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from("generation_readings")
-          .select("timestamp, actual_kwh, building_load_kwh, source")
-          .eq("project_id", projectId)
-          .gte("timestamp", startDate)
-          .lte("timestamp", endDate)
-          .order("timestamp", { ascending: true })
-          .range(from, from + pageSize - 1);
-        if (error) throw error;
-        allReadings.push(...(data ?? []));
-        hasMore = (data?.length ?? 0) === pageSize;
-        from += pageSize;
-      }
-      return allReadings;
-    },
-  });
+  // Use shared readings hook (same cache as PerformanceChart)
+  const { data: readings } = useGenerationReadings(projectId, year, month);
 
   // Fetch per-source guarantees for this month
   const { data: sourceGuarantees } = useQuery({

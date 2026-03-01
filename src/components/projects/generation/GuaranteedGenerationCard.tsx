@@ -7,16 +7,7 @@ import { Settings, RotateCcw } from "lucide-react";
 import { SourceGuaranteesDialog } from "./SourceGuaranteesDialog";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-
-interface MonthData {
-  month: number;
-  name: string;
-  fullName: string;
-  actual_kwh: number | null;
-  guaranteed_kwh: number | null;
-  expected_kwh: number | null;
-  source: string | null;
-}
+import type { MonthData } from "./GenerationTab";
 
 interface GuaranteedGenerationCardProps {
   projectId: string;
