@@ -187,27 +187,31 @@ export function getPanelEfficiency(
  */
 export function getBatteryCapacityRemaining(
   year: number,
-  config: DegradationConfig
+  config: DegradationConfig,
+  replacementYear?: number
 ): number {
   if (!config.enabled) return 100;
   
-  // Year 1 has no degradation
-  if (year <= 1) return 100;
+  // If past the replacement year, reset effective age relative to replacement
+  const effectiveYear = (replacementYear && year > replacementYear)
+    ? (year - replacementYear)
+    : year;
+  
+  // First year (or first year after replacement) has no degradation
+  if (effectiveYear <= 1) return 100;
   
   let totalDegradation = 0;
   
   // Check if using new yearly mode
   if (config.batteryDegradationMode === 'yearly' && config.batteryYearlyRates?.length > 0) {
-    // Sum degradation from Year 1 to Year (N-1)
-    for (let y = 0; y < year - 1 && y < config.batteryYearlyRates.length; y++) {
+    // Sum degradation from Year 1 to Year (N-1) of effective age
+    for (let y = 0; y < effectiveYear - 1 && y < config.batteryYearlyRates.length; y++) {
       totalDegradation += config.batteryYearlyRates[y];
     }
   } else if (config.batteryDegradationMode === 'simple' && config.batterySimpleRate !== undefined) {
-    // Simple mode: apply same rate every year (N-1 years)
-    totalDegradation = (year - 1) * config.batterySimpleRate;
+    totalDegradation = (effectiveYear - 1) * config.batterySimpleRate;
   } else {
-    // Legacy fallback
-    totalDegradation = (year - 1) * (config.batteryDegradationRate ?? 3.0);
+    totalDegradation = (effectiveYear - 1) * (config.batteryDegradationRate ?? 3.0);
   }
   
   const remaining = 100 - totalDegradation;
@@ -472,7 +476,8 @@ export function runAdvancedSimulation(
   for (let year = 1; year <= lifetimeYears; year++) {
     // Calculate degraded generation
     const panelEfficiency = getPanelEfficiency(year, degradation);
-    const batteryRemaining = getBatteryCapacityRemaining(year, degradation);
+    const batteryReplacementYear = systemCosts.replacementYear ?? degradation.inverterReplacementYear ?? 10;
+    const batteryRemaining = getBatteryCapacityRemaining(year, degradation, batteryReplacementYear);
     
     // Energy yield (total kWh production) with degradation — for LCOE & display, NOT revenue
     const energyYield = baseAnnualSolar * (panelEfficiency / 100);
