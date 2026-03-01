@@ -2,9 +2,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ActualGenerationCard } from "./ActualGenerationCard";
+import { GenerationDataCard } from "./GenerationDataCard";
 import { GuaranteedGenerationCard } from "./GuaranteedGenerationCard";
-import { BuildingLoadCard } from "./BuildingLoadCard";
 import { PerformanceChart } from "./PerformanceChart";
 import { PerformanceSummaryTable } from "./PerformanceSummaryTable";
 import { LifetimePerformanceChart } from "./LifetimePerformanceChart";
@@ -14,6 +13,17 @@ export interface GenerationRecord {
   project_id: string;
   month: number;
   year: number;
+  actual_kwh: number | null;
+  guaranteed_kwh: number | null;
+  expected_kwh: number | null;
+  building_load_kwh: number | null;
+  source: string | null;
+}
+
+export interface MonthData {
+  month: number;
+  name: string;
+  fullName: string;
   actual_kwh: number | null;
   guaranteed_kwh: number | null;
   expected_kwh: number | null;
@@ -79,10 +89,7 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
 
   const refetch = () => {
     queryClient.invalidateQueries({ queryKey: ["generation-record", projectId, year, month] });
-    queryClient.invalidateQueries({ queryKey: ["generation-daily", projectId, year, month] });
     queryClient.invalidateQueries({ queryKey: ["generation-readings", projectId, year, month] });
-    queryClient.invalidateQueries({ queryKey: ["generation-readings-chart", projectId, year, month] });
-    queryClient.invalidateQueries({ queryKey: ["generation-readings-daily", projectId, year, month] });
   };
 
   return (
@@ -116,12 +123,13 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
       <LifetimePerformanceChart projectId={projectId} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ActualGenerationCard
+        <GenerationDataCard
           projectId={projectId}
           month={month}
           year={year}
           monthData={monthData}
           onDataChanged={refetch}
+          dataType="solar"
         />
         <GuaranteedGenerationCard
           projectId={projectId}
@@ -130,12 +138,13 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
           monthData={monthData}
           onDataChanged={refetch}
         />
-        <BuildingLoadCard
+        <GenerationDataCard
           projectId={projectId}
           month={month}
           year={year}
           monthData={monthData}
           onDataChanged={refetch}
+          dataType="council"
         />
       </div>
 

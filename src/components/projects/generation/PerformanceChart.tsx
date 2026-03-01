@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,16 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
-interface MonthData {
-  month: number;
-  name: string;
-  fullName: string;
-  actual_kwh: number | null;
-  guaranteed_kwh: number | null;
-  expected_kwh: number | null;
-  building_load_kwh: number | null;
-}
+import { useGenerationReadings } from "@/hooks/useGenerationReadings";
+import { parseLocal, daysInMonth, formatTimeLabel, MONTH_SHORT, MONTH_FULL } from "./generationUtils";
+import type { MonthData } from "./GenerationTab";
+import type { Timeframe } from "./generationUtils";
 
 interface PerformanceChartProps {
   projectId: string;
@@ -29,42 +23,11 @@ interface PerformanceChartProps {
   monthData: MonthData;
 }
 
-type Timeframe = "30min" | "hourly" | "daily" | "monthly";
-
-const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
 const chartConfig = {
   actual: { label: "Solar Generation", color: "#f0e442" },
   building_load: { label: "Council Demand", color: "#898989" },
   guarantee: { label: "Guaranteed Generation", color: "#00b0f0" },
 };
-
-function daysInMonth(month: number, year: number): number {
-  return new Date(year, month, 0).getDate();
-}
-
-/** Parse timestamp as local time, stripping any timezone suffix */
-function parseLocal(ts: string): Date {
-  // Remove trailing Z or +HH:MM / -HH:MM so Date treats it as local
-  const stripped = ts.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
-  return new Date(stripped);
-}
-
-function formatTimeLabel(date: Date, timeframe: Timeframe, month: number, singleDay?: boolean): string {
-  if (timeframe === "30min" || timeframe === "hourly") {
-    const h = date.getHours().toString().padStart(2, "0");
-    const m = date.getMinutes().toString().padStart(2, "0");
-    if (singleDay) return `${h}:${m}`;
-    const d = date.getDate();
-    return `${d} ${h}:${m}`;
-  }
-  if (timeframe === "daily") {
-    return `${date.getDate()}`;
-  }
-  return `${date.getDate()}`;
-}
-
-const MONTH_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 const SOURCE_COLORS = ["#f0e442", "#e6c619", "#d4a017", "#c2842a", "#b0683d", "#9e4c50", "#8b6914", "#c9a832"];
 
@@ -76,39 +39,21 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   const [displayUnit, setDisplayUnit] = useState<"kWh" | "kW">("kWh");
   const [showSources, setShowSources] = useState(false);
 
-  const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
   const days = daysInMonth(month, year);
+  const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
   const endDate = `${year}-${String(month).padStart(2, "0")}-${days}`;
 
   const [dateStart, setDateStart] = useState<string>(startDate);
   const [dateEnd, setDateEnd] = useState<string>(endDate);
 
-  // Query raw readings for interval views - paginate to avoid 1000 row limit
-  const { data: readings } = useQuery({
-    queryKey: ["generation-readings-chart", projectId, year, month],
-    queryFn: async () => {
-      const allReadings: { timestamp: string; actual_kwh: number | null; building_load_kwh: number | null; source: string | null }[] = [];
-      const pageSize = 1000;
-      let from = 0;
-      let hasMore = true;
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from("generation_readings")
-          .select("timestamp, actual_kwh, building_load_kwh, source")
-          .eq("project_id", projectId)
-          .gte("timestamp", `${startDate}T00:00:00`)
-          .lte("timestamp", `${endDate}T23:59:59`)
-          .order("timestamp")
-          .range(from, from + pageSize - 1);
-        if (error) throw error;
-        allReadings.push(...(data ?? []));
-        hasMore = (data?.length ?? 0) === pageSize;
-        from += pageSize;
-      }
-      return allReadings;
-    },
-    enabled: timeframe !== "monthly",
-  });
+  // Fix stale date filter: reset when month/year changes
+  useEffect(() => {
+    setDateStart(startDate);
+    setDateEnd(endDate);
+  }, [startDate, endDate]);
+
+  // Use shared readings hook
+  const { data: readings } = useGenerationReadings(projectId, year, month, timeframe !== "monthly");
 
   const dailyGuarantee = monthData.guaranteed_kwh ? monthData.guaranteed_kwh / days : null;
 
@@ -118,7 +63,6 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return timeInMinutes >= 360 && timeInMinutes <= 1050;
   }
 
-  // Extract unique source labels, filtering out stale 'csv' entries
   const sourceLabels = useMemo(() => {
     if (!readings) return [];
     const set = new Set<string>();
@@ -126,7 +70,6 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return Array.from(set).sort();
   }, [readings]);
 
-  // Query source guarantees to map raw source names to display labels
   const { data: chartSourceGuarantees } = useQuery({
     queryKey: ["chart-source-guarantees", projectId, year, month],
     queryFn: async () => {
@@ -141,7 +84,6 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     },
   });
 
-  // Build display name map: raw source -> friendly label
   const sourceDisplayNameMap = useMemo(() => {
     const map = new Map<string, string>();
     if (!chartSourceGuarantees) return map;
@@ -154,14 +96,13 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return map;
   }, [chartSourceGuarantees]);
 
-  // Council source filename for tooltip
   const councilSourceName = useMemo(() => {
     if (!chartSourceGuarantees) return null;
     const council = chartSourceGuarantees.find(sg => sg.meter_type === 'council');
     return council?.reading_source || council?.source_label || null;
   }, [chartSourceGuarantees]);
 
-  // Aggregate readings across all sources by timestamp (used when showSources is false)
+  // Aggregate readings across all sources by timestamp
   const aggregatedReadings = useMemo(() => {
     if (!readings) return null;
     const map = new Map<string, { timestamp: string; actual_kwh: number; building_load_kwh: number }>();
@@ -178,7 +119,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return Array.from(map.values());
   }, [readings]);
 
-  // Per-source readings keyed by timestamp (used when showSources is true)
+  // Per-source readings keyed by timestamp
   const perSourceReadings = useMemo(() => {
     if (!readings || !showSources) return null;
     const map = new Map<string, { timestamp: string; building_load_kwh: number; [key: string]: any }>();
@@ -199,14 +140,12 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return Array.from(map.values());
   }, [readings, showSources, sourceLabels]);
 
-  // Choose aggregated or per-source readings based on toggle
   const activeReadings = showSources ? perSourceReadings : aggregatedReadings;
 
   const filteredReadings = hoursFilter === "sun" && activeReadings
     ? activeReadings.filter((r: any) => isSunHour(r.timestamp))
     : activeReadings;
 
-  // Apply date range filter
   const dateFilteredReadings = useMemo(() => {
     if (!filteredReadings) return filteredReadings;
     return filteredReadings.filter((r: any) => {
@@ -216,8 +155,6 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   }, [filteredReadings, dateStart, dateEnd]);
 
   const isSingleDay = dateStart === dateEnd;
-
-  // Source data keys for per-source mode
   const sourceKeys = sourceLabels.map((_, i) => `source_${i}`);
 
   const chartData = (() => {
@@ -283,9 +220,8 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       dailyMap.set(day, existing);
     }
 
-     const rangeStartDay = dateStart >= startDate ? parseInt(dateStart.slice(8, 10)) : 1;
-     const rangeEndDay = dateEnd <= endDate ? parseInt(dateEnd.slice(8, 10)) : days;
-    const monthShort = MONTH_SHORT[month - 1];
+    const rangeStartDay = dateStart >= startDate ? parseInt(dateStart.slice(8, 10)) : 1;
+    const rangeEndDay = dateEnd <= endDate ? parseInt(dateEnd.slice(8, 10)) : days;
     return Array.from({ length: rangeEndDay - rangeStartDay + 1 }, (_, i) => {
       const day = rangeStartDay + i;
       const rec = dailyMap.get(day) ?? {};
@@ -299,12 +235,10 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     });
   })();
 
-  // Chart label always shows the month (and day if single-day view)
   const chartLabel = isSingleDay
     ? `${new Date(dateStart).getDate()} ${MONTH_FULL[month - 1]} ${year}`
     : `${MONTH_FULL[month - 1]} ${year}`;
 
-  // Sun hours (06:00–17:30) = 11.5 hours = 23 half-hour intervals
   const sunHourIntervals = 23;
   const allHourIntervals = 48;
   const intervalsPerDay = hoursFilter === "sun" ? sunHourIntervals : allHourIntervals;
@@ -318,12 +252,10 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
         ? (dailyGuarantee ? dailyGuarantee / hoursPerDay : null)
         : (dailyGuarantee ? dailyGuarantee / intervalsPerDay : null);
 
-  // Divisor to convert kWh → kW based on timeframe interval duration
   const kwDivisor = displayUnit === "kW"
     ? (timeframe === "30min" ? 0.5 : timeframe === "hourly" ? 1 : timeframe === "daily" ? 24 : days * 24)
     : 1;
 
-  // Add guarantee field to each data point, applying unit conversion
   const enrichedData = chartData.map((d: any) => {
     const entry: any = { ...d, building_load: d.building_load / kwDivisor, guarantee: (guaranteeValue ?? 0) / kwDivisor };
     if (showSources) {
@@ -334,14 +266,13 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return entry;
   });
 
-  // Compute global Y-axis max from full month data (not date-filtered)
+  // Compute global Y-axis max from full month data
   const yAxisMax = useMemo(() => {
     if (timeframe === "monthly") {
       const vals: number[] = [];
       if (!hiddenSeries.has("actual") && !showSources) vals.push((monthData.actual_kwh ?? 0) / kwDivisor);
-      if (showSources) vals.push((monthData.actual_kwh ?? 0) / kwDivisor); // approx
+      if (showSources) vals.push((monthData.actual_kwh ?? 0) / kwDivisor);
       if (!hiddenSeries.has("building_load") && stackBars) {
-        // stacked: add building on top
         const top = ((monthData.actual_kwh ?? 0) + (monthData.building_load_kwh ?? 0)) / kwDivisor;
         vals.push(top);
       } else if (!hiddenSeries.has("building_load")) {
@@ -353,7 +284,6 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
 
     if (!filteredReadings || filteredReadings.length === 0) return undefined;
 
-    // Aggregate full month readings at current timeframe granularity
     const bucketMap = new Map<string, any>();
     for (const r of filteredReadings as any[]) {
       const d = parseLocal(r.timestamp);
@@ -385,7 +315,6 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       if (stackBars && !hiddenSeries.has("building_load")) {
         barHeight += ((val.building_load ?? 0) / kwDivisor);
       }
-      // Also check building_load alone (unstacked)
       if (!stackBars && !hiddenSeries.has("building_load")) {
         globalMax = Math.max(globalMax, (val.building_load ?? 0) / kwDivisor);
       }
@@ -402,7 +331,6 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return (d.actual ?? 0) > 0 || (d.building_load ?? 0) > 0;
   });
 
-  // Dynamic chart config for sources mode - use display names from guarantees
   const activeChartConfig = useMemo(() => {
     if (!showSources) return chartConfig;
     const cfg: Record<string, { label: string; color: string }> = {
@@ -426,7 +354,6 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     });
   };
 
-  // Calculate interval for X-axis labels based on data size
   const labelInterval = chartData.length > 50 ? Math.ceil(chartData.length / 30) : 0;
 
   return (
