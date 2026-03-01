@@ -1255,6 +1255,10 @@ export function SystemCostsManager({
                 <span>2.5%</span>
                 <span>5%</span>
               </div>
+              <div className="flex justify-between items-center pt-1 text-xs">
+                <span className="text-muted-foreground">Annual Insurance Cost</span>
+                <span className="font-medium">R {((totalCapitalCost + totalMaintenancePerYear) * (costs.insuranceRatePercent / 100)).toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr</span>
+              </div>
             </div>
           </div>
         </CardContent>
