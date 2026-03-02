@@ -419,11 +419,11 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
 
   // ── Advanced simulation ──
   const isAdvancedEnabled =
-    advancedConfig.seasonal.enabled ||
-    advancedConfig.degradation.enabled ||
-    advancedConfig.financial.enabled ||
-    advancedConfig.gridConstraints.enabled ||
-    advancedConfig.loadGrowth.enabled;
+    advancedConfig?.seasonal?.enabled ||
+    advancedConfig?.degradation?.enabled ||
+    advancedConfig?.financial?.enabled ||
+    advancedConfig?.gridConstraints?.enabled ||
+    advancedConfig?.loadGrowth?.enabled;
 
   const advancedResults = useMemo<AdvancedFinancialResults | null>(() => {
     if (!isAdvancedEnabled || !hasFinancialData) return null;
