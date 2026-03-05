@@ -26,6 +26,7 @@ import { ProfileStacking } from "@/components/loadprofiles/ProfileStacking";
 import { MeterComparison } from "@/components/loadprofiles/MeterComparison";
 import { SiteMeterOverview } from "@/components/loadprofiles/SiteMeterOverview";
 import { downloadCsvFromStorage, uploadCsvToStorage } from "./utils/csvStorage";
+import { reconstructCsvFromRawData } from "./utils/reconstructCsv";
 
 interface Site {
   id: string;
@@ -388,13 +389,21 @@ export function SitesTab() {
       }
       
       if (!csvContent) {
-        // Fallback: try downloading from storage
+        // Fallback 1: try downloading from storage
         const storedCsv = await downloadCsvFromStorage(meter.id);
         if (storedCsv) {
           csvContent = storedCsv;
         } else {
-          toast.error("No CSV content stored for this meter. The original CSV data was not preserved during import. Please re-upload the CSV file using the upload button.");
-          return;
+          // Fallback 2: reconstruct from parsed interval data
+          const meterData2 = await supabase.from("scada_imports").select("raw_data").eq("id", meter.id).single();
+          const reconstructed = reconstructCsvFromRawData(meterData2.data?.raw_data);
+          if (reconstructed) {
+            csvContent = reconstructed;
+            uploadCsvToStorage(reconstructed, meter.id, `${meter.shop_name || meter.site_name}.csv`).catch(console.error);
+          } else {
+            toast.error("No CSV content stored for this meter. Please re-upload the CSV file.");
+            return;
+          }
         }
       }
       
@@ -1035,23 +1044,30 @@ export function SitesTab() {
       console.log('[loadMeterForWizard] Extracted csvContent length:', csvContent?.length || 0);
       
       if (!csvContent) {
-        // Fallback: try downloading from storage
+        // Fallback 1: try downloading from storage
         const storedCsv = await downloadCsvFromStorage(meterId);
         if (storedCsv) {
           csvContent = storedCsv;
         } else {
-          console.warn("No CSV content for meter:", meterId, "raw_data:", rawData);
-          const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
-          setWizardError({
-            meterId,
-            meterName: displayName,
-            message: "No CSV data stored for this meter. Use the upload button to import CSV data first."
-          });
-          setCurrentWizardMeterId(meterId);
-          setCurrentWizardFileName(displayName);
-          setCurrentWizardCsvContent(null);
-          setProcessingQueue(prev => prev.filter(id => id !== meterId));
-          return;
+          // Fallback 2: reconstruct from parsed interval data
+          const reconstructed = reconstructCsvFromRawData(rawData);
+          if (reconstructed) {
+            csvContent = reconstructed;
+            uploadCsvToStorage(reconstructed, meterId, `${meter.shop_name || meter.site_name}.csv`).catch(console.error);
+          } else {
+            console.warn("No CSV content for meter:", meterId);
+            const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
+            setWizardError({
+              meterId,
+              meterName: displayName,
+              message: "No CSV data stored for this meter. Use the upload button to import CSV data first."
+            });
+            setCurrentWizardMeterId(meterId);
+            setCurrentWizardFileName(displayName);
+            setCurrentWizardCsvContent(null);
+            setProcessingQueue(prev => prev.filter(id => id !== meterId));
+            return;
+          }
         }
       }
       
