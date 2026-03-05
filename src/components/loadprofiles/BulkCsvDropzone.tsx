@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { processCSVToLoadProfile, validateLoadProfile } from "./utils/csvToLoadProfile";
 import { WizardParseConfig, ColumnConfig } from "./types/csvImportTypes";
 import { matchFilesToMeters, MatchResult, MeterInfo, normalizeName } from "./utils/fuzzyMatcher";
+import { uploadCsvToStorage } from "./utils/csvStorage";
 
 interface FileMatchInfo {
   file: File;
@@ -487,6 +488,9 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
       if (updateError) {
         return { ...fileInfo, status: 'failed', message: updateError.message };
       }
+
+      // Upload original CSV to storage (fire and forget)
+      uploadCsvToStorage(content, targetMeterId, file.name).catch(console.error);
 
       // Check for issues
       if (!validation.isValid) {

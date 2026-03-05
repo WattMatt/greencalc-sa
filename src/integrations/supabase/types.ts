@@ -1845,6 +1845,7 @@ export type Database = {
           area_sqm: number | null
           category_id: string | null
           created_at: string
+          csv_file_path: string | null
           data_points: number | null
           date_range_end: string | null
           date_range_start: string | null
@@ -1871,6 +1872,7 @@ export type Database = {
           area_sqm?: number | null
           category_id?: string | null
           created_at?: string
+          csv_file_path?: string | null
           data_points?: number | null
           date_range_end?: string | null
           date_range_start?: string | null
@@ -1897,6 +1899,7 @@ export type Database = {
           area_sqm?: number | null
           category_id?: string | null
           created_at?: string
+          csv_file_path?: string | null
           data_points?: number | null
           date_range_end?: string | null
           date_range_start?: string | null

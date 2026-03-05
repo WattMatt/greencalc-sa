@@ -1,0 +1,1 @@
+ALTER TABLE public.scada_imports ADD COLUMN IF NOT EXISTS csv_file_path text;

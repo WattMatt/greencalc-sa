@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { CsvImportWizard, WizardParseConfig } from "./CsvImportWizard";
 import { processCSVToLoadProfile, ProcessedLoadProfile, validateLoadProfile } from "./utils/csvToLoadProfile";
+import { uploadCsvToStorage } from "./utils/csvStorage";
 import { MeterAnalysisChart, MeterChartDataPoint } from "./MeterAnalysisChart";
 
 interface Category {
@@ -303,7 +304,7 @@ export function ScadaImport({ categories, siteId, onImportComplete }: ScadaImpor
     setIsSaving(true);
 
     try {
-      const { error } = await supabase.from("scada_imports").insert([
+      const { data: inserted, error } = await supabase.from("scada_imports").insert([
         {
           site_name: siteName,
           site_id: siteId || null,
@@ -320,9 +321,14 @@ export function ScadaImport({ categories, siteId, onImportComplete }: ScadaImpor
           load_profile_weekday: processedData.weekdayProfile,
           load_profile_weekend: processedData.weekendProfile,
         }
-      ]);
+      ]).select("id").single();
 
       if (error) throw error;
+
+      // Upload original CSV to storage (fire and forget)
+      if (inserted?.id && csvContent) {
+        uploadCsvToStorage(csvContent, inserted.id, fileName).catch(console.error);
+      }
 
       queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
       queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });

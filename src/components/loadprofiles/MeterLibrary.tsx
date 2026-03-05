@@ -20,6 +20,7 @@ import { WizardParseConfig, ColumnConfig, ParsedData } from "./types/csvImportTy
 import { MeterProfilePreview } from "./MeterProfilePreview";
 import { CsvImportWizard } from "./CsvImportWizard";
 import { OneClickBatchProcessor } from "./OneClickBatchProcessor";
+import { uploadCsvToStorage, downloadCsvFromStorage } from "./utils/csvStorage";
 // Lazy load BulkCsvDropzone to avoid chunk loading issues
 const BulkCsvDropzone = lazy(() => import("./BulkCsvDropzone").then(m => ({ default: m.BulkCsvDropzone })));
 
@@ -879,9 +880,20 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       const processingConfig = rawData?.[0]?.processingConfig || null;
       
       if (!csvContent) {
+        // Fallback: try downloading from storage
+        const storedCsv = await downloadCsvFromStorage(meterId);
+        if (storedCsv) {
+          const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
+          setWizardError(null);
+          setCurrentWizardMeterId(meterId);
+          setCurrentWizardCsvContent(storedCsv);
+          setCurrentWizardFileName(displayName);
+          setPreviousProcessingConfig(processingConfig);
+          return;
+        }
+
         console.warn("No CSV content for meter:", meterId);
         const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
-        // Set error state and open wizard with error UI instead of just moving to next
         setWizardError({
           meterId,
           meterName: displayName,
@@ -889,7 +901,6 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
         });
         setCurrentWizardMeterId(meterId);
         setCurrentWizardFileName(displayName);
-        // Keep csvContent as null - this triggers the error UI in wizard
         setCurrentWizardCsvContent(null);
         setPreviousProcessingConfig(null);
         return;
@@ -1003,6 +1014,10 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
         console.error("Failed to update meter:", updateError);
         moveToNextMeterInQueue(meterId, 'failed', updateError.message);
       } else {
+        // Upload original CSV to storage (fire and forget)
+        if (currentWizardCsvContent) {
+          uploadCsvToStorage(currentWizardCsvContent, meterId, currentWizardFileName || "meter.csv").catch(console.error);
+        }
         moveToNextMeterInQueue(meterId, 'success', `${profile.dataPoints} readings`);
       }
     } catch (err) {

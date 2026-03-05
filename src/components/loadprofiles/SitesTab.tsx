@@ -25,6 +25,7 @@ import { MeterAnalysis } from "@/components/loadprofiles/MeterAnalysis";
 import { ProfileStacking } from "@/components/loadprofiles/ProfileStacking";
 import { MeterComparison } from "@/components/loadprofiles/MeterComparison";
 import { SiteMeterOverview } from "@/components/loadprofiles/SiteMeterOverview";
+import { downloadCsvFromStorage, uploadCsvToStorage } from "./utils/csvStorage";
 
 interface Site {
   id: string;
@@ -387,8 +388,14 @@ export function SitesTab() {
       }
       
       if (!csvContent) {
-        toast.error("No CSV content stored for this meter. The original CSV data was not preserved during import. Please re-upload the CSV file using the upload button.");
-        return;
+        // Fallback: try downloading from storage
+        const storedCsv = await downloadCsvFromStorage(meter.id);
+        if (storedCsv) {
+          csvContent = storedCsv;
+        } else {
+          toast.error("No CSV content stored for this meter. The original CSV data was not preserved during import. Please re-upload the CSV file using the upload button.");
+          return;
+        }
       }
       
       // Open the column selection dialog
@@ -1028,20 +1035,24 @@ export function SitesTab() {
       console.log('[loadMeterForWizard] Extracted csvContent length:', csvContent?.length || 0);
       
       if (!csvContent) {
-        console.warn("No CSV content for meter:", meterId, "raw_data:", rawData);
-        const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
-        // Set error state and open wizard with error UI instead of just toast
-        setWizardError({
-          meterId,
-          meterName: displayName,
-          message: "No CSV data stored for this meter. Use the upload button to import CSV data first."
-        });
-        setCurrentWizardMeterId(meterId);
-        setCurrentWizardFileName(displayName);
-        // Keep csvContent as null - this triggers the error UI in wizard
-        setCurrentWizardCsvContent(null);
-        setProcessingQueue(prev => prev.filter(id => id !== meterId));
-        return;
+        // Fallback: try downloading from storage
+        const storedCsv = await downloadCsvFromStorage(meterId);
+        if (storedCsv) {
+          csvContent = storedCsv;
+        } else {
+          console.warn("No CSV content for meter:", meterId, "raw_data:", rawData);
+          const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
+          setWizardError({
+            meterId,
+            meterName: displayName,
+            message: "No CSV data stored for this meter. Use the upload button to import CSV data first."
+          });
+          setCurrentWizardMeterId(meterId);
+          setCurrentWizardFileName(displayName);
+          setCurrentWizardCsvContent(null);
+          setProcessingQueue(prev => prev.filter(id => id !== meterId));
+          return;
+        }
       }
       
       const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
@@ -1133,6 +1144,10 @@ export function SitesTab() {
         console.error("Failed to update meter:", updateError);
         moveToNextMeterInQueue(meterId, 'failed', updateError.message);
       } else {
+        // Upload original CSV to storage (fire and forget)
+        if (currentWizardCsvContent) {
+          uploadCsvToStorage(currentWizardCsvContent, meterId, currentWizardFileName || "meter.csv").catch(console.error);
+        }
         moveToNextMeterInQueue(meterId, 'success', `${profile.dataPoints} readings`);
       }
     } catch (err) {
