@@ -24,10 +24,31 @@ export function parseRawData(rawData: unknown): RawDataPoint[] {
       return rawData as RawDataPoint[];
     }
 
-    // Format: { timestamp: "DD Mon YYYY HH:MM", value }
+    // Format: { timestamp: "...", value }
     if (firstItem.timestamp && "value" in firstItem && !firstItem.date) {
+      const normaliseTime = (t: string) => (t.length === 5 ? t + ":00" : t);
+
       return rawData.map((item: { timestamp: string; value: number }) => {
-        const parts = item.timestamp.split(" ");
+        const ts = item.timestamp.trim();
+
+        // ISO-like: "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SS..."
+        const isoMatch = ts.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2}(?::\d{2})?)/);
+        if (isoMatch) {
+          const date = isoMatch[1];
+          const time = normaliseTime(isoMatch[2]);
+          return { date, time, timestamp: `${date}T${time}`, value: item.value || 0 };
+        }
+
+        // SA format: "DD/MM/YYYY HH:MM:SS" or "DD-MM-YYYY HH:MM:SS"
+        const saMatch = ts.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)$/);
+        if (saMatch) {
+          const date = `${saMatch[3]}-${saMatch[2].padStart(2, "0")}-${saMatch[1].padStart(2, "0")}`;
+          const time = normaliseTime(saMatch[4]);
+          return { date, time, timestamp: `${date}T${time}`, value: item.value || 0 };
+        }
+
+        // Legacy: "DD Mon YYYY HH:MM"
+        const parts = ts.split(" ");
         if (parts.length >= 4) {
           const day = parts[0].padStart(2, "0");
           const month = MONTH_MAP[parts[1]] || "01";
@@ -36,6 +57,7 @@ export function parseRawData(rawData: unknown): RawDataPoint[] {
           const date = `${year}-${month}-${day}`;
           return { date, time, timestamp: `${date}T${time}`, value: item.value || 0 };
         }
+
         return { date: "", time: "", timestamp: "", value: 0 };
       }).filter((p) => p.date !== "");
     }
