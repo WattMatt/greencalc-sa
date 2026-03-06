@@ -868,43 +868,43 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
           powerFactor?: number;
         };
       }[] | null;
-      const csvContent = rawData?.[0]?.csvContent;
       const processingConfig = rawData?.[0]?.processingConfig || null;
+      const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
       
-      if (!csvContent) {
-        // Fallback: try downloading from storage
-        const storedCsv = await downloadCsvFromStorage(meterId);
-        if (storedCsv) {
-          const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
-          setWizardError(null);
-          setCurrentWizardMeterId(meterId);
-          setCurrentWizardCsvContent(storedCsv);
-          setCurrentWizardFileName(displayName);
-          setPreviousProcessingConfig(processingConfig);
-          return;
-        }
-
-        console.warn("No CSV content for meter:", meterId);
-        const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
-        setWizardError({
-          meterId,
-          meterName: displayName,
-          message: "No CSV data stored for this meter. The original CSV data was not preserved during import. Please re-upload the CSV file."
-        });
+      // Priority 1: Storage bucket
+      const storedCsv = await downloadCsvFromStorage(meterId);
+      if (storedCsv) {
+        setWizardError(null);
         setCurrentWizardMeterId(meterId);
+        setCurrentWizardCsvContent(storedCsv);
         setCurrentWizardFileName(displayName);
-        setCurrentWizardCsvContent(null);
-        setPreviousProcessingConfig(null);
+        setPreviousProcessingConfig(processingConfig);
         return;
       }
       
-      const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
-      // Clear any previous error when successfully loading CSV
-      setWizardError(null);
+      // Priority 2: Legacy csvContent in raw_data
+      const csvContent = rawData?.[0]?.csvContent;
+      if (csvContent) {
+        setWizardError(null);
+        setCurrentWizardMeterId(meterId);
+        setCurrentWizardCsvContent(csvContent);
+        setCurrentWizardFileName(displayName);
+        setPreviousProcessingConfig(processingConfig);
+        return;
+      }
+      
+      // Neither source available
+      console.warn("No CSV content for meter:", meterId);
+      setWizardError({
+        meterId,
+        meterName: displayName,
+        message: "The original CSV file is not available. Please re-upload the file to save and preview the data."
+      });
       setCurrentWizardMeterId(meterId);
-      setCurrentWizardCsvContent(csvContent);
       setCurrentWizardFileName(displayName);
-      setPreviousProcessingConfig(processingConfig);
+      setCurrentWizardCsvContent(null);
+      setPreviousProcessingConfig(null);
+      return;
     } catch (err) {
       console.error("Error loading meter for wizard:", err);
       moveToNextMeterInQueue(meterId, 'failed', String(err));
