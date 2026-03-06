@@ -116,12 +116,38 @@ export function normaliseRawData(rawData: unknown): NormalisedDataPoint[] {
       if (!line) continue;
 
       const parts = line.split(",");
-      const date = parts[dateCol >= 0 ? dateCol : 0]?.trim();
-      const time = timeCol >= 0 ? parts[timeCol]?.trim() : "00:00:00";
+      let date = parts[dateCol >= 0 ? dateCol : 0]?.trim();
+      let time = timeCol >= 0 ? parts[timeCol]?.trim() : "";
       const value = parseFloat(parts[valueIdx]?.replace(/[^\d.-]/g, "") || "0") || 0;
 
-      if (date && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      if (!date) continue;
+
+      // If no separate time column, check if date cell contains combined datetime
+      if (!time && date.includes(" ")) {
+        const spaceIdx = date.indexOf(" ");
+        time = date.substring(spaceIdx + 1).trim();
+        date = date.substring(0, spaceIdx).trim();
+      }
+
+      // Already ISO: YYYY-MM-DD
+      if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
         parsed.push({ date, time: time || "00:00:00", value });
+        continue;
+      }
+
+      // SA format: DD/MM/YYYY or DD-MM-YYYY
+      const saMatch = date.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (saMatch) {
+        const isoDate = `${saMatch[3]}-${saMatch[2].padStart(2, "0")}-${saMatch[1].padStart(2, "0")}`;
+        parsed.push({ date: isoDate, time: time || "00:00:00", value });
+        continue;
+      }
+
+      // YYYY/MM/DD
+      const altIso = date.match(/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/);
+      if (altIso) {
+        const isoDate = `${altIso[1]}-${altIso[2].padStart(2, "0")}-${altIso[3].padStart(2, "0")}`;
+        parsed.push({ date: isoDate, time: time || "00:00:00", value });
       }
     }
 
