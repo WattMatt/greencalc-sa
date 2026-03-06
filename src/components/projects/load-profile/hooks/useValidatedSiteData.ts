@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Tenant } from "../types";
 import { RawDataMap, RawDataEntry } from "./useRawScadaData";
+import { normaliseRawData } from "@/components/loadprofiles/utils/normaliseRawData";
 
 /** Energy units where sub-hourly readings should be SUMMED to get hourly kW */
 const ENERGY_UNITS = new Set(["kwh", "wh", "mwh", "kvah"]);
@@ -99,7 +100,15 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
       const dateHourMap = new Map<string, Map<number, { sum: number; count: number }>>();
 
       for (const { entry, areaScale } of rawEntries) {
-        const points = Array.isArray(entry.raw_data) ? entry.raw_data as { date?: string; time?: string; value?: number }[] : [];
+        let points: { date?: string; time?: string; value?: number }[] = [];
+        if (Array.isArray(entry.raw_data) && entry.raw_data.length > 0) {
+          const first = (entry.raw_data as Record<string, unknown>[])[0];
+          if (first.date && first.time) {
+            points = entry.raw_data as { date?: string; time?: string; value?: number }[];
+          } else {
+            points = normaliseRawData(entry.raw_data);
+          }
+        }
         if (points.length === 0) continue;
         const useSum = isEnergyUnit(entry.value_unit);
 
