@@ -1,29 +1,34 @@
 
 
-# Plan: Storage-first CSV retrieval with re-upload message
+# Why Data Inspector Shows No Data for Kingswalk
 
-## Changes
+## Root Cause
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+The Kingswalk SCADA data is stored in **legacy `csvContent` format** — `raw_data` is `[{ "csvContent": "sep=,\ndate,p14\n31/12/2024 23:30:00,3.64\n..." }]`.
 
-Reorder `loadMeterForWizard` to check storage **first**:
+The normaliser (`normaliseRawData.ts`) handles this format (Format 4), but its date parser on line 123 only accepts `YYYY-MM-DD`:
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+```typescript
+if (date && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+```
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+Kingswalk's CSV has a **single `date` column with combined datetime** in `DD/MM/YYYY HH:MM:SS` format (e.g. `31/12/2024 23:30:00`). Since there's no separate `time` column and the date format doesn't match `YYYY-MM-DD`, **every row is silently skipped**, producing an empty array.
 
-Same reordering:
+## Fix
 
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+Update the `csvContent` parser in `src/components/loadprofiles/utils/normaliseRawData.ts` (Format 4, lines 114-128) to handle:
 
-### No other files change
+1. **Combined datetime in a single column** — when there's no separate `time` column, split the cell value on space to extract date and time parts.
+2. **DD/MM/YYYY format** — convert to `YYYY-MM-DD` before storing.
+3. **Other SA date formats** — reuse the same SA-format regex already used in Format 3.
 
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
+### Changes to `normaliseRawData.ts` (lines 114-128)
+
+Replace the simple date matching with a parser that:
+- Attempts ISO format first (`YYYY-MM-DD`)
+- Falls back to SA format (`DD/MM/YYYY`)  
+- Splits combined datetime strings (e.g. `31/12/2024 23:30:00`) into date + time components
+- Uses the existing `timeCol` fallback logic but also extracts time from combined cells when `timeCol === -1`
+
+No other files need changes — once the normaliser correctly parses the legacy csvContent, the `useValidatedSiteData` hook will produce valid `siteDataByDate` maps and the Data Inspector will display data.
 
