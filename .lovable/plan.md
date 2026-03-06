@@ -1,46 +1,39 @@
 
 
-# Fix: Legacy raw_data format not handled in Tenant tab hooks
+# Fix: Load Profile plot fails when PDB_35775423_SolarDB3.1 is included
 
 ## Root Cause
 
-The meter `PDB_35775423_SolarDB3.1` has `raw_data` in legacy `{timestamp, value}` format. The normalisation migration edge function was created but never executed, so existing data hasn't been converted.
+`useValidatedSiteData.ts` line 102 casts `raw_data` directly as `{date, time, value}[]`. The `PDB_35775423_SolarDB3.1` meter has legacy `{timestamp, value}` format, so every point fails the `!point.date || !point.time` check at line 107 and is skipped. Result: zero validated dates, no chart.
 
-During the normalisation refactor, two hooks were simplified to use a `castRawData()` function that only accepts the new `{date, time, value}` format — if the data doesn't match, it returns an empty array. This causes "No monthly data available" and "No daily data available" in the Tenants tab.
+## Fix (single file, two changes)
 
-**Affected hooks with broken `castRawData`:**
-- `src/components/loadprofiles/hooks/useDailyConsumption.ts` (line 36-41)
-- `src/components/projects/load-profile/hooks/useMonthlyData.ts` (line 28-33)
+**File:** `src/components/projects/load-profile/hooks/useValidatedSiteData.ts`
 
-**Working utility with backward-compat fallback:**
-- `src/components/projects/load-profile/utils/parseRawData.ts` — already handles both formats correctly via `normaliseRawData()` fallback
-
-## Fix
-
-### Step 1: Update `castRawData` in both hooks to fall back to `normaliseRawData`
-
-Replace the simple cast with the same fallback pattern used in `parseRawData.ts`:
-
+**Change 1 — Add import (line 3):**
 ```typescript
 import { normaliseRawData } from "@/components/loadprofiles/utils/normaliseRawData";
+```
 
-function castRawData(rawData: unknown): NormalisedPoint[] {
-  if (!rawData || !Array.isArray(rawData) || rawData.length === 0) return [];
-  const first = rawData[0];
-  if (first.date && first.time && "value" in first) return rawData as NormalisedPoint[];
-  // Fallback: normalise legacy formats
-  return normaliseRawData(rawData);
+**Change 2 — Replace line 102 with normalisation fallback:**
+
+Replace:
+```typescript
+const points = Array.isArray(entry.raw_data) ? entry.raw_data as { date?: string; time?: string; value?: number }[] : [];
+```
+
+With:
+```typescript
+let points: { date?: string; time?: string; value?: number }[] = [];
+if (Array.isArray(entry.raw_data) && entry.raw_data.length > 0) {
+  const first = (entry.raw_data as Record<string, unknown>[])[0];
+  if (first.date && first.time) {
+    points = entry.raw_data as { date?: string; time?: string; value?: number }[];
+  } else {
+    points = normaliseRawData(entry.raw_data);
+  }
 }
 ```
 
-### Step 2 (optional): Run the normalise-raw-data edge function
-
-This converts all existing legacy data in-place so the fallback path is no longer needed. Can be triggered after the code fix.
-
-## Files changed
-
-| File | Change |
-|------|--------|
-| `src/components/loadprofiles/hooks/useDailyConsumption.ts` | Add `normaliseRawData` import, update `castRawData` with fallback |
-| `src/components/projects/load-profile/hooks/useMonthlyData.ts` | Add `normaliseRawData` import, update `castRawData` with fallback |
+This is the identical fallback pattern already used in `useDailyConsumption` and `useMonthlyData`. No other files need changes.
 
