@@ -1012,19 +1012,28 @@ export function SitesTab() {
         return;
       }
       
-      // Handle various raw_data structures
+      const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
+      
+      // Priority 1: Storage bucket
+      const storedCsv = await downloadCsvFromStorage(meterId);
+      if (storedCsv) {
+        console.log('[loadMeterForWizard] Using stored CSV from bucket, length:', storedCsv.length);
+        setWizardError(null);
+        setCurrentWizardMeterId(meterId);
+        setCurrentWizardCsvContent(storedCsv);
+        setCurrentWizardFileName(displayName);
+        return;
+      }
+      
+      // Priority 2: Legacy csvContent in raw_data
       let csvContent: string | null = null;
       const rawData = meter.raw_data;
       
-      console.log('[loadMeterForWizard] raw_data type:', typeof rawData, Array.isArray(rawData));
-      
       if (Array.isArray(rawData) && rawData.length > 0) {
         const firstItem = rawData[0] as Record<string, unknown> | string;
-        // Check if it's the new format with csvContent
         if (typeof firstItem === 'object' && firstItem !== null && 'csvContent' in firstItem) {
           csvContent = firstItem.csvContent as string;
         } else if (typeof firstItem === 'string') {
-          // Sometimes the CSV is stored directly as a string in the first element
           csvContent = firstItem;
         }
       } else if (typeof rawData === 'string') {
@@ -1033,36 +1042,27 @@ export function SitesTab() {
         csvContent = (rawData as Record<string, unknown>).csvContent as string;
       }
       
-      console.log('[loadMeterForWizard] Extracted csvContent length:', csvContent?.length || 0);
-      
-      if (!csvContent) {
-        // Fallback: try downloading from storage
-        const storedCsv = await downloadCsvFromStorage(meterId);
-        if (storedCsv) {
-          csvContent = storedCsv;
-        } else {
-          console.warn("No CSV content for meter:", meterId, "raw_data:", rawData);
-          const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
-          setWizardError({
-            meterId,
-            meterName: displayName,
-            message: "No CSV data stored for this meter. Use the upload button to import CSV data first."
-          });
-          setCurrentWizardMeterId(meterId);
-          setCurrentWizardFileName(displayName);
-          setCurrentWizardCsvContent(null);
-          setProcessingQueue(prev => prev.filter(id => id !== meterId));
-          return;
-        }
+      if (csvContent) {
+        console.log('[loadMeterForWizard] Using legacy csvContent, length:', csvContent.length);
+        setWizardError(null);
+        setCurrentWizardMeterId(meterId);
+        setCurrentWizardCsvContent(csvContent);
+        setCurrentWizardFileName(displayName);
+        return;
       }
       
-      const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
-      console.log('[loadMeterForWizard] Opening wizard for:', displayName);
-      // Clear any previous error when successfully loading CSV
-      setWizardError(null);
+      // Neither source available
+      console.warn("No CSV content for meter:", meterId, "raw_data:", rawData);
+      setWizardError({
+        meterId,
+        meterName: displayName,
+        message: "The original CSV file is not available. Please re-upload the file to save and preview the data."
+      });
       setCurrentWizardMeterId(meterId);
-      setCurrentWizardCsvContent(csvContent);
       setCurrentWizardFileName(displayName);
+      setCurrentWizardCsvContent(null);
+      setProcessingQueue(prev => prev.filter(id => id !== meterId));
+      return;
     } catch (err) {
       console.error("Error loading meter for wizard:", err);
       moveToNextMeterInQueue(meterId, 'failed', String(err));
