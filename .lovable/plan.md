@@ -1,65 +1,76 @@
 
 
-## Correction: The Wizard Path *Does* Have Date/Time Data — But in a Combined Format
+# Plan: Normalise raw_data at Write Time, Simplify Read Path
 
-I need to correct my earlier statement. Looking at the actual code, here is exactly what happens:
+## Summary
 
-### What the Wizard Path Stores (TenantManager.tsx, lines 771-775)
+Standardise all `scada_imports.raw_data` to always contain `Array<{ date: string, time: string, value: number }>`. Parse once at import time, read directly without re-parsing.
 
-```typescript
-const rawData = result.rows.map(row => ({
-    timestamp: `${row[dateColIdx]} ${row[timeColIdx]}`.trim(),
-    value: parseFloat(row[valueColIdx]) || 0
-}));
-```
+## Step 1: Create normalisation utility
 
-This produces objects like:
-```json
-{ "timestamp": "01/02/2026 00:30:00", "value": 12.5 }
-```
+**New file: `src/components/loadprofiles/utils/normaliseRawData.ts`**
 
-The date and time values **are present** — they are just concatenated into a single `timestamp` string. The wizard does **not** store separate `date` and `time` fields. It only stores `{ timestamp, value }`.
+A single function that accepts any of the 3 current formats (`{date, time, value}`, `{timestamp, value}`, `{csvContent}`) and returns the canonical `{ date, time, value }[]` array. This is the existing `parseRawData` logic extracted for write-time use.
 
-### What the Auto-Process Path Stores (ScadaImport.tsx, line 313)
+## Step 2: Update all write paths to normalise before DB insert/update
 
-It saves the edge function's `rawData` output directly, which has **4 fields per object**:
-```json
-{ "timestamp": "2026-02-01T00:30:00.000Z", "date": "2026-02-01", "time": "00:30:00", "value": 12.5 }
-```
+Six files write `raw_data` to `scada_imports`. Each will call `normaliseRawData()` before the `.insert()` or `.update()` call:
 
-### Why parseRawData.ts Fails
+| File | Write location |
+|------|---------------|
+| `ScadaImport.tsx` | Line ~307 — insert after auto-process |
+| `SitesTab.tsx` | Line ~1128 — update from CSV wizard |
+| `MeterLibrary.tsx` | Lines ~525, ~998 — wizard and reimport |
+| `BulkCsvDropzone.tsx` | Line ~440 — insert from bulk drop |
+| `MeterReimportDialog.tsx` | Line ~98 — update on reimport |
+| `OneClickBatchProcessor.tsx` | Line ~392 — update from batch |
+| `ExcelAuditReimport.tsx` | Lines ~528, ~548 — update and insert |
 
-The parser has three branches:
+## Step 3: Update edge function output
 
-1. **`{ date, time, value }`** — checks `firstItem.date`. Wizard data lacks `date` field. **Skipped.**
-2. **`{ timestamp, value }`** — checks `firstItem.timestamp`. **Matches.** But then splits by space expecting 4+ parts (`DD Mon YYYY HH:MM`). The wizard's timestamp `"01/02/2026 00:30:00"` only has 2 parts. **Returns empty.**
-3. **`{ csvContent }`** — not applicable. **Skipped.**
+**`supabase/functions/process-scada-profile/index.ts`** (line ~598–606): Strip `timestamp`, `kva`, `meterId`, `originalLine` from raw data output. Only keep `{ date, time, value }`.
 
-Result: zero parsed points, blank chart.
+## Step 4: Simplify all read-side consumers
 
-### The Fix
+Remove inline `parseRawData` functions and the shared utility's heavy parsing logic. Replace with direct typecast:
 
-**Single file: `src/components/projects/load-profile/utils/parseRawData.ts`**
+| File | Change |
+|------|--------|
+| `useValidatedSiteData.ts` | Replace `parseRawData(entry.raw_data)` with direct cast |
+| `useMonthlyData.ts` | Remove 60-line inline `parseRawData`, cast directly |
+| `useSpecificDateData.ts` | Remove 60-line inline `parseRawData`, cast directly |
+| `useDailyConsumption.ts` | Remove `parseDateTime` format-sniffing, cast directly |
+| `parseRawData.ts` | Simplify to thin cast with backward-compat fallback |
 
-Add two new timestamp format handlers inside the `{ timestamp, value }` branch (line 28-41), **before** the existing `parts.length >= 4` check:
+## Step 5: One-time migration edge function
 
-1. **ISO-like**: `YYYY-MM-DD HH:MM:SS` → split on space, first part is date, second is time
-2. **SA date format**: `DD/MM/YYYY HH:MM:SS` → swap day/month/year to `YYYY-MM-DD`, extract time
+**New file: `supabase/functions/normalise-raw-data/index.ts`**
 
-```typescript
-// Try "YYYY-MM-DD HH:MM:SS" format
-const isoMatch = ts.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2})?)$/);
-if (isoMatch) {
-  return { date: isoMatch[1], time: normaliseTime(isoMatch[2]), ... };
-}
+An edge function that:
+1. Reads all `scada_imports` rows where `raw_data IS NOT NULL`
+2. Runs each through the normalisation logic
+3. Updates rows in-place with the standardised `{ date, time, value }[]` format
+4. Returns a summary of how many rows were converted
 
-// Try "DD/MM/YYYY HH:MM:SS" format
-const saMatch = ts.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)$/);
-if (saMatch) {
-  const date = `${saMatch[3]}-${saMatch[2].padStart(2,'0')}-${saMatch[1].padStart(2,'0')}`;
-  return { date, time: normaliseTime(saMatch[4]), ... };
-}
-```
+This handles all existing legacy data. Can be triggered once manually via the backend function invocation.
 
-No other files need changing. This fixes both existing stored data and future wizard uploads.
+## Files affected
+
+| File | Action |
+|------|--------|
+| `src/components/loadprofiles/utils/normaliseRawData.ts` | **Create** |
+| `supabase/functions/normalise-raw-data/index.ts` | **Create** |
+| `src/components/loadprofiles/ScadaImport.tsx` | Edit |
+| `src/components/loadprofiles/SitesTab.tsx` | Edit |
+| `src/components/loadprofiles/MeterLibrary.tsx` | Edit |
+| `src/components/loadprofiles/BulkCsvDropzone.tsx` | Edit |
+| `src/components/loadprofiles/MeterReimportDialog.tsx` | Edit |
+| `src/components/loadprofiles/OneClickBatchProcessor.tsx` | Edit |
+| `src/components/loadprofiles/ExcelAuditReimport.tsx` | Edit |
+| `supabase/functions/process-scada-profile/index.ts` | Edit |
+| `src/components/projects/load-profile/utils/parseRawData.ts` | Simplify |
+| `src/components/projects/load-profile/hooks/useValidatedSiteData.ts` | Simplify |
+| `src/components/projects/load-profile/hooks/useMonthlyData.ts` | Simplify |
+| `src/components/projects/load-profile/hooks/useSpecificDateData.ts` | Simplify |
+| `src/components/loadprofiles/hooks/useDailyConsumption.ts` | Simplify |
 
