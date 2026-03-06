@@ -1,39 +1,29 @@
 
 
-# Fix: Load Profile plot fails when PDB_35775423_SolarDB3.1 is included
+# Plan: Storage-first CSV retrieval with re-upload message
 
-## Root Cause
+## Changes
 
-`useValidatedSiteData.ts` line 102 casts `raw_data` directly as `{date, time, value}[]`. The `PDB_35775423_SolarDB3.1` meter has legacy `{timestamp, value}` format, so every point fails the `!point.date || !point.time` check at line 107 and is skipped. Result: zero validated dates, no chart.
+### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
 
-## Fix (single file, two changes)
+Reorder `loadMeterForWizard` to check storage **first**:
 
-**File:** `src/components/projects/load-profile/hooks/useValidatedSiteData.ts`
+1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
+2. If storage returns CSV, use it
+3. Only if storage returns null, check legacy `rawData[0].csvContent`
+4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-**Change 1 — Add import (line 3):**
-```typescript
-import { normaliseRawData } from "@/components/loadprofiles/utils/normaliseRawData";
-```
+### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
 
-**Change 2 — Replace line 102 with normalisation fallback:**
+Same reordering:
 
-Replace:
-```typescript
-const points = Array.isArray(entry.raw_data) ? entry.raw_data as { date?: string; time?: string; value?: number }[] : [];
-```
+1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
+2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
+3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-With:
-```typescript
-let points: { date?: string; time?: string; value?: number }[] = [];
-if (Array.isArray(entry.raw_data) && entry.raw_data.length > 0) {
-  const first = (entry.raw_data as Record<string, unknown>[])[0];
-  if (first.date && first.time) {
-    points = entry.raw_data as { date?: string; time?: string; value?: number }[];
-  } else {
-    points = normaliseRawData(entry.raw_data);
-  }
-}
-```
+### No other files change
 
-This is the identical fallback pattern already used in `useDailyConsumption` and `useMonthlyData`. No other files need changes.
+- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
+- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- No database changes
 
