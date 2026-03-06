@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Tenant, ShopType, ChartDataPoint, DisplayUnit, RawDataPoint } from "../types";
+import { normaliseRawData } from "@/components/loadprofiles/utils/normaliseRawData";
 
 interface UseMonthlyDataProps {
   tenants: Tenant[];
@@ -29,7 +30,8 @@ function castRawData(rawData: unknown): RawDataPoint[] {
   if (!rawData || !Array.isArray(rawData) || rawData.length === 0) return [];
   const first = rawData[0];
   if (first.date && first.time && "value" in first) return rawData as RawDataPoint[];
-  return [];
+  const normalised = normaliseRawData(rawData);
+  return normalised.map(p => ({ date: p.date, time: p.time, value: p.value, timestamp: `${p.date}T${p.time}` }));
 }
 
 export function useMonthlyData({

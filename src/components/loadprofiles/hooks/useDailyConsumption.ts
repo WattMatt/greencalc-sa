@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { normaliseRawData } from "@/components/loadprofiles/utils/normaliseRawData";
 import { format } from "date-fns";
 
 interface NormalisedPoint {
@@ -37,7 +38,7 @@ function castRawData(rawData: unknown): NormalisedPoint[] {
   if (!rawData || !Array.isArray(rawData) || rawData.length === 0) return [];
   const first = rawData[0];
   if (first.date && first.time && "value" in first) return rawData as NormalisedPoint[];
-  return [];
+  return normaliseRawData(rawData);
 }
 
 export function useDailyConsumption(meterId: string | null): UseDailyConsumptionResult {
