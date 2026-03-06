@@ -17,6 +17,7 @@ import { ChartSettings } from "./components/ChartSettings";
 import { ChartStats } from "./components/ChartStats";
 import { OverPanelingAnalysis } from "./components/OverPanelingAnalysis";
 import { AnnotationsPanel } from "./components/AnnotationsPanel";
+import { DataInspector } from "./components/DataInspector";
 import { TOULegend } from "./components/TOULegend";
 import { TopContributors } from "./components/TopContributors";
 import { MethodologySection, solarMethodology, batteryMethodology, financialMethodology, touMethodology } from "@/components/simulation/MethodologySection";
@@ -368,6 +369,12 @@ export function LoadProfileChart({
 
           {showTOU && <TOULegend />}
           {showAnnotations && <AnnotationsPanel annotations={annotations} setAnnotations={setAnnotations} />}
+
+          <DataInspector
+            validatedSiteData={validatedSiteData}
+            rawDataMap={rawDataMap}
+            tenants={tenants}
+          />
         </CardContent>
       </Card>
 
