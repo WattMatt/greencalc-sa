@@ -1,76 +1,35 @@
 
 
-# Plan: Normalise raw_data at Write Time, Simplify Read Path
+# Plan: Load Profile Data Inspector
 
-## Summary
+Add a collapsible "Data Inspector" panel below the Load Envelope chart inside the existing Load Profile tab. This shows the actual processed data powering the charts — per-tenant, per-date, hourly kW values — directly in context within the project.
 
-Standardise all `scada_imports.raw_data` to always contain `Array<{ date: string, time: string, value: number }>`. Parse once at import time, read directly without re-parsing.
+## What it shows
 
-## Step 1: Create normalisation utility
+1. **Summary bar** — Total validated dates, tenants with SCADA data, estimated tenants, outlier count, available year range
+2. **Site-level table** — Rows = validated dates, Columns = hours 00–23, values = site-total kW. Sortable by date or peak hour. Colour-coded cells (heatmap style) for quick visual scanning.
+3. **Per-tenant breakdown** — Select a tenant from a dropdown to see their individual hourly kW arrays per date
+4. **Raw data sample** — For any tenant/date, click to see the underlying `raw_data` entries (the normalised `{date, time, value}` points) in a dialog
+5. **Format verification badge** — Shows whether raw_data is in normalised format or legacy format per meter
 
-**New file: `src/components/loadprofiles/utils/normaliseRawData.ts`**
+## New files
 
-A single function that accepts any of the 3 current formats (`{date, time, value}`, `{timestamp, value}`, `{csvContent}`) and returns the canonical `{ date, time, value }[]` array. This is the existing `parseRawData` logic extracted for write-time use.
+| File | Purpose |
+|------|---------|
+| `src/components/projects/load-profile/components/DataInspector.tsx` | Main collapsible panel with tabs: Site Data, Per-Tenant, Raw Sample |
 
-## Step 2: Update all write paths to normalise before DB insert/update
-
-Six files write `raw_data` to `scada_imports`. Each will call `normaliseRawData()` before the `.insert()` or `.update()` call:
-
-| File | Write location |
-|------|---------------|
-| `ScadaImport.tsx` | Line ~307 — insert after auto-process |
-| `SitesTab.tsx` | Line ~1128 — update from CSV wizard |
-| `MeterLibrary.tsx` | Lines ~525, ~998 — wizard and reimport |
-| `BulkCsvDropzone.tsx` | Line ~440 — insert from bulk drop |
-| `MeterReimportDialog.tsx` | Line ~98 — update on reimport |
-| `OneClickBatchProcessor.tsx` | Line ~392 — update from batch |
-| `ExcelAuditReimport.tsx` | Lines ~528, ~548 — update and insert |
-
-## Step 3: Update edge function output
-
-**`supabase/functions/process-scada-profile/index.ts`** (line ~598–606): Strip `timestamp`, `kva`, `meterId`, `originalLine` from raw data output. Only keep `{ date, time, value }`.
-
-## Step 4: Simplify all read-side consumers
-
-Remove inline `parseRawData` functions and the shared utility's heavy parsing logic. Replace with direct typecast:
+## Edited files
 
 | File | Change |
 |------|--------|
-| `useValidatedSiteData.ts` | Replace `parseRawData(entry.raw_data)` with direct cast |
-| `useMonthlyData.ts` | Remove 60-line inline `parseRawData`, cast directly |
-| `useSpecificDateData.ts` | Remove 60-line inline `parseRawData`, cast directly |
-| `useDailyConsumption.ts` | Remove `parseDateTime` format-sniffing, cast directly |
-| `parseRawData.ts` | Simplify to thin cast with backward-compat fallback |
+| `src/components/projects/load-profile/index.tsx` | Add a toggle button in ChartHeader area and render `<DataInspector>` below the charts, passing `validatedSiteData`, `rawDataMap`, and `tenants` |
 
-## Step 5: One-time migration edge function
+## Technical details
 
-**New file: `supabase/functions/normalise-raw-data/index.ts`**
-
-An edge function that:
-1. Reads all `scada_imports` rows where `raw_data IS NOT NULL`
-2. Runs each through the normalisation logic
-3. Updates rows in-place with the standardised `{ date, time, value }[]` format
-4. Returns a summary of how many rows were converted
-
-This handles all existing legacy data. Can be triggered once manually via the backend function invocation.
-
-## Files affected
-
-| File | Action |
-|------|--------|
-| `src/components/loadprofiles/utils/normaliseRawData.ts` | **Create** |
-| `supabase/functions/normalise-raw-data/index.ts` | **Create** |
-| `src/components/loadprofiles/ScadaImport.tsx` | Edit |
-| `src/components/loadprofiles/SitesTab.tsx` | Edit |
-| `src/components/loadprofiles/MeterLibrary.tsx` | Edit |
-| `src/components/loadprofiles/BulkCsvDropzone.tsx` | Edit |
-| `src/components/loadprofiles/MeterReimportDialog.tsx` | Edit |
-| `src/components/loadprofiles/OneClickBatchProcessor.tsx` | Edit |
-| `src/components/loadprofiles/ExcelAuditReimport.tsx` | Edit |
-| `supabase/functions/process-scada-profile/index.ts` | Edit |
-| `src/components/projects/load-profile/utils/parseRawData.ts` | Simplify |
-| `src/components/projects/load-profile/hooks/useValidatedSiteData.ts` | Simplify |
-| `src/components/projects/load-profile/hooks/useMonthlyData.ts` | Simplify |
-| `src/components/projects/load-profile/hooks/useSpecificDateData.ts` | Simplify |
-| `src/components/loadprofiles/hooks/useDailyConsumption.ts` | Simplify |
+- **DataInspector** receives `ValidatedSiteData` (already computed) and `RawDataMap` — no extra DB queries needed
+- Site-level table iterates `siteDataByDate` entries; per-tenant table iterates `tenantDateMaps.get(tenantId)`
+- Heatmap cell colouring: interpolate background from white (0 kW) to blue (peak kW) using inline styles
+- Raw sample dialog: for a selected tenant + date, pull entries from `rawDataMap[scadaImportId].raw_data` filtered to that date
+- Row limit selector (25/50/100/All) to avoid rendering thousands of rows
+- CSV export button for the currently visible table
 
