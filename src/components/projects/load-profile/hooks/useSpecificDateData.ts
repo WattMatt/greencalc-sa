@@ -15,61 +15,11 @@ interface AvailableDateRange {
   availableDates: Date[];
 }
 
-// Parse raw_data which might be in different formats
-function parseRawData(rawData: unknown): RawDataPoint[] {
-  if (!rawData) return [];
-  
-  // If it's already an array of RawDataPoints
-  if (Array.isArray(rawData) && rawData.length > 0) {
-    const firstItem = rawData[0];
-    
-    // Check if it's already in the correct format
-    if (firstItem.date && firstItem.time && 'value' in firstItem) {
-      return rawData as RawDataPoint[];
-    }
-    
-    // Check if it's the CSV format { csvContent: "..." }
-    if (firstItem.csvContent && typeof firstItem.csvContent === 'string') {
-      const parsed: RawDataPoint[] = [];
-      const lines = firstItem.csvContent.split('\n');
-      
-      // Find header line (look for rdate,rtime,kWh)
-      let headerIndex = -1;
-      for (let i = 0; i < Math.min(10, lines.length); i++) {
-        if (lines[i].toLowerCase().includes('rdate') || lines[i].toLowerCase().includes('date')) {
-          headerIndex = i;
-          break;
-        }
-      }
-      
-      if (headerIndex === -1) return [];
-      
-      // Parse data lines after header
-      for (let i = headerIndex + 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        
-        const parts = line.split(',');
-        if (parts.length >= 3) {
-          const date = parts[0]; // e.g., 2025-01-01
-          const time = parts[1]; // e.g., 00:30:00
-          const kwhValue = parseFloat(parts[2]) || 0; // kWh+ column
-          
-          if (date && time && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            parsed.push({
-              date,
-              time,
-              timestamp: `${date}T${time}`,
-              value: kwhValue,
-            });
-          }
-        }
-      }
-      
-      return parsed;
-    }
-  }
-  
+/** Direct cast – data is normalised at write time */
+function castRawData(rawData: unknown): RawDataPoint[] {
+  if (!rawData || !Array.isArray(rawData) || rawData.length === 0) return [];
+  const first = rawData[0];
+  if (first.date && first.time && "value" in first) return rawData as RawDataPoint[];
   return [];
 }
 
@@ -80,14 +30,13 @@ export function useSpecificDateData({
   displayUnit,
   powerFactor,
 }: UseSpecificDateDataProps) {
-  // Get available dates from all tenants with SCADA data
   const availableDateRange = useMemo((): AvailableDateRange => {
     const allDates = new Set<string>();
     let minDate: Date | null = null;
     let maxDate: Date | null = null;
 
     tenants.forEach((tenant) => {
-      const rawData = parseRawData(tenant.scada_imports?.raw_data);
+      const rawData = castRawData(tenant.scada_imports?.raw_data);
       if (!rawData.length) return;
 
       rawData.forEach((point) => {
@@ -106,20 +55,17 @@ export function useSpecificDateData({
     return { startDate: minDate, endDate: maxDate, availableDates };
   }, [tenants]);
 
-  // Check if any tenants have raw SCADA data
   const hasRawData = useMemo(() => {
     return tenants.some((tenant) => {
-      const rawData = parseRawData(tenant.scada_imports?.raw_data);
+      const rawData = castRawData(tenant.scada_imports?.raw_data);
       return rawData.length > 0;
     });
   }, [tenants]);
 
-  // Calculate chart data for a specific date
   const chartData = useMemo((): ChartDataPoint[] | null => {
     if (!selectedDate) return null;
 
     const dateStr = selectedDate.toISOString().split("T")[0];
-    // Track both sum and count for proper averaging of kW readings
     const hourlyData: { 
       hour: string; 
       total: number; 
@@ -127,7 +73,6 @@ export function useSpecificDateData({
       [key: string]: number | string | { [key: string]: number };
     }[] = [];
 
-    // Initialize hourly buckets with count tracking
     for (let h = 0; h < 24; h++) {
       const hourLabel = `${h.toString().padStart(2, "0")}:00`;
       hourlyData.push({ hour: hourLabel, total: 0, _counts: {} });
@@ -136,11 +81,10 @@ export function useSpecificDateData({
     let hasDataForDate = false;
 
     tenants.forEach((tenant) => {
-      const rawData = parseRawData(tenant.scada_imports?.raw_data);
+      const rawData = castRawData(tenant.scada_imports?.raw_data);
       const tenantArea = Number(tenant.area_sqm) || 0;
 
       if (rawData.length) {
-        // Filter data for the selected date
         const dateData = rawData.filter((point) => point.date === dateStr);
 
         if (dateData.length > 0) {
@@ -153,14 +97,12 @@ export function useSpecificDateData({
             const hour = parseInt(point.time?.split(":")[0] || "0", 10);
             if (hour >= 0 && hour < 24) {
               const kwValue = (point.value || 0) * areaScaleFactor;
-              // Accumulate sum and count for averaging
               hourlyData[hour][key] = ((hourlyData[hour][key] as number) || 0) + kwValue;
               hourlyData[hour]._counts[key] = (hourlyData[hour]._counts[key] || 0) + 1;
             }
           });
         }
       } else {
-        // Fallback to shop type estimates for tenants without SCADA data
         const shopType = tenant.shop_type_id
           ? shopTypes.find((st) => st.id === tenant.shop_type_id)
           : null;
@@ -176,7 +118,6 @@ export function useSpecificDateData({
 
         for (let h = 0; h < 24; h++) {
           const hourlyKwh = dailyKwh * (profileArray[h] / 100);
-          // Estimates are already hourly averages, count = 1
           hourlyData[h][key] = ((hourlyData[h][key] as number) || 0) + hourlyKwh;
           hourlyData[h]._counts[key] = 1;
         }
@@ -185,7 +126,6 @@ export function useSpecificDateData({
 
     if (!hasDataForDate) return null;
 
-    // Convert sums to averages for each tenant, then convert to display unit
     return hourlyData.map((hourData) => {
       const result: ChartDataPoint = { hour: hourData.hour as string, total: 0 };
       const counts = hourData._counts as { [key: string]: number };
@@ -195,7 +135,6 @@ export function useSpecificDateData({
         
         const sumValue = hourData[key] as number;
         const count = counts[key] || 1;
-        // AVERAGE kW readings within the hour (for 30-min intervals, this divides by 2)
         const avgKw = sumValue / count;
         
         const value = displayUnit === "kw" ? avgKw : avgKw / powerFactor;
@@ -206,9 +145,5 @@ export function useSpecificDateData({
     });
   }, [tenants, shopTypes, selectedDate, displayUnit, powerFactor]);
 
-  return {
-    chartData,
-    availableDateRange,
-    hasRawData,
-  };
+  return { chartData, availableDateRange, hasRawData };
 }

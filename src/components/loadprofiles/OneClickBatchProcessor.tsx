@@ -9,6 +9,7 @@ import { Zap, CheckCircle2, XCircle, AlertTriangle, X, Play, Pause } from "lucid
 import { toast } from "sonner";
 import { processCSVToLoadProfile, validateLoadProfile } from "./utils/csvToLoadProfile";
 import { WizardParseConfig, ColumnConfig } from "./types/csvImportTypes";
+import { normaliseRawData } from "./utils/normaliseRawData";
 
 interface ProcessingResult {
   id: string;
@@ -368,23 +369,15 @@ export function OneClickBatchProcessor({
       const totalDays = Math.max(1, profile.weekdayDays + profile.weekendDays);
       const avgDailyKwh = profile.totalKwh / totalDays;
 
-      // Build new raw_data preserving CSV for future reprocessing
-      const newRawData = [{
-        csvContent, // Preserve for reprocessing
-        processingConfig: parseConfig.valueColumnIndex !== undefined ? {
-          column: headers[parseConfig.valueColumnIndex],
-          unit: parseConfig.valueUnit,
-          voltageV: parseConfig.voltageV,
-          powerFactor: parseConfig.powerFactor,
-        } : undefined,
-        totalKwh: profile.totalKwh,
-        avgDailyKwh,
-        peakKw: profile.peakKw,
-        avgKw: profile.avgKw,
-        dataPoints: profile.dataPoints,
-        dateStart: dateRangeStart,
-        dateEnd: dateRangeEnd,
-      }];
+      // Build normalised interval data from parsed rows
+      const dateIdx = parseConfig.dateColumnIndex ?? 0;
+      const timeIdx = parseConfig.timeColumnIndex;
+      const valueIdx = parseConfig.valueColumnIndex ?? 1;
+      
+      const newRawData = normaliseRawData(rows.map(row => ({
+        timestamp: `${row[dateIdx] || ''} ${timeIdx !== undefined && timeIdx >= 0 ? (row[timeIdx] || '') : ''}`.trim(),
+        value: parseFloat(row[valueIdx]?.replace(/[^\d.-]/g, '') || '0') || 0,
+      })).filter(d => d.value !== 0 || d.timestamp));
 
       // Update meter
       const { error: updateError } = await supabase

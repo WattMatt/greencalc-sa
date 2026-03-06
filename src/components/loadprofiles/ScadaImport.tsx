@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { CsvImportWizard, WizardParseConfig } from "./CsvImportWizard";
 import { processCSVToLoadProfile, ProcessedLoadProfile, validateLoadProfile } from "./utils/csvToLoadProfile";
 import { uploadCsvToStorage } from "./utils/csvStorage";
+import { normaliseRawData } from "./utils/normaliseRawData";
 import { MeterAnalysisChart, MeterChartDataPoint } from "./MeterAnalysisChart";
 
 interface Category {
@@ -311,7 +312,7 @@ export function ScadaImport({ categories, siteId, onImportComplete }: ScadaImpor
           shop_name: shopName || null,
           area_sqm: area ? parseFloat(area) : null,
           file_name: fileName,
-          raw_data: processedData.rawData,
+          raw_data: normaliseRawData(processedData.rawData),
           data_points: processedData.dataPoints,
           date_range_start: processedData.dateRange.start,
           date_range_end: processedData.dateRange.end,

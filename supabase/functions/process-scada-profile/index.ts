@@ -636,7 +636,7 @@ serve(async (req) => {
         },
         weekdayDays,
         weekendDays,
-        rawData: rawData.slice(0, 5000), // Limit raw data size
+        rawData: rawData.slice(0, 5000).map(p => ({ date: p.date, time: p.time, value: p.value })),
         weekdayProfile,
         weekendProfile,
         detectedColumns: {

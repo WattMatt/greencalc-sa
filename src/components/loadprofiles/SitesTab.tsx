@@ -18,6 +18,7 @@ import { SheetImport } from "@/components/loadprofiles/SheetImport";
 import { MeterReimportDialog } from "@/components/loadprofiles/MeterReimportDialog";
 import { ColumnSelectionDialog } from "@/components/loadprofiles/ColumnSelectionDialog";
 import { CsvImportWizard, WizardParseConfig, ParsedData } from "@/components/loadprofiles/CsvImportWizard";
+import { normaliseRawData } from "@/components/loadprofiles/utils/normaliseRawData";
 import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
 import { SiteLocationMap } from "@/components/loadprofiles/SiteLocationMap";
 import { SitesMapView } from "@/components/loadprofiles/SitesMapView";
@@ -1113,16 +1114,18 @@ export function SitesTab() {
       const totalDays = Math.max(1, profile.weekdayDays + profile.weekendDays);
       const avgDailyKwh = profile.totalKwh / totalDays;
 
-      // Build new raw_data WITHOUT CSV content
-      const newRawData = [{
-        totalKwh: profile.totalKwh,
-        avgDailyKwh,
-        peakKw: profile.peakKw,
-        avgKw: profile.avgKw,
-        dataPoints: profile.dataPoints,
-        dateStart: dateRangeStart,
-        dateEnd: dateRangeEnd,
-      }];
+      // Build new raw_data as normalised interval data from the wizard rows
+      const intervalData = parsedData.rows.map(row => {
+        const dateIdx = config.dateColumnIndex ?? 0;
+        const timeIdx = config.timeColumnIndex;
+        const valueIdx = config.valueColumnIndex ?? 1;
+        return {
+          timestamp: `${row[dateIdx] || ''} ${timeIdx !== undefined && timeIdx >= 0 ? (row[timeIdx] || '') : ''}`.trim(),
+          value: parseFloat(row[valueIdx]?.replace(/[^\d.-]/g, '') || '0') || 0,
+        };
+      }).filter(d => d.value !== 0 || d.timestamp);
+      
+      const newRawData = normaliseRawData(intervalData);
 
       // Update the meter
       const { error: updateError } = await supabase

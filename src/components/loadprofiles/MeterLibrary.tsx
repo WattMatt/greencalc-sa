@@ -21,6 +21,7 @@ import { MeterProfilePreview } from "./MeterProfilePreview";
 import { CsvImportWizard } from "./CsvImportWizard";
 import { OneClickBatchProcessor } from "./OneClickBatchProcessor";
 import { uploadCsvToStorage, downloadCsvFromStorage } from "./utils/csvStorage";
+import { normaliseRawData } from "./utils/normaliseRawData";
 // Lazy load BulkCsvDropzone to avoid chunk loading issues
 const BulkCsvDropzone = lazy(() => import("./BulkCsvDropzone").then(m => ({ default: m.BulkCsvDropzone })));
 
@@ -496,16 +497,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
             const avgDailyKwh = profile.totalKwh / totalDays;
 
             // Build new raw_data WITHOUT CSV content (clear it to save space)
-            const newRawData = [{
-              // csvContent intentionally removed to save storage
-              totalKwh: profile.totalKwh,
-              avgDailyKwh,
-              peakKw: profile.peakKw,
-              avgKw: profile.avgKw,
-              dataPoints: profile.dataPoints,
-              dateStart: dateRangeStart,
-              dateEnd: dateRangeEnd,
-            }];
+            const newRawData = [] as { date: string; time: string; value: number; [key: string]: string | number }[];
 
             // Validate profile per CSV_EXTRACTION_SPECIFICATION.md
             const validation = validateLoadProfile(profile);
@@ -974,17 +966,18 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
         powerFactor: config.powerFactor,
       };
       
-      const newRawData = [{
-        csvContent: currentWizardCsvContent, // Preserve for reprocessing
-        processingConfig, // Store the config for reconfiguration
-        totalKwh: profile.totalKwh,
-        avgDailyKwh,
-        peakKw: profile.peakKw,
-        avgKw: profile.avgKw,
-        dataPoints: profile.dataPoints,
-        dateStart: dateRangeStart,
-        dateEnd: dateRangeEnd,
-      }];
+      // Build normalised interval data from wizard rows
+      const intervalData = parsedData.rows.map(row => {
+        const dateIdx = config.dateColumnIndex ?? 0;
+        const timeIdx = config.timeColumnIndex;
+        const valueIdx = config.valueColumnIndex ?? 1;
+        return {
+          timestamp: `${row[dateIdx] || ''} ${timeIdx !== undefined && timeIdx >= 0 ? (row[timeIdx] || '') : ''}`.trim(),
+          value: parseFloat(row[valueIdx]?.replace(/[^\d.-]/g, '') || '0') || 0,
+        };
+      }).filter(d => d.value !== 0 || d.timestamp);
+      
+      const newRawData = normaliseRawData(intervalData);
 
       // Validate profile per CSV_EXTRACTION_SPECIFICATION.md
       const validation = validateLoadProfile(profile);

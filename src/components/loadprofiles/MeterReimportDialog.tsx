@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { Upload, Loader2, Check, FileUp, AlertTriangle } from "lucide-react";
 import { CsvImportWizard, WizardParseConfig } from "./CsvImportWizard";
 import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
+import { normaliseRawData } from "./utils/normaliseRawData";
 
 interface MeterReimportDialogProps {
   isOpen: boolean;
@@ -78,10 +79,10 @@ export function MeterReimportDialog({
       const timeIdx = config.timeColumnIndex ?? headers.findIndex(h => h.includes('time') || h === 'rtime');
       const valueIdx = config.valueColumnIndex ?? headers.findIndex(h => h.includes('kwh') || h.includes('value') || h.includes('active'));
       
-      const rawData = parsedData.rows.map(row => ({
+      const rawData = normaliseRawData(parsedData.rows.map(row => ({
         timestamp: `${row[dateIdx] || ''} ${timeIdx >= 0 ? (row[timeIdx] || '') : ''}`.trim(),
         value: parseFloat(row[valueIdx]?.replace(/[^\d.-]/g, '') || '0') || 0
-      })).filter(d => d.value !== 0 || d.timestamp);
+      })).filter(d => d.value !== 0 || d.timestamp));
 
       // Check if we got meaningful data
       const hasNonZeroValues = rawData.some(d => d.value !== 0);

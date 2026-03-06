@@ -24,58 +24,11 @@ interface AvailableMonth {
   totalKwh: number;
 }
 
-// Parse raw_data which might be in different formats
-function parseRawData(rawData: unknown): RawDataPoint[] {
-  if (!rawData) return [];
-  
-  if (Array.isArray(rawData) && rawData.length > 0) {
-    const firstItem = rawData[0];
-    
-    // Check if it's already in the correct format
-    if (firstItem.date && firstItem.time && 'value' in firstItem) {
-      return rawData as RawDataPoint[];
-    }
-    
-    // Check if it's the CSV format { csvContent: "..." }
-    if (firstItem.csvContent && typeof firstItem.csvContent === 'string') {
-      const parsed: RawDataPoint[] = [];
-      const lines = firstItem.csvContent.split('\n');
-      
-      let headerIndex = -1;
-      for (let i = 0; i < Math.min(10, lines.length); i++) {
-        if (lines[i].toLowerCase().includes('rdate') || lines[i].toLowerCase().includes('date')) {
-          headerIndex = i;
-          break;
-        }
-      }
-      
-      if (headerIndex === -1) return [];
-      
-      for (let i = headerIndex + 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        
-        const parts = line.split(',');
-        if (parts.length >= 3) {
-          const date = parts[0];
-          const time = parts[1];
-          const kwhValue = parseFloat(parts[2]) || 0;
-          
-          if (date && time && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            parsed.push({
-              date,
-              time,
-              timestamp: `${date}T${time}`,
-              value: kwhValue,
-            });
-          }
-        }
-      }
-      
-      return parsed;
-    }
-  }
-  
+/** Direct cast – data is normalised at write time */
+function castRawData(rawData: unknown): RawDataPoint[] {
+  if (!rawData || !Array.isArray(rawData) || rawData.length === 0) return [];
+  const first = rawData[0];
+  if (first.date && first.time && "value" in first) return rawData as RawDataPoint[];
   return [];
 }
 
@@ -90,12 +43,12 @@ export function useMonthlyData({
     const monthMap = new Map<string, { dates: Set<string>; totalKwh: number }>();
     
     tenants.forEach((tenant) => {
-      const rawData = parseRawData(tenant.scada_imports?.raw_data);
+      const rawData = castRawData(tenant.scada_imports?.raw_data);
       if (!rawData.length) return;
       
       rawData.forEach((point) => {
         if (!point.date) return;
-        const month = point.date.substring(0, 7); // "YYYY-MM"
+        const month = point.date.substring(0, 7);
         
         if (!monthMap.has(month)) {
           monthMap.set(month, { dates: new Set(), totalKwh: 0 });
@@ -118,7 +71,7 @@ export function useMonthlyData({
           totalKwh: data.totalKwh,
         };
       })
-      .sort((a, b) => b.value.localeCompare(a.value)); // Most recent first
+      .sort((a, b) => b.value.localeCompare(a.value));
   }, [tenants]);
 
   // Calculate stats for selected month
@@ -131,7 +84,7 @@ export function useMonthlyData({
     let totalDataPoints = 0;
     
     tenants.forEach((tenant) => {
-      const rawData = parseRawData(tenant.scada_imports?.raw_data);
+      const rawData = castRawData(tenant.scada_imports?.raw_data);
       if (!rawData.length) return;
       
       const tenantArea = Number(tenant.area_sqm) || 0;
@@ -145,7 +98,6 @@ export function useMonthlyData({
         const scaledValue = (point.value || 0) * areaScaleFactor;
         totalKwh += scaledValue;
         
-        // For half-hour readings, peak kW = kWh * 2
         const kw = scaledValue * 2;
         if (kw > peakKw) peakKw = kw;
         
@@ -156,20 +108,13 @@ export function useMonthlyData({
     const daysWithData = allDates.size;
     const avgDailyKwh = daysWithData > 0 ? totalKwh / daysWithData : 0;
     
-    return {
-      totalKwh,
-      peakKw,
-      avgDailyKwh,
-      daysWithData,
-      totalDataPoints,
-    };
+    return { totalKwh, peakKw, avgDailyKwh, daysWithData, totalDataPoints };
   }, [tenants, selectedMonth]);
 
   // Calculate hourly chart data averaged across the selected month
   const chartData = useMemo((): ChartDataPoint[] | null => {
     if (!selectedMonth) return null;
     
-    // Track both sum and count per hour per tenant for proper averaging
     const hourlyTotals: Map<string, { sums: Map<string, number>; counts: Map<string, number> }> = new Map();
     
     for (let h = 0; h < 24; h++) {
@@ -180,7 +125,7 @@ export function useMonthlyData({
     const allDatesInMonth = new Set<string>();
     
     tenants.forEach((tenant) => {
-      const rawData = parseRawData(tenant.scada_imports?.raw_data);
+      const rawData = castRawData(tenant.scada_imports?.raw_data);
       const tenantArea = Number(tenant.area_sqm) || 0;
       
       if (rawData.length) {
@@ -201,7 +146,6 @@ export function useMonthlyData({
             const scaledValue = (point.value || 0) * areaScaleFactor;
             
             const hourData = hourlyTotals.get(hourLabel)!;
-            // Accumulate sum and count for each tenant per hour
             hourData.sums.set(key, (hourData.sums.get(key) || 0) + scaledValue);
             hourData.counts.set(key, (hourData.counts.get(key) || 0) + 1);
           }
@@ -212,7 +156,6 @@ export function useMonthlyData({
     const daysInMonth = allDatesInMonth.size;
     if (daysInMonth === 0) return null;
     
-    // Calculate averaged hourly profile
     const result: ChartDataPoint[] = [];
     
     for (let h = 0; h < 24; h++) {
@@ -223,13 +166,7 @@ export function useMonthlyData({
       
       hourData.sums.forEach((sumValue, key) => {
         const readingCount = hourData.counts.get(key) || 1;
-        
-        // First: average readings within each hour (for 30-min intervals)
-        // Then: average across days in the month
-        // For 30-min intervals: readingCount = daysInMonth * 2 readings per hour
-        // avgKw = sum / readingCount gives us the average kW
         const avgKw = sumValue / readingCount;
-        
         const value = displayUnit === "kw" ? avgKw : avgKw / powerFactor;
         
         dataPoint[key] = value;
@@ -244,10 +181,5 @@ export function useMonthlyData({
 
   const hasRawData = availableMonths.length > 0;
 
-  return {
-    chartData,
-    availableMonths,
-    monthlyStats,
-    hasRawData,
-  };
+  return { chartData, availableMonths, monthlyStats, hasRawData };
 }
