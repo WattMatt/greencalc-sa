@@ -138,7 +138,7 @@ function detectColumns(headers: string[], sampleRows: string[][]) {
       dateCol = idx;
     }
     
-    if (dateCol === -1 && timePatterns.some(p => lower === p || lower.startsWith(p))) {
+    if (timeCol === -1 && timePatterns.some(p => lower === p || lower.startsWith(p))) {
       if (sampleRows.length > 0) {
         const sampleVal = sampleRows[0]?.[idx];
         const datetimeCount = sampleRows.filter(row => looksLikeDatetime(row[idx])).length;
