@@ -62,6 +62,13 @@ function normaliseRawData(rawData: unknown): NormalisedPoint[] | null {
         const isoMatch = ts.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2}(?::\d{2})?)/);
         if (isoMatch) return { date: isoMatch[1], time: normaliseTime(isoMatch[2]), value: val };
 
+        // YYYY/MM/DD HH:MM:SS (slash-separated)
+        const slashIso = ts.match(/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})[T\s](\d{2}:\d{2}(?::\d{2})?)/);
+        if (slashIso) {
+          const date = `${slashIso[1]}-${slashIso[2].padStart(2, "0")}-${slashIso[3].padStart(2, "0")}`;
+          return { date, time: normaliseTime(slashIso[4]), value: val };
+        }
+
         const saMatch = ts.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)$/);
         if (saMatch) {
           const date = `${saMatch[3]}-${saMatch[2].padStart(2, "0")}-${saMatch[1].padStart(2, "0")}`;
