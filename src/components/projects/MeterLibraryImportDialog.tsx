@@ -36,7 +36,6 @@ interface MeterRow {
   weekday_days: number | null;
   weekend_days: number | null;
   csv_file_path: string | null;
-  csv_file_path: string | null;
 }
 
 interface ParsedRow {
