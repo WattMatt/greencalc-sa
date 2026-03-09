@@ -68,7 +68,7 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
   });
 
   // Build parsed rows when meters load
-  useMemo(() => {
+  useEffect(() => {
     if (globalMeters && !initialised) {
       setRows(
         globalMeters.map((m) => {
