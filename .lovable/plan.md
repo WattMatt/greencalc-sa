@@ -1,53 +1,29 @@
 
 
-# Plan: Bulk Create Tenants from Meter Library with Auto-Extract
+# Plan: Storage-first CSV retrieval with re-upload message
 
-## What this does
+## Changes
 
-Adds a new action to the Tenants tab that lets you select meters from the meter library and bulk-create tenants from them in one go. The system will parse the meter's `shop_name` / `site_name` to extract the **tenant name** and **area (m2)**, then create `project_tenants` records with the meter already assigned.
+### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
 
-## How the name/area extraction works
+Reorder `loadMeterForWizard` to check storage **first**:
 
-Your meter labels follow the pattern:
-```text
-PDB_36506603_HomeEssentials_3365m2
-PDB_35775424_Dischem_1462m2
-PDB_36085238_Sorbet_87m2
-```
+1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
+2. If storage returns CSV, use it
+3. Only if storage returns null, check legacy `rawData[0].csvContent`
+4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-The parser will:
-1. Split by `_` and identify the **shop name** segment (after the numeric meter ID) and the **area** segment (ending in `m2`)
-2. Extract shop number from the PDB meter ID (e.g. `36506603`)
-3. Convert camelCase names to spaced names (e.g. `HomeEssentials` → `Home Essentials`, `BurgerKingDT` → `Burger King DT`)
-4. For non-PDB labels (e.g. `Woolworths`, `ABC FINANCE`), use the full `shop_name` as tenant name with area defaulting to `0`
+### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
 
-## UI Flow
+Same reordering:
 
-1. New button in TenantManager toolbar: **"Import from Meter Library"**
-2. Opens a dialog showing all global meters (`project_id IS NULL`) with checkboxes
-3. Each row shows: meter label, **extracted shop name** (editable), **extracted area** (editable), and a preview of data availability
-4. User reviews/adjusts extractions, then clicks **"Create Tenants"**
-5. System bulk-inserts `project_tenants` records with `scada_import_id` already set, plus copies each selected meter as a local project meter (same as existing wizard pattern)
+1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
+2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
+3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-## Files to change
+### No other files change
 
-### 1. New file: `src/utils/meterLabelParser.ts`
-Pure utility function to parse meter labels:
-- `parseMeterLabel(label: string) → { shopName: string, shopNumber: string | null, areaSqm: number }`
-- Handles PDB pattern, camelCase splitting, area extraction
-- Falls back gracefully for non-standard labels
-
-### 2. New file: `src/components/projects/MeterLibraryImportDialog.tsx`
-Dialog component:
-- Fetches global meters from `scada_imports` where `project_id IS NULL` and `data_points > 0`
-- Displays parsed results in an editable table
-- Select-all / individual checkboxes
-- On confirm: creates local meter copies + `project_tenants` records with assignments
-
-### 3. Edit: `src/components/projects/TenantManager.tsx`
-- Add "Import from Meter Library" button to the toolbar (alongside existing CSV import and wizard buttons)
-- Wire up the new dialog
-
-## No database changes needed
-Uses existing `scada_imports` and `project_tenants` tables as-is.
+- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
+- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- No database changes
 

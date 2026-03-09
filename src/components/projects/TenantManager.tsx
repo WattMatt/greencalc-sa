@@ -9,7 +9,7 @@ import { NumericInput } from "@/components/ui/numeric-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ChevronsUpDown, Check, Layers, MoreVertical, Eye, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, X } from "lucide-react";
+import { ChevronsUpDown, Check, Layers, MoreVertical, Eye, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, X, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -30,6 +30,7 @@ import { AccuracyBadge, AccuracySummary, getAccuracyLevel } from "@/components/s
 import { ScaledMeterPreview } from "./ScaledMeterPreview";
 import { TenantColumnMapper, type TenantMappedData } from "./TenantColumnMapper";
 import { ScadaImportWizard, type ParsedFileResult } from "./ScadaImportWizard";
+import { MeterLibraryImportDialog } from "./MeterLibraryImportDialog";
 
 interface Tenant {
   id: string;
@@ -277,8 +278,11 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
   // Profile scope toggle: global vs local
   const [profileScope, setProfileScope] = useState<'global' | 'local'>('global');
   
-  // Scada Import Wizard state
+// Scada Import Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
+  
+  // Meter Library Import Dialog state
+  const [meterLibraryImportOpen, setMeterLibraryImportOpen] = useState(false);
   
   // Column mapper state (still used after wizard completes)
   const [columnMapperOpen, setColumnMapperOpen] = useState(false);
@@ -1151,6 +1155,10 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
             <Upload className="h-4 w-4 mr-2" />
             Import Data
           </Button>
+          <Button variant="outline" onClick={() => setMeterLibraryImportOpen(true)}>
+            <Database className="h-4 w-4 mr-2" />
+            Import from Library
+          </Button>
         </div>
       </div>
 
@@ -1657,6 +1665,12 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
         onClose={() => setWizardOpen(false)}
         projectId={projectId}
         onComplete={handleWizardComplete}
+      />
+
+      <MeterLibraryImportDialog
+        open={meterLibraryImportOpen}
+        onClose={() => setMeterLibraryImportOpen(false)}
+        projectId={projectId}
       />
 
       {/* Tenant Column Mapper */}
