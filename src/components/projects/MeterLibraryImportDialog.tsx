@@ -26,8 +26,6 @@ interface MeterRow {
   meter_color: string | null;
   data_points: number | null;
   area_sqm: number | null;
-  load_profile_weekday: number[] | null;
-  load_profile_weekend: number[] | null;
   date_range_start: string | null;
   date_range_end: string | null;
   file_name: string | null;
