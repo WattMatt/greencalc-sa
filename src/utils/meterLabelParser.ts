@@ -33,7 +33,7 @@ export function parseMeterLabel(
   const raw = (label ?? fallbackSiteName ?? "").trim();
 
   if (!raw) {
-    return { shopName: "Unknown", shopNumber: null, areaSqm: 0 };
+    return { shopName: "Unknown", shopNumber: null, areaSqm: 0, prefix: null };
   }
 
   const parts = raw.split("_");
