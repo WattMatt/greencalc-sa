@@ -79,6 +79,7 @@ interface TenantManagerProps {
   tenants: Tenant[];
   shopTypes: ShopType[];
   highlightTenantId?: string | null;
+  meterDataPrefix?: string;
 }
 
 // KwhOverrideCell component for inline editing
