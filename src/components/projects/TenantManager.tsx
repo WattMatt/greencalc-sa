@@ -9,7 +9,7 @@ import { NumericInput } from "@/components/ui/numeric-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ChevronsUpDown, Check, Layers, MoreVertical, Eye, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, X } from "lucide-react";
+import { ChevronsUpDown, Check, Layers, MoreVertical, Eye, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, X, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
