@@ -13,6 +13,7 @@ export interface ParsedMeterLabel {
   shopName: string;
   shopNumber: string | null;
   areaSqm: number;
+  prefix: string | null;
 }
 
 /**
