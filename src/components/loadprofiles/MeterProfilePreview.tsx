@@ -47,7 +47,7 @@ const TOU_COLORS = {
 };
 
 export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePreviewProps) {
-  
+  const [profileType, setProfileType] = useState<'weekday' | 'weekend'>('weekday');
   
   const { 
     isLoading: isLoadingMonthly, 
