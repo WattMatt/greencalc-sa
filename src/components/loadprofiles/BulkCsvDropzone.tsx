@@ -1,29 +1,26 @@
 import { useState, useCallback, useRef, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle, 
-  Zap, Play, Pause, X, RefreshCw, Loader2, Link2, Link2Off,
+  Zap, Play, Pause, X, Loader2,
   FolderUp, Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import { processCSVToLoadProfile, validateLoadProfile } from "./utils/csvToLoadProfile";
 import { WizardParseConfig, ColumnConfig } from "./types/csvImportTypes";
-import { matchFilesToMeters, MatchResult, MeterInfo, normalizeName } from "./utils/fuzzyMatcher";
 import { uploadCsvToStorage } from "./utils/csvStorage";
 import { normaliseRawData } from "./utils/normaliseRawData";
 
 interface FileMatchInfo {
   file: File;
   content: string;
-  match: MatchResult | null;
-  status: 'pending' | 'processing' | 'success' | 'failed' | 'needs_review' | 'skipped';
+  status: 'pending' | 'processing' | 'success' | 'failed' | 'needs_review';
   message?: string;
   dataPoints?: number;
 }
@@ -51,24 +48,20 @@ function autoDetectConfig(content: string): {
   // Check for Excel "sep=" line and skip it
   let lineOffset = 0;
   if (lines.length > 0 && lines[0].toLowerCase().startsWith('sep=')) {
-    // Extract delimiter from sep= line (e.g., "sep=;" means semicolon)
     const sepMatch = lines[0].match(/^sep=(.)/i);
     if (sepMatch) {
       delimiter = sepMatch[1];
       console.log(`[autoDetect] Found sep= line, delimiter: "${delimiter}"`);
     }
     lineOffset = 1;
-    startRow = 2; // Skip sep= line, headers are on line 2
+    startRow = 2;
   }
 
   // Check for PnP SCADA format (after skipping sep= line)
   if (lines.length >= 2 + lineOffset) {
     const firstLine = lines[lineOffset];
     
-    // Format 1: "meterName",2024-01-01,2024-12-31
-    const meterMatch = firstLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
-    
-    // Format 2: pnpscada.com,meterNumber (simple format)
+    const meterMatch = firstLine.match(/^,"([^"]+)",(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
     const pnpSimpleMatch = firstLine.toLowerCase().includes('pnpscada') || 
                            firstLine.toLowerCase().includes('scada.com');
     
@@ -76,32 +69,25 @@ function autoDetectConfig(content: string): {
     const hasScadaHeaders = secondLine.includes('rdate') && secondLine.includes('rtime') && secondLine.includes('kwh');
     
     if (meterMatch && hasScadaHeaders) {
-      // Format 1: Full meter info with date range
       isPnpScada = true;
       meterName = meterMatch[1];
       dateRange = { start: meterMatch[2], end: meterMatch[3] };
-      startRow = lineOffset + 3; // Skip sep= (if present), meter info line, and header line
+      startRow = lineOffset + 3;
     } else if (pnpSimpleMatch && hasScadaHeaders) {
-      // Format 2: Simple pnpscada.com,meterNumber format
       isPnpScada = true;
-      // Try to extract meter name/number from first line
       const parts = firstLine.split(',').map(p => p.replace(/"/g, '').trim());
-      meterName = parts[1] || parts[0]; // Use second part (meter number) or first
-      startRow = lineOffset + 3; // Skip pnpscada line and header line
+      meterName = parts[1] || parts[0];
+      startRow = lineOffset + 3;
       console.log(`[autoDetect] Detected simple PnP SCADA format, meter: ${meterName}`);
     } else if (pnpSimpleMatch) {
-      // Format 3: pnpscada.com line but different header format - need to scan for headers
       isPnpScada = true;
       const parts = firstLine.split(',').map(p => p.replace(/"/g, '').trim());
       meterName = parts[1] || parts[0];
       
-      // Scan for header row (look for date/time/kwh patterns)
-      // startRow convention: startRow - 1 = header row index, startRow = first data row index
       for (let i = lineOffset + 1; i < Math.min(lines.length, lineOffset + 10); i++) {
         const lineLower = lines[i].toLowerCase();
         if ((lineLower.includes('date') || lineLower.includes('rdate') || lineLower.includes('time')) &&
             (lineLower.includes('kwh') || lineLower.includes('kw') || lineLower.includes('energy'))) {
-          // i is 0-indexed line of header, so startRow = i + 1 means headerIdx = i + 1 - 1 = i (correct!)
           startRow = i + 1;
           console.log(`[autoDetect] Found SCADA headers at line index ${i} (1-indexed: ${i + 1}): ${lines[i].substring(0, 50)}...`);
           break;
@@ -130,7 +116,6 @@ function autoDetectConfig(content: string): {
 function looksLikeDatetime(val: string): boolean {
   if (!val) return false;
   const cleanVal = val.replace(/"/g, '').trim();
-  // Match patterns like: 2025-11-20 00:30:00, 2025/11/20 00:30, 20-11-2025 00:30:00
   const datetimePattern = /\d{2,4}[-\/]\d{1,2}[-\/]\d{1,4}[\sT]\d{1,2}:\d{2}/;
   return datetimePattern.test(cleanVal);
 }
@@ -149,20 +134,16 @@ function detectColumns(headers: string[], sampleRows: string[][]) {
   headers.forEach((header, idx) => {
     const lower = header.toLowerCase().trim();
     
-    // Date detection - check header name
     if (dateCol === -1 && datePatterns.some(p => lower.includes(p))) {
       dateCol = idx;
     }
     
-    // Time column that contains actual datetime data should be treated as date column
     if (dateCol === -1 && timePatterns.some(p => lower === p || lower.startsWith(p))) {
-      // Check if the data in this column looks like datetime (has date + time)
       if (sampleRows.length > 0) {
         const sampleVal = sampleRows[0]?.[idx];
         const datetimeCount = sampleRows.filter(row => looksLikeDatetime(row[idx])).length;
         console.log(`[detectColumns] Time column check: header="${header}", sampleVal="${sampleVal}", datetimeCount=${datetimeCount}/${sampleRows.length}, looksLikeDatetime=${looksLikeDatetime(sampleVal || '')}`);
         if (datetimeCount > sampleRows.length * 0.5) {
-          // This "time" column actually contains datetime values - use as date column
           dateCol = idx;
           console.log(`[detectColumns] Promoted 'Time' column to dateCol - contains datetime values`);
         } else if (!lower.includes('date')) {
@@ -173,18 +154,16 @@ function detectColumns(headers: string[], sampleRows: string[][]) {
       }
     }
     
-    // Value detection with scoring
     let score = 0;
     let unit: 'kWh' | 'kW' = 'kWh';
     
     if (lower === 'kwh' || lower === 'kwh_del') { score = 100; unit = 'kWh'; }
-    else if (lower === 'p1 (kwh)' || lower === 'p1(kwh)') { score = 95; unit = 'kWh'; } // PnP SCADA format
+    else if (lower === 'p1 (kwh)' || lower === 'p1(kwh)') { score = 95; unit = 'kWh'; }
     else if (lower === 'kw' || lower === 'power') { score = 80; unit = 'kW'; }
     else if (lower.includes('kwh') || lower.includes('energy') || lower.includes('consumption')) { score = 70; unit = 'kWh'; }
     else if (lower.includes('kw') || lower.includes('demand')) { score = 60; unit = 'kW'; }
     else if (lower.includes('value') || lower.includes('reading')) { score = 40; unit = 'kWh'; }
     
-    // Boost score for numeric columns
     if (score > 0 && sampleRows.length > 0) {
       const numericCount = sampleRows.filter(row => {
         const val = row[idx];
@@ -201,7 +180,6 @@ function detectColumns(headers: string[], sampleRows: string[][]) {
     }
   });
 
-  // Fallback: find first numeric column if no value column detected
   if (valueCol === -1 && sampleRows.length > 0) {
     for (let i = 0; i < headers.length; i++) {
       if (i === dateCol || i === timeCol) continue;
@@ -212,7 +190,7 @@ function detectColumns(headers: string[], sampleRows: string[][]) {
       });
       if (isNumeric) {
         valueCol = i;
-        valueUnit = 'kWh'; // Default
+        valueUnit = 'kWh';
         break;
       }
     }
@@ -229,37 +207,15 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
-  const [createNewForUnmatched, setCreateNewForUnmatched] = useState(true);
-
-  // Fetch existing meters for matching
-  const { data: meters } = useQuery({
-    queryKey: ["meters-for-matching", siteId],
-    queryFn: async () => {
-      let query = supabase
-        .from("scada_imports")
-        .select("id, shop_name, meter_label, site_name, shop_number")
-        .limit(5000);
-      
-      if (siteId) query = query.eq("site_id", siteId);
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []) as MeterInfo[];
-    },
-  });
 
   // Stats
   const stats = useMemo(() => {
-    const matched = fileMatches.filter(f => f.match && f.match.confidence >= 50);
-    const unmatched = fileMatches.filter(f => !f.match || f.match.confidence < 50);
     const success = fileMatches.filter(f => f.status === 'success');
     const failed = fileMatches.filter(f => f.status === 'failed');
     const needsReview = fileMatches.filter(f => f.status === 'needs_review');
     
     return { 
       total: fileMatches.length, 
-      matched: matched.length, 
-      unmatched: unmatched.length,
       success: success.length,
       failed: failed.length,
       needsReview: needsReview.length
@@ -292,22 +248,16 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
       }
     }));
 
-    // Match files to meters
-    const matchResults = matchFilesToMeters(csvFiles, meters || []);
-
-    // Create file match info
+    // Create file info — every file will create a new meter
     const matches: FileMatchInfo[] = fileContents.map(({ file, content }) => ({
       file,
       content,
-      match: matchResults.get(file) || null,
       status: 'pending' as const
     }));
 
     setFileMatches(matches);
-    
-    const matchedCount = matches.filter(m => m.match && m.match.confidence >= 50).length;
-    toast.success(`${csvFiles.length} files loaded, ${matchedCount} matched to meters`);
-  }, [meters]);
+    toast.success(`${csvFiles.length} files loaded`);
+  }, []);
 
   // Drag and drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -328,7 +278,7 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
 
   // Parse and process a single CSV
   const processFile = async (fileInfo: FileMatchInfo): Promise<FileMatchInfo> => {
-    const { file, content, match } = fileInfo;
+    const { file, content } = fileInfo;
     
     console.log(`[BulkCSV] Processing file: ${file.name}`);
     
@@ -384,10 +334,10 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
         return { ...fileInfo, status: 'failed', message: `No value column found in: ${headers.slice(0, 5).join(', ')}` };
       }
 
-      // Build column config - note: ColumnConfig only supports date/general/text/skip
+      // Build column config
       const columns: ColumnConfig[] = headers.map((header, idx) => {
         if (idx === dateCol) return { index: idx, name: header, dataType: 'date' as const, dateFormat: 'YMD' };
-        if (idx === timeCol) return { index: idx, name: header, dataType: 'general' as const }; // Use general for time
+        if (idx === timeCol) return { index: idx, name: header, dataType: 'general' as const };
         if (idx === valueCol) return { index: idx, name: header, dataType: 'general' as const };
         return { index: idx, name: header, dataType: 'text' as const };
       });
@@ -431,41 +381,32 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
       const validation = validateLoadProfile(profile);
       console.log(`[BulkCSV] ${file.name}: Validation result - isValid=${validation.isValid}, reason=${validation.reason}`);
 
-      // Determine target meter ID
-      let targetMeterId = match?.meterId;
+      // Always create a new meter
+      const displayName = config.meterName || file.name.replace(/\.csv$/i, '');
       
-      // If no match and createNewForUnmatched, create a new meter
-      if (!targetMeterId && createNewForUnmatched) {
-        const displayName = config.meterName || normalizeName(file.name) || file.name.replace(/\.csv$/i, '');
-        
-        const { data: newMeter, error: insertError } = await supabase
-          .from("scada_imports")
-          .insert({
-            site_name: displayName,
-            shop_name: displayName,
-            file_name: file.name,
-            raw_data: normaliseRawData(rows.map(row => ({
-              timestamp: `${row[dateCol] || ''} ${timeCol >= 0 ? (row[timeCol] || '') : ''}`.trim(),
-              value: parseFloat(row[valueCol]?.replace(/[^\d.-]/g, '') || '0') || 0
-            })).filter(d => d.value !== 0 || d.timestamp)),
-            site_id: siteId || null,
-          })
-          .select("id")
-          .single();
-        
-        if (insertError) {
-          console.error("Failed to create meter:", insertError);
-          return { ...fileInfo, status: 'failed', message: 'Failed to create meter' };
-        }
-        
-        targetMeterId = newMeter.id;
+      const { data: newMeter, error: insertError } = await supabase
+        .from("scada_imports")
+        .insert({
+          site_name: displayName,
+          shop_name: displayName,
+          file_name: file.name,
+          raw_data: normaliseRawData(rows.map(row => ({
+            timestamp: `${row[dateCol] || ''} ${timeCol >= 0 ? (row[timeCol] || '') : ''}`.trim(),
+            value: parseFloat(row[valueCol]?.replace(/[^\\d.-]/g, '') || '0') || 0
+          })).filter(d => d.value !== 0 || d.timestamp)),
+          site_id: siteId || null,
+        })
+        .select("id")
+        .single();
+      
+      if (insertError) {
+        console.error("Failed to create meter:", insertError);
+        return { ...fileInfo, status: 'failed', message: 'Failed to create meter' };
       }
+      
+      const targetMeterId = newMeter.id;
 
-      if (!targetMeterId) {
-        return { ...fileInfo, status: 'skipped', message: 'No meter match found' };
-      }
-
-      // Update meter in database
+      // Update meter with processed profile data
       const { error: updateError } = await supabase
         .from("scada_imports")
         .update({
@@ -478,10 +419,6 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
           date_range_end: profile.dateRangeEnd,
           detected_interval_minutes: profile.detectedInterval,
           processed_at: new Date().toISOString(),
-          raw_data: normaliseRawData(rows.map(row => ({
-            timestamp: `${row[dateCol] || ''} ${timeCol >= 0 ? (row[timeCol] || '') : ''}`.trim(),
-            value: parseFloat(row[valueCol]?.replace(/[^\d.-]/g, '') || '0') || 0
-          })).filter(d => d.value !== 0 || d.timestamp)),
           file_name: file.name,
         })
         .eq("id", targetMeterId);
@@ -528,25 +465,21 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
     const results: FileMatchInfo[] = [...fileMatches];
 
     for (let i = 0; i < results.length; i++) {
-      // Check pause
       while (isPausedRef.current) {
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
       setProgress({ current: i + 1, total: results.length });
       
-      // Update status to processing
       results[i] = { ...results[i], status: 'processing' };
       setFileMatches([...results]);
 
-      // Process
       results[i] = await processFile(results[i]);
       setFileMatches([...results]);
     }
 
     setIsProcessing(false);
     queryClient.invalidateQueries({ queryKey: ["meter-library"] });
-    queryClient.invalidateQueries({ queryKey: ["meters-for-matching"] });
 
     const successCount = results.filter(r => r.status === 'success').length;
     const failedCount = results.filter(r => r.status === 'failed').length;
@@ -574,19 +507,12 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
     setFileMatches(prev => prev.filter((_, i) => i !== index));
   };
 
-  const getConfidenceBadge = (confidence: number) => {
-    if (confidence >= 90) return <Badge className="bg-green-500/20 text-green-700">{confidence}%</Badge>;
-    if (confidence >= 70) return <Badge className="bg-yellow-500/20 text-yellow-700">{confidence}%</Badge>;
-    return <Badge className="bg-orange-500/20 text-orange-700">{confidence}%</Badge>;
-  };
-
   const getStatusIcon = (status: FileMatchInfo['status']) => {
     switch (status) {
       case 'success': return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       case 'failed': return <XCircle className="h-4 w-4 text-destructive" />;
       case 'needs_review': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
       case 'processing': return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
-      case 'skipped': return <X className="h-4 w-4 text-muted-foreground" />;
       default: return null;
     }
   };
@@ -616,7 +542,7 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
               <FolderUp className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-lg font-medium">Drop CSV files here</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Files will be automatically matched to existing meters
+                Each file will create a new meter in the library
               </p>
             </>
           ) : (
@@ -634,14 +560,6 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
             <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
               <div className="flex items-center gap-4 text-sm">
                 <span><strong>{stats.total}</strong> files</span>
-                <span className="flex items-center gap-1">
-                  <Link2 className="h-3.5 w-3.5 text-green-500" />
-                  <strong>{stats.matched}</strong> matched
-                </span>
-                <span className="flex items-center gap-1">
-                  <Link2Off className="h-3.5 w-3.5 text-muted-foreground" />
-                  <strong>{stats.unmatched}</strong> new
-                </span>
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={clearFiles} disabled={isProcessing}>
@@ -649,18 +567,6 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
                   Clear
                 </Button>
               </div>
-            </div>
-
-            {/* Options */}
-            <div className="flex items-center gap-4 text-sm">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <Checkbox 
-                  checked={createNewForUnmatched}
-                  onCheckedChange={(c) => setCreateNewForUnmatched(!!c)}
-                  disabled={isProcessing}
-                />
-                <span>Create new meters for unmatched files</span>
-              </label>
             </div>
 
             {/* Progress */}
@@ -695,20 +601,6 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
                     {/* File info */}
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{fm.file.name}</div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {fm.match ? (
-                          <span className="flex items-center gap-1">
-                            <Link2 className="h-3 w-3" />
-                            {fm.match.meterName}
-                            {getConfidenceBadge(fm.match.confidence)}
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1">
-                            <Link2Off className="h-3 w-3" />
-                            {createNewForUnmatched ? 'Will create new meter' : 'No match'}
-                          </span>
-                        )}
-                      </div>
                     </div>
                     
                     {/* Message */}
