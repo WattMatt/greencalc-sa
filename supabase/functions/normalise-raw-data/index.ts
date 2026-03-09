@@ -87,6 +87,13 @@ function normaliseRawData(rawData: unknown): NormalisedPoint[] | null {
         const dateOnlyMatch = ts.match(/^(\d{4}-\d{2}-\d{2})$/);
         if (dateOnlyMatch) return { date: dateOnlyMatch[1], time: "00:00:00", value: val };
 
+        // Date-only slash: "YYYY/MM/DD"
+        const slashDateOnly = ts.match(/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/);
+        if (slashDateOnly) {
+          const date = `${slashDateOnly[1]}-${slashDateOnly[2].padStart(2, "0")}-${slashDateOnly[3].padStart(2, "0")}`;
+          return { date, time: "00:00:00", value: val };
+        }
+
         // Date-only SA: "DD/MM/YYYY" or "DD-MM-YYYY"
         const saDateOnly = ts.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
         if (saDateOnly) {
