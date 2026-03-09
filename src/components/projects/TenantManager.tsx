@@ -1154,6 +1154,10 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
             <Upload className="h-4 w-4 mr-2" />
             Import Data
           </Button>
+          <Button variant="outline" onClick={() => setMeterLibraryImportOpen(true)}>
+            <Database className="h-4 w-4 mr-2" />
+            Import from Library
+          </Button>
         </div>
       </div>
 
