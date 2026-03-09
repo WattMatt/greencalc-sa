@@ -1,29 +1,56 @@
 
 
-# Plan: Storage-first CSV retrieval with re-upload message
+# Fix: Time Column Detection Bug in Bulk CSV Import
 
-## Changes
+## Root Cause
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+In `BulkCsvDropzone.tsx`, the `detectColumns` function has a logic bug on line 141:
 
-Reorder `loadMeterForWizard` to check storage **first**:
+```typescript
+if (dateCol === -1 && timePatterns.some(p => lower === p || lower.startsWith(p))) {
+```
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+The time column detection only runs when `dateCol === -1`. For PnP SCADA files with separate `rdate` and `rtime` columns, `rdate` is found first (setting `dateCol`), so when `rtime` is encountered, the condition `dateCol === -1` is false and the time column is **never detected**.
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+This causes the normaliser to receive timestamps like `"2026-02-01"` (date only, no time), which are parsed with `time: "00:00:00"` for every single row. The 1344 data points all end up with the same time, making the daily chart useless.
 
-Same reordering:
+The tenant import path works because it stores the legacy `{ timestamp: "2026-02-01 00:30:00", value: 0 }` format where the combined datetime is preserved.
 
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+## Fix
 
-### No other files change
+### File: `src/components/loadprofiles/BulkCsvDropzone.tsx`
 
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
+**Line 141**: Remove the `dateCol === -1` guard from the time column detection. The time check should always run independently of whether a date column was found. Change:
+
+```typescript
+if (dateCol === -1 && timePatterns.some(p => lower === p || lower.startsWith(p))) {
+```
+
+to:
+
+```typescript
+if (timeCol === -1 && timePatterns.some(p => lower === p || lower.startsWith(p))) {
+```
+
+This ensures that when `rtime` is encountered after `rdate`, it's properly detected as the time column. The existing inner logic (lines 142-155) already handles the case where a "time" header actually contains datetime values (promoting it to `dateCol` instead).
+
+### Secondary fix — same file, line 395
+
+The regex `/[^\\d.-]/g` has a double-escaped backslash, meaning it matches literal `\d` characters instead of digits. Change:
+
+```typescript
+value: parseFloat(row[valueCol]?.replace(/[^\\d.-]/g, '') || '0') || 0
+```
+
+to:
+
+```typescript
+value: parseFloat(row[valueCol]?.replace(/[^\d.-]/g, '') || '0') || 0
+```
+
+## Files affected
+- `src/components/loadprofiles/BulkCsvDropzone.tsx` (2 line changes)
+
+## Note
+Existing meters imported with corrupted `raw_data` (all times `00:00:00`) will still show the summary profile fallback chart. Users can re-import the CSV to get correct interval data.
 
