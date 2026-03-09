@@ -79,6 +79,7 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
             shopName: parsed.shopName,
             shopNumber: parsed.shopNumber || m.shop_number || null,
             areaSqm: parsed.areaSqm || m.area_sqm || 0,
+            prefix: parsed.prefix,
             selected: false,
           };
         })
