@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -26,8 +26,6 @@ interface MeterRow {
   meter_color: string | null;
   data_points: number | null;
   area_sqm: number | null;
-  load_profile_weekday: number[] | null;
-  load_profile_weekend: number[] | null;
   date_range_start: string | null;
   date_range_end: string | null;
   file_name: string | null;
@@ -58,10 +56,11 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, site_name, shop_name, shop_number, meter_label, meter_color, data_points, area_sqm, load_profile_weekday, load_profile_weekend, date_range_start, date_range_end, file_name, value_unit, detected_interval_minutes, weekday_days, weekend_days, csv_file_path")
+        .select("id, site_name, shop_name, shop_number, meter_label, meter_color, data_points, area_sqm, date_range_start, date_range_end, file_name, value_unit, detected_interval_minutes, weekday_days, weekend_days, csv_file_path")
         .is("project_id", null)
         .gt("data_points", 0)
-        .order("site_name", { ascending: true });
+        .order("site_name", { ascending: true })
+        .limit(5000);
       if (error) throw error;
       return data as MeterRow[];
     },
@@ -69,7 +68,7 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
   });
 
   // Build parsed rows when meters load
-  useMemo(() => {
+  useEffect(() => {
     if (globalMeters && !initialised) {
       setRows(
         globalMeters.map((m) => {
@@ -126,7 +125,7 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
         // 1. Fetch raw_data for this meter individually
         const { data: fullMeter, error: fetchErr } = await supabase
           .from("scada_imports")
-          .select("raw_data")
+          .select("raw_data, load_profile_weekday, load_profile_weekend")
           .eq("id", m.id)
           .single();
 
@@ -144,8 +143,8 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
             project_id: projectId,
             data_points: m.data_points,
             area_sqm: row.areaSqm,
-            load_profile_weekday: m.load_profile_weekday,
-            load_profile_weekend: m.load_profile_weekend,
+            load_profile_weekday: fullMeter.load_profile_weekday,
+            load_profile_weekend: fullMeter.load_profile_weekend,
             date_range_start: m.date_range_start,
             date_range_end: m.date_range_end,
             raw_data: fullMeter.raw_data as any,
