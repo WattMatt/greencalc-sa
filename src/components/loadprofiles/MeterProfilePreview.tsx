@@ -371,6 +371,10 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                       </div>
                     );
                   })()
+                ) : totalDays === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No daily data available. Raw data may not be stored.
+                  </div>
                 ) : (
                   <>
                     {/* Day navigation */}
