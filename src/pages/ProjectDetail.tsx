@@ -238,6 +238,7 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
           total_area_sqm: params.totalArea || null,
           system_type: serialiseSystemConfig(params.systemConfig),
           client_name: params.clientName || null,
+          meter_data_prefix: params.meterDataPrefix || null,
           budget: params.budget || null,
           target_date: params.targetDate?.toISOString().split('T')[0] || null,
         })
