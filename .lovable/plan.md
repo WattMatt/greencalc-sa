@@ -1,28 +1,29 @@
 
 
-# Plan: Filter Import from Library to PDB files only
+# Plan: Storage-first CSV retrieval with re-upload message
 
-## Problem
-The current query fetches all unassigned meters (up to 5,000), which may be timing out or returning too many irrelevant rows. The user wants to focus only on PDB-prefixed meters.
+## Changes
 
-## Change
+### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
 
-### `src/components/projects/MeterLibraryImportDialog.tsx` (line 59-63)
+Reorder `loadMeterForWizard` to check storage **first**:
 
-Add a `.like("shop_name", "PDB_%")` filter to the query so only meters whose `shop_name` (which stores the original filename) starts with "PDB" are fetched:
+1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
+2. If storage returns CSV, use it
+3. Only if storage returns null, check legacy `rawData[0].csvContent`
+4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-```typescript
-const { data, error } = await supabase
-  .from("scada_imports")
-  .select("id, site_name, shop_name, shop_number, meter_label, meter_color, data_points, area_sqm, date_range_start, date_range_end, file_name, value_unit, detected_interval_minutes, weekday_days, weekend_days, csv_file_path")
-  .is("project_id", null)
-  .gt("data_points", 0)
-  .or("shop_name.ilike.PDB_%,meter_label.ilike.PDB_%,file_name.ilike.PDB_%")
-  .order("site_name", { ascending: true })
-  .limit(5000);
-```
+### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
 
-This checks `shop_name`, `meter_label`, and `file_name` for the PDB prefix (case-insensitive), ensuring we capture PDB meters regardless of which field stores the original filename.
+Same reordering:
 
-No other files or database changes needed.
+1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
+2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
+3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+
+### No other files change
+
+- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
+- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- No database changes
 
