@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Upload, FileText, Trash2, Settings2, Eye, ChevronDown, Check, ChevronsUpDown, Database, Loader2, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { Upload, FileText, Trash2, Settings2, Eye, ChevronDown, Check, ChevronsUpDown, Database, Loader2, Clock, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
@@ -83,6 +83,14 @@ export interface ParsedFileResult {
   rows: string[][];
   columns: ColumnInterpretation[];
   rawContent?: string;
+}
+
+// Header mismatch info
+interface HeaderMismatch {
+  fileIdx: number;
+  fileName: string;
+  missingCols: string[];
+  extraCols: string[];
 }
 
 // ── Separator helpers ──────────────────────────────────────────
@@ -212,6 +220,41 @@ function readFileAsText(file: File): Promise<string> {
   });
 }
 
+/**
+ * Validate headers across all files. Returns mismatches compared to the first file.
+ */
+function validateHeaders(
+  files: FileEntry[],
+  separator: string,
+  headerRow: number
+): HeaderMismatch[] {
+  const readyFiles = files.filter((f) => f.content);
+  if (readyFiles.length <= 1) return [];
+
+  const referenceHeaders = parseContent(readyFiles[0].content!, separator, headerRow).headers;
+  const refSet = new Set(referenceHeaders.map((h) => h.toLowerCase().trim()));
+
+  const mismatches: HeaderMismatch[] = [];
+  for (let i = 1; i < readyFiles.length; i++) {
+    const { headers } = parseContent(readyFiles[i].content!, separator, headerRow);
+    const thisSet = new Set(headers.map((h) => h.toLowerCase().trim()));
+
+    const missingCols = referenceHeaders.filter((h) => !thisSet.has(h.toLowerCase().trim()));
+    const extraCols = headers.filter((h) => !refSet.has(h.toLowerCase().trim()));
+
+    if (missingCols.length > 0 || extraCols.length > 0) {
+      const fileIdx = files.indexOf(readyFiles[i]);
+      mismatches.push({
+        fileIdx,
+        fileName: readyFiles[i].name,
+        missingCols,
+        extraCols,
+      });
+    }
+  }
+  return mismatches;
+}
+
 // ── Component ──────────────────────────────────────────────────
 
 export function ScadaImportWizard({
@@ -234,12 +277,15 @@ export function ScadaImportWizard({
   const [columns, setColumns] = useState<ColumnInterpretation[]>([]);
   const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<string[][]>([]);
+  const [headerMismatches, setHeaderMismatches] = useState<HeaderMismatch[]>([]);
 
   // Step 3 state
   const [previewActive, setPreviewActive] = useState(false);
   const [openSection, setOpenSection] = useState<"parsing" | "columns">("parsing");
   // Track which file's tenant popover is open
   const [openTenantPopover, setOpenTenantPopover] = useState<number | null>(null);
+  // Per-file preview index
+  const [previewFileIdx, setPreviewFileIdx] = useState(0);
 
   // Step 4 state
   const [uploadStatuses, setUploadStatuses] = useState<Record<number, { status: 'pending' | 'uploading' | 'parsing' | 'done' | 'error'; error?: string }>>({});
@@ -429,6 +475,10 @@ export function ScadaImportWizard({
         const detected = detectSeparator(firstContent);
         setSeparator(detected);
         loadPreview(firstContent, detected, headerRow);
+
+        // Validate headers across all files
+        const mismatches = validateHeaders(updated, detected, headerRow);
+        setHeaderMismatches(mismatches);
       }
 
       toast.success("Files loaded successfully");
@@ -465,13 +515,22 @@ export function ScadaImportWizard({
     []
   );
 
+  const revalidateHeaders = useCallback(
+    (sep: string, hRow: number) => {
+      const mismatches = validateHeaders(files, sep, hRow);
+      setHeaderMismatches(mismatches);
+    },
+    [files]
+  );
+
   const handleSeparatorChange = useCallback(
     (val: string) => {
       setSeparator(val);
       const firstContent = files.find((f) => f.content)?.content;
       if (firstContent) loadPreview(firstContent, val, headerRow);
+      revalidateHeaders(val, headerRow);
     },
-    [files, headerRow, loadPreview]
+    [files, headerRow, loadPreview, revalidateHeaders]
   );
 
   const handleHeaderRowChange = useCallback(
@@ -480,8 +539,9 @@ export function ScadaImportWizard({
       setHeaderRow(num);
       const firstContent = files.find((f) => f.content)?.content;
       if (firstContent) loadPreview(firstContent, separator, num);
+      revalidateHeaders(separator, num);
     },
-    [files, separator, loadPreview]
+    [files, separator, loadPreview, revalidateHeaders]
   );
 
   const toggleColumnVisibility = useCallback((idx: number) => {
@@ -542,10 +602,20 @@ export function ScadaImportWizard({
     [columns]
   );
 
+  // Per-file preview: parse the selected file's content
+  const readyFiles = useMemo(() => files.filter((f) => f.content), [files]);
+
+  const currentPreviewData = useMemo(() => {
+    const file = readyFiles[previewFileIdx];
+    if (!file?.content) return { headers: [] as string[], rows: [] as string[][] };
+    const { headers, rows } = parseContent(file.content, separator, headerRow);
+    return { headers, rows: rows.slice(0, 50) };
+  }, [readyFiles, previewFileIdx, separator, headerRow]);
+
   const filteredPreviewRows = useMemo(
     () =>
-      previewRows.map((row) => visibleColIndices.map((ci) => row[ci] || "")),
-    [previewRows, visibleColIndices]
+      currentPreviewData.rows.map((row) => visibleColIndices.map((ci) => row[ci] || "")),
+    [currentPreviewData.rows, visibleColIndices]
   );
 
   // ── Navigate to Step 4 ───────────────────────────────────────
@@ -625,6 +695,8 @@ export function ScadaImportWizard({
     setActiveTab("upload");
     setSeparator("comma");
     setHeaderRow(1);
+    setHeaderMismatches([]);
+    setPreviewFileIdx(0);
     onClose();
   }, [onClose]);
 
@@ -655,7 +727,7 @@ export function ScadaImportWizard({
             </TabsTrigger>
             <TabsTrigger
               value="preview"
-              disabled={columns.length === 0}
+              disabled={columns.length === 0 || headerMismatches.length > 0}
             >
               3. Preview
             </TabsTrigger>
@@ -896,7 +968,11 @@ export function ScadaImportWizard({
                                         >
                                           <Check className={cn("mr-2 h-4 w-4", entry.tenantId === t.id ? "opacity-100" : "opacity-0")} />
                                           {t.shop_name || t.name}
-                                          {t.shop_number ? ` (${t.shop_number})` : ""}
+                                          {t.shop_number && (
+                                            <span className="ml-1 text-xs text-muted-foreground">
+                                              ({t.shop_number})
+                                            </span>
+                                          )}
                                         </CommandItem>
                                       ))}
                                   </CommandGroup>
@@ -927,6 +1003,42 @@ export function ScadaImportWizard({
             value="parse"
             className="flex-1 flex flex-col min-h-0 overflow-auto space-y-4"
           >
+            {/* Header mismatch warning */}
+            {headerMismatches.length > 0 && (
+              <Card className="border-destructive bg-destructive/5">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-destructive">
+                        Column headers do not match across all files
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        All files must have the same column headings. Fix the header row number, remove mismatched files, or ensure all files share the same structure.
+                      </p>
+                      <div className="space-y-1">
+                        {headerMismatches.map((m) => (
+                          <div key={m.fileIdx} className="text-xs border rounded p-2 bg-background">
+                            <span className="font-medium">{m.fileName}</span>
+                            {m.missingCols.length > 0 && (
+                              <span className="text-destructive ml-2">
+                                Missing: {m.missingCols.join(", ")}
+                              </span>
+                            )}
+                            {m.extraCols.length > 0 && (
+                              <span className="text-amber-600 ml-2">
+                                Extra: {m.extraCols.join(", ")}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Parsing Configuration */}
             <Collapsible
               open={openSection === "parsing"}
@@ -1129,9 +1241,10 @@ export function ScadaImportWizard({
               <Button
                 size="sm"
                 onClick={() => {
+                  setPreviewFileIdx(0);
                   setActiveTab("preview");
                 }}
-                disabled={columns.length === 0 || !someVisible}
+                disabled={columns.length === 0 || !someVisible || headerMismatches.length > 0}
               >
                 <Eye className="h-4 w-4 mr-2" />
                 Preview Data
@@ -1149,10 +1262,28 @@ export function ScadaImportWizard({
               <p className="text-xs text-muted-foreground">
                 Data displayed using the column interpretation from the Parsing Configuration
               </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {previewRows.length} readings processed
-              </p>
             </div>
+
+            {/* Per-file selector */}
+            {readyFiles.length > 1 && (
+              <div className="flex flex-wrap gap-1">
+                {readyFiles.map((f, idx) => (
+                  <Button
+                    key={idx}
+                    variant={previewFileIdx === idx ? "default" : "outline"}
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => setPreviewFileIdx(idx)}
+                  >
+                    {f.name.replace(/\.(csv|xlsx?)$/i, "")}
+                  </Button>
+                ))}
+              </div>
+            )}
+
+            <p className="text-sm text-muted-foreground">
+              {currentPreviewData.rows.length} readings • {readyFiles[previewFileIdx]?.name || ""}
+            </p>
 
             <div className="overflow-auto border rounded-md flex-1 min-h-0">
               <Table>
