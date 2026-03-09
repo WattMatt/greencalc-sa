@@ -15,6 +15,7 @@ interface MeterLibraryImportDialogProps {
   open: boolean;
   onClose: () => void;
   projectId: string;
+  meterDataPrefix?: string;
 }
 
 interface MeterRow {
