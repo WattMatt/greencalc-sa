@@ -79,7 +79,7 @@ export function parseMeterLabel(
     }
 
     const shopName = nameParts.map(expandCamelCase).join(" ") || raw;
-    return { shopName, shopNumber: null, areaSqm };
+    return { shopName, shopNumber: null, areaSqm, prefix: null };
   }
 
   // Plain string — use as-is
