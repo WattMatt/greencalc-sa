@@ -51,22 +51,24 @@ export function MeterLibraryImportDialog({ open, onClose, projectId, meterDataPr
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [initialised, setInitialised] = useState(false);
 
-  // Fetch global (unassigned) meters
+  // Fetch global (unassigned) meters filtered by project prefix
   const { data: globalMeters, isLoading } = useQuery({
-    queryKey: ["global-meters-for-import"],
+    queryKey: ["global-meters-for-import", meterDataPrefix],
     queryFn: async () => {
+      if (!meterDataPrefix) return [] as MeterRow[];
+      const prefix = `${meterDataPrefix}_%`;
       const { data, error } = await supabase
         .from("scada_imports")
         .select("id, site_name, shop_name, shop_number, meter_label, meter_color, data_points, area_sqm, date_range_start, date_range_end, file_name, value_unit, detected_interval_minutes, weekday_days, weekend_days, csv_file_path")
         .is("project_id", null)
         .gt("data_points", 0)
-        .or("shop_name.ilike.PDB_%,meter_label.ilike.PDB_%,file_name.ilike.PDB_%")
+        .or(`shop_name.ilike.${prefix},meter_label.ilike.${prefix},file_name.ilike.${prefix}`)
         .order("site_name", { ascending: true })
         .limit(5000);
       if (error) throw error;
       return data as MeterRow[];
     },
-    enabled: open,
+    enabled: open && !!meterDataPrefix,
   });
 
   // Build parsed rows when meters load
