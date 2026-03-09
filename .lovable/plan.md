@@ -1,29 +1,34 @@
 
 
-# Plan: Storage-first CSV retrieval with re-upload message
+# Plan: Add Meter Data Prefix field to projects
+
+## Overview
+Add a `meter_data_prefix` column to the `projects` table (e.g. "PDB") that the user sets in the Project Parameters panel. The Import from Library dialog then uses this prefix to filter meters, replacing the hardcoded `PDB_` filter.
 
 ## Changes
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+### 1. Database migration
+Add a nullable `meter_data_prefix` text column to the `projects` table:
+```sql
+ALTER TABLE public.projects ADD COLUMN meter_data_prefix text;
+```
 
-Reorder `loadMeterForWizard` to check storage **first**:
+### 2. `src/pages/ProjectDetail.tsx` — Dashboard parameters
+- Add `meterDataPrefix: string` to `DashboardParams` interface.
+- Initialise from `project.meter_data_prefix`.
+- Add an input field in the Project Parameters card (after Client Name), labelled "Meter File Prefix" with placeholder "e.g. PDB".
+- Include `meter_data_prefix` in the `saveParams` update call.
+- Sync in the `useEffect` that watches project prop changes.
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+### 3. `src/components/projects/MeterLibraryImportDialog.tsx`
+- Accept a new prop `meterDataPrefix?: string`.
+- Replace the hardcoded `.or("shop_name.ilike.PDB_%,meter_label.ilike.PDB_%,file_name.ilike.PDB_%")` with a dynamic filter using the prefix. If no prefix is set, show an empty state telling the user to set one in Project Parameters.
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+### 4. `src/components/projects/TenantManager.tsx`
+- Pass the project's `meter_data_prefix` through to `MeterLibraryImportDialog` as a prop.
 
-Same reordering:
+### 5. `src/components/projects/ProjectOverview.tsx`
+- Display the meter prefix in the Project Details grid if set.
 
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
-
-### No other files change
-
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
+No other files affected.
 
