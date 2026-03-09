@@ -507,6 +507,18 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="meterDataPrefix" className="text-xs">Meter File Prefix</Label>
+              <Input
+                id="meterDataPrefix"
+                value={params.meterDataPrefix}
+                onChange={(e) => handleParamChange("meterDataPrefix", e.target.value)}
+                onBlur={handleFieldBlur}
+                placeholder="e.g. PDB"
+                className="h-8"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="budget" className="text-xs">Budget (R)</Label>
               <Input
                 id="budget"
