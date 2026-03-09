@@ -57,7 +57,7 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, site_name, shop_name, shop_number, meter_label, meter_color, data_points, area_sqm, load_profile_weekday, load_profile_weekend, date_range_start, date_range_end, raw_data, file_name, value_unit, detected_interval_minutes, weekday_days, weekend_days, csv_file_path")
+        .select("id, site_name, shop_name, shop_number, meter_label, meter_color, data_points, area_sqm, load_profile_weekday, load_profile_weekend, date_range_start, date_range_end, file_name, value_unit, detected_interval_minutes, weekday_days, weekend_days, csv_file_path")
         .is("project_id", null)
         .gt("data_points", 0)
         .order("site_name", { ascending: true });
