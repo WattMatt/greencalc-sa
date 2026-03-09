@@ -7,8 +7,10 @@ import { Slider } from "@/components/ui/slider";
 import { format } from "date-fns";
 import { ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea } from "recharts";
 import { Activity, Calendar, Zap, Clock, Loader2, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useMonthlyConsumption } from "./hooks/useMonthlyConsumption";
 import { useDailyConsumption } from "./hooks/useDailyConsumption";
+import { useState } from "react";
 
 interface MeterProfilePreviewProps {
   isOpen: boolean;
@@ -45,7 +47,7 @@ const TOU_COLORS = {
 };
 
 export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePreviewProps) {
-  
+  const [profileType, setProfileType] = useState<'weekday' | 'weekend'>('weekday');
   
   const { 
     isLoading: isLoadingMonthly, 
@@ -287,6 +289,88 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                     <Loader2 className="h-6 w-6 animate-spin mr-2" />
                     <span>Loading daily data...</span>
                   </div>
+                ) : totalDays === 0 && meter.load_profile_weekday && meter.load_profile_weekday.length === 24 ? (
+                  /* Fallback: render from summary profile arrays */
+                  (() => {
+                    const activeProfile = profileType === 'weekend' && meter.load_profile_weekend?.length === 24
+                      ? meter.load_profile_weekend
+                      : meter.load_profile_weekday!;
+                    const isWeekend = profileType === 'weekend';
+                    const dailyKwh = activeProfile.reduce((s, v) => s + v, 0);
+                    const peakKw = Math.max(...activeProfile);
+                    const peakHour = activeProfile.indexOf(peakKw);
+                    
+                    return (
+                      <div className="space-y-4">
+                        {/* Weekday / Weekend toggle */}
+                        <div className="flex items-center justify-between">
+                          <Badge variant="outline" className="text-xs">
+                            Summary Profile (average)
+                          </Badge>
+                          {meter.load_profile_weekend?.length === 24 && (
+                            <ToggleGroup
+                              type="single"
+                              value={profileType}
+                              onValueChange={(v) => v && setProfileType(v as 'weekday' | 'weekend')}
+                              size="sm"
+                            >
+                              <ToggleGroupItem value="weekday" className="text-xs px-3">Weekday</ToggleGroupItem>
+                              <ToggleGroupItem value="weekend" className="text-xs px-3">Weekend</ToggleGroupItem>
+                            </ToggleGroup>
+                          )}
+                        </div>
+
+                        {/* Summary stats */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <Card className="bg-muted/30">
+                            <CardContent className="pt-3 pb-2">
+                              <div className="text-xs text-muted-foreground">Daily Total</div>
+                              <div className="text-lg font-bold">
+                                {dailyKwh.toFixed(1)}
+                                <span className="text-xs font-normal ml-1">kWh</span>
+                              </div>
+                            </CardContent>
+                          </Card>
+                          <Card className="bg-muted/30">
+                            <CardContent className="pt-3 pb-2">
+                              <div className="text-xs text-muted-foreground">Peak</div>
+                              <div className="text-lg font-bold">
+                                {peakKw.toFixed(2)}
+                                <span className="text-xs font-normal ml-1">kW</span>
+                              </div>
+                            </CardContent>
+                          </Card>
+                          <Card className="bg-muted/30">
+                            <CardContent className="pt-3 pb-2">
+                              <div className="text-xs text-muted-foreground">Peak Hour</div>
+                              <div className="text-lg font-bold">
+                                {peakHour.toString().padStart(2, '0')}:00
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+
+                        {/* Chart */}
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm flex items-center justify-between">
+                              <span>Average {isWeekend ? 'Weekend' : 'Weekday'} Profile</span>
+                              <span className="text-muted-foreground font-normal">
+                                {dailyKwh.toFixed(1)} kWh/day
+                              </span>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            {renderChart(
+                              createChartData(activeProfile, isWeekend),
+                              isWeekend,
+                              peakHour
+                            )}
+                          </CardContent>
+                        </Card>
+                      </div>
+                    );
+                  })()
                 ) : totalDays === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     No daily data available. Raw data may not be stored.
