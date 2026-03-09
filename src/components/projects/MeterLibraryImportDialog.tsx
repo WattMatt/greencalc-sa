@@ -30,7 +30,6 @@ interface MeterRow {
   load_profile_weekend: number[] | null;
   date_range_start: string | null;
   date_range_end: string | null;
-  raw_data: unknown;
   file_name: string | null;
   value_unit: string | null;
   detected_interval_minutes: number | null;
@@ -58,7 +57,7 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, site_name, shop_name, shop_number, meter_label, meter_color, data_points, area_sqm, load_profile_weekday, load_profile_weekend, date_range_start, date_range_end, raw_data, file_name, value_unit, detected_interval_minutes, weekday_days, weekend_days, csv_file_path")
+        .select("id, site_name, shop_name, shop_number, meter_label, meter_color, data_points, area_sqm, load_profile_weekday, load_profile_weekend, date_range_start, date_range_end, file_name, value_unit, detected_interval_minutes, weekday_days, weekend_days, csv_file_path")
         .is("project_id", null)
         .gt("data_points", 0)
         .order("site_name", { ascending: true });
@@ -122,7 +121,16 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
       for (const row of selected) {
         const m = row.meter;
 
-        // 1. Create a project-local copy of the meter
+        // 1. Fetch raw_data for this meter individually
+        const { data: fullMeter, error: fetchErr } = await supabase
+          .from("scada_imports")
+          .select("raw_data")
+          .eq("id", m.id)
+          .single();
+
+        if (fetchErr) throw fetchErr;
+
+        // 2. Create a project-local copy of the meter
         const { data: localMeter, error: meterErr } = await supabase
           .from("scada_imports")
           .insert({
@@ -138,7 +146,7 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
             load_profile_weekend: m.load_profile_weekend,
             date_range_start: m.date_range_start,
             date_range_end: m.date_range_end,
-            raw_data: m.raw_data as any,
+            raw_data: fullMeter.raw_data as any,
             file_name: m.file_name,
             value_unit: m.value_unit,
             detected_interval_minutes: m.detected_interval_minutes,
