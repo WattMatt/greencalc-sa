@@ -49,6 +49,7 @@ interface DashboardParams {
   capacity: number;
   systemConfig: SystemConfig;
   clientName: string;
+  meterDataPrefix: string;
   budget: number;
   targetDate: Date | undefined;
 }
