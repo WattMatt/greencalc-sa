@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ADD COLUMN meter_data_prefix text;

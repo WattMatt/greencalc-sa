@@ -79,6 +79,7 @@ interface TenantManagerProps {
   tenants: Tenant[];
   shopTypes: ShopType[];
   highlightTenantId?: string | null;
+  meterDataPrefix?: string;
 }
 
 // KwhOverrideCell component for inline editing
@@ -237,7 +238,7 @@ function getSortedProfilesWithSuggestions(
 type SortColumn = 'shop_number' | 'shop_name' | 'area' | 'kwh';
 type SortDirection = 'asc' | 'desc';
 
-export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId }: TenantManagerProps) {
+export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId, meterDataPrefix }: TenantManagerProps) {
   const queryClient = useQueryClient();
   const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -1671,6 +1672,7 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
         open={meterLibraryImportOpen}
         onClose={() => setMeterLibraryImportOpen(false)}
         projectId={projectId}
+        meterDataPrefix={meterDataPrefix}
       />
 
       {/* Tenant Column Mapper */}

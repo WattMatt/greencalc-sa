@@ -15,6 +15,7 @@ interface MeterLibraryImportDialogProps {
   open: boolean;
   onClose: () => void;
   projectId: string;
+  meterDataPrefix?: string;
 }
 
 interface MeterRow {
@@ -45,27 +46,29 @@ interface ParsedRow {
   selected: boolean;
 }
 
-export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibraryImportDialogProps) {
+export function MeterLibraryImportDialog({ open, onClose, projectId, meterDataPrefix }: MeterLibraryImportDialogProps) {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [initialised, setInitialised] = useState(false);
 
-  // Fetch global (unassigned) meters
+  // Fetch global (unassigned) meters filtered by project prefix
   const { data: globalMeters, isLoading } = useQuery({
-    queryKey: ["global-meters-for-import"],
+    queryKey: ["global-meters-for-import", meterDataPrefix],
     queryFn: async () => {
+      if (!meterDataPrefix) return [] as MeterRow[];
+      const prefix = `${meterDataPrefix}_%`;
       const { data, error } = await supabase
         .from("scada_imports")
         .select("id, site_name, shop_name, shop_number, meter_label, meter_color, data_points, area_sqm, date_range_start, date_range_end, file_name, value_unit, detected_interval_minutes, weekday_days, weekend_days, csv_file_path")
         .is("project_id", null)
         .gt("data_points", 0)
-        .or("shop_name.ilike.PDB_%,meter_label.ilike.PDB_%,file_name.ilike.PDB_%")
+        .or(`shop_name.ilike.${prefix},meter_label.ilike.${prefix},file_name.ilike.${prefix}`)
         .order("site_name", { ascending: true })
         .limit(5000);
       if (error) throw error;
       return data as MeterRow[];
     },
-    enabled: open,
+    enabled: open && !!meterDataPrefix,
   });
 
   // Build parsed rows when meters load
@@ -203,13 +206,18 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
           </DialogDescription>
         </DialogHeader>
 
-        {isLoading ? (
+        {!meterDataPrefix ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <p>No meter file prefix configured.</p>
+            <p className="text-xs mt-1">Set the <strong>Meter File Prefix</strong> in Project Parameters first (e.g. "PDB").</p>
+          </div>
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : !rows.length ? (
           <div className="text-center py-12 text-muted-foreground">
-            <p>No unassigned meters with data found in the library.</p>
+            <p>No unassigned meters matching prefix "{meterDataPrefix}" found in the library.</p>
           </div>
         ) : (
           <>

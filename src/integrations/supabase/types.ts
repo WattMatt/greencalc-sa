@@ -1361,6 +1361,7 @@ export type Database = {
           location: string | null
           logo_url: string | null
           longitude: number | null
+          meter_data_prefix: string | null
           name: string
           system_type: string | null
           target_date: string | null
@@ -1379,6 +1380,7 @@ export type Database = {
           location?: string | null
           logo_url?: string | null
           longitude?: number | null
+          meter_data_prefix?: string | null
           name: string
           system_type?: string | null
           target_date?: string | null
@@ -1397,6 +1399,7 @@ export type Database = {
           location?: string | null
           logo_url?: string | null
           longitude?: number | null
+          meter_data_prefix?: string | null
           name?: string
           system_type?: string | null
           target_date?: string | null

@@ -49,6 +49,7 @@ interface DashboardParams {
   capacity: number;
   systemConfig: SystemConfig;
   clientName: string;
+  meterDataPrefix: string;
   budget: number;
   targetDate: Date | undefined;
 }
@@ -191,6 +192,7 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
     capacity: project.connection_size_kva || 0,
     systemConfig: parseSystemConfig(project.system_type),
     clientName: project.client_name || "",
+    meterDataPrefix: (project as any).meter_data_prefix || "",
     budget: project.budget || 0,
     targetDate: project.target_date ? new Date(project.target_date) : undefined,
   });
@@ -205,6 +207,7 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
       capacity: project.connection_size_kva || prev.capacity,
       systemConfig: parseSystemConfig(project.system_type),
       clientName: project.client_name || prev.clientName,
+      meterDataPrefix: (project as any).meter_data_prefix || prev.meterDataPrefix,
       budget: project.budget || prev.budget,
       targetDate: project.target_date ? new Date(project.target_date) : prev.targetDate,
     }));
@@ -235,6 +238,7 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
           total_area_sqm: params.totalArea || null,
           system_type: serialiseSystemConfig(params.systemConfig),
           client_name: params.clientName || null,
+          meter_data_prefix: params.meterDataPrefix || null,
           budget: params.budget || null,
           target_date: params.targetDate?.toISOString().split('T')[0] || null,
         })
@@ -498,6 +502,18 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
                 onChange={(e) => handleParamChange("clientName", e.target.value)}
                 onBlur={handleFieldBlur}
                 placeholder="Enter client name"
+                className="h-8"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="meterDataPrefix" className="text-xs">Meter File Prefix</Label>
+              <Input
+                id="meterDataPrefix"
+                value={params.meterDataPrefix}
+                onChange={(e) => handleParamChange("meterDataPrefix", e.target.value)}
+                onBlur={handleFieldBlur}
+                placeholder="e.g. PDB"
                 className="h-8"
               />
             </div>
@@ -1284,6 +1300,7 @@ export default function ProjectDetail() {
             tenants={tenants || []}
             shopTypes={shopTypes || []}
             highlightTenantId={highlightTenantId}
+            meterDataPrefix={(project as any)?.meter_data_prefix || undefined}
           />
         </TabsContent>
 
