@@ -382,7 +382,7 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
       console.log(`[BulkCSV] ${file.name}: Validation result - isValid=${validation.isValid}, reason=${validation.reason}`);
 
       // Always create a new meter
-      const displayName = config.meterName || file.name.replace(/\.csv$/i, '');
+      const displayName = file.name.replace(/\.csv$/i, '');
       
       const { data: newMeter, error: insertError } = await supabase
         .from("scada_imports")
