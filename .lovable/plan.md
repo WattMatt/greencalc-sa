@@ -1,29 +1,53 @@
 
 
-# Plan: Storage-first CSV retrieval with re-upload message
+# Fix: `useMonthlyConsumption` to support normalised data format
 
-## Changes
+## Problem
+The `useMonthlyConsumption` hook (line 167) only recognises `{ timestamp, value }` objects. The system's canonical normalised format is `{ date, time, value }` — used by **all** import paths (new uploads included). This means no meter preview will ever render correctly until this hook is updated.
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+## Change
 
-Reorder `loadMeterForWizard` to check storage **first**:
+### `src/components/loadprofiles/hooks/useMonthlyConsumption.ts` (~lines 162-179)
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+Add a branch for the normalised `{ date, time, value }` format **before** the legacy `timestamp` check:
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+```typescript
+if (Array.isArray(rawDataAny)) {
+  const firstItem = rawDataAny[0] as Record<string, unknown> | undefined;
 
-Same reordering:
+  // Embedded CSV
+  if (rawDataAny.length === 1 && firstItem?.csvContent && typeof firstItem.csvContent === 'string') {
+    points = parseEmbeddedCSV(firstItem.csvContent);
+  }
+  // Normalised format: { date, time, value }
+  else if (rawDataAny.length > 0 && firstItem?.date && firstItem?.time && 'value' in firstItem) {
+    points = rawDataAny.map((item: unknown) => {
+      const r = item as Record<string, unknown>;
+      return {
+        date: String(r.date),
+        time: String(r.time),
+        value: typeof r.value === 'number' ? r.value : 0,
+      };
+    });
+  }
+  // Legacy: { timestamp, value }
+  else if (rawDataAny.length > 0 && firstItem?.timestamp) {
+    points = rawDataAny.map((item: unknown) => {
+      const r = item as Record<string, unknown>;
+      return {
+        timestamp: r.timestamp as string | undefined,
+        date: r.date as string | undefined,
+        time: r.time as string | undefined,
+        value: typeof r.value === 'number' ? r.value : 0,
+      };
+    });
+  }
+}
+```
 
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+No other files need changes. The downstream `parseDateTime` function already handles `date` + `time` fields correctly.
 
-### No other files change
-
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
+### After deploying
+- **New uploads**: Will render previews immediately.
+- **Existing broken meters** (`PDB_36506619_KFCDT_22m2`, `PDB_36506609_TigerWheel&Tyre_464m2`): Click **Re-process (⚙)** in the Meter Library to repopulate `raw_data`, then previews will work.
 
