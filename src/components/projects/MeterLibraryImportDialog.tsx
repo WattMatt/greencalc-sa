@@ -125,7 +125,7 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
         // 1. Fetch raw_data for this meter individually
         const { data: fullMeter, error: fetchErr } = await supabase
           .from("scada_imports")
-          .select("raw_data")
+          .select("raw_data, load_profile_weekday, load_profile_weekend")
           .eq("id", m.id)
           .single();
 
