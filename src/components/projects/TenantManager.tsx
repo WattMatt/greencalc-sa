@@ -737,6 +737,8 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
 
     let importedCount = 0;
     let updatedCount = 0;
+    let tenantCreatedCount = 0;
+    let globalCount = 0;
     for (const result of results) {
       try {
         const processed = processCSVToLoadProfile(result.headers, result.rows, defaultConfig);
@@ -780,8 +782,7 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
           ? tenants.find((t) => t.id === result.tenantId)
           : null;
 
-        const payload = {
-          project_id: projectId,
+        const basePayload = {
           site_name: shopName,
           shop_name: shopName,
           load_profile_weekday: processed.weekdayProfile,
@@ -798,6 +799,9 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
           area_sqm: assignedTenant?.area_sqm ?? null,
         };
 
+        // ── 1) Project-scoped scada_imports record ──
+        const projectPayload = { ...basePayload, project_id: projectId };
+
         // Check for existing record with same project_id + file_name
         const { data: existing } = await supabase
           .from("scada_imports")
@@ -806,24 +810,100 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
           .eq("file_name", fileName)
           .maybeSingle();
 
+        let projectMeterId: string | null = null;
+
         if (existing) {
-          // Update existing record instead of creating a duplicate
           const { error } = await supabase
             .from("scada_imports")
-            .update(payload)
+            .update(projectPayload)
             .eq("id", existing.id);
           if (error) {
             console.error(`[handleWizardComplete] Update error for ${shopName}:`, error);
             continue;
           }
+          projectMeterId = existing.id;
           updatedCount++;
         } else {
-          const { error } = await supabase.from("scada_imports").insert(payload);
-          if (error) {
+          const { data: inserted, error } = await supabase
+            .from("scada_imports")
+            .insert(projectPayload)
+            .select("id")
+            .single();
+          if (error || !inserted) {
             console.error(`[handleWizardComplete] Insert error for ${shopName}:`, error);
             continue;
           }
+          projectMeterId = inserted.id;
           importedCount++;
+        }
+
+        // ── 2) Global meter library entry (project_id = null) ──
+        // Use filename as meter_label for easy identification
+        const globalPayload = {
+          ...basePayload,
+          project_id: null as string | null,
+          meter_label: shopName,
+        };
+
+        // Check for existing global record with same file_name
+        const { data: existingGlobal } = await supabase
+          .from("scada_imports")
+          .select("id")
+          .is("project_id", null)
+          .eq("file_name", fileName)
+          .maybeSingle();
+
+        let globalMeterId: string | null = null;
+
+        if (existingGlobal) {
+          await supabase
+            .from("scada_imports")
+            .update(globalPayload)
+            .eq("id", existingGlobal.id);
+          globalMeterId = existingGlobal.id;
+        } else {
+          const { data: insertedGlobal } = await supabase
+            .from("scada_imports")
+            .insert(globalPayload)
+            .select("id")
+            .single();
+          if (insertedGlobal) {
+            globalMeterId = insertedGlobal.id;
+            globalCount++;
+          }
+        }
+
+        // Upload CSV to storage for both records
+        if (result.rawContent) {
+          const { uploadCsvToStorage } = await import("@/components/loadprofiles/utils/csvStorage");
+          if (projectMeterId) {
+            await uploadCsvToStorage(result.rawContent, projectMeterId, fileName);
+          }
+          if (globalMeterId) {
+            await uploadCsvToStorage(result.rawContent, globalMeterId, fileName);
+          }
+        }
+
+        // ── 3) Create project_tenants record (if not already assigned to existing tenant) ──
+        if (projectMeterId && !result.tenantId) {
+          // Create a new tenant linked to this meter
+          const { error: tenantError } = await supabase
+            .from("project_tenants")
+            .insert({
+              project_id: projectId,
+              name: shopName,
+              shop_name: shopName,
+              area_sqm: assignedTenant?.area_sqm ?? 0,
+              scada_import_id: projectMeterId,
+              include_in_load_profile: true,
+            });
+          if (!tenantError) tenantCreatedCount++;
+        } else if (projectMeterId && result.tenantId) {
+          // Link existing tenant to the new meter
+          await supabase
+            .from("project_tenants")
+            .update({ scada_import_id: projectMeterId })
+            .eq("id", result.tenantId);
         }
       } catch (err) {
         console.error(`[handleWizardComplete] Processing error:`, err);
@@ -837,10 +917,14 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
       queryClient.invalidateQueries({ queryKey: ["meter-library"] });
       queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
       queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });
+      queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["existing-scada-imports", projectId] });
       const parts: string[] = [];
       if (importedCount > 0) parts.push(`imported ${importedCount}`);
       if (updatedCount > 0) parts.push(`updated ${updatedCount}`);
-      toast.success(`Successfully ${parts.join(' and ')} meter profile${totalCount > 1 ? 's' : ''}`);
+      if (tenantCreatedCount > 0) parts.push(`created ${tenantCreatedCount} tenants`);
+      if (globalCount > 0) parts.push(`added ${globalCount} to meter library`);
+      toast.success(`Successfully ${parts.join(', ')}`);
       setProfileScope('local'); // Auto-switch to local view
     } else {
       toast.error("No meter profiles could be processed from the uploaded files");
