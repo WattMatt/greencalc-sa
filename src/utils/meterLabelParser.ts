@@ -83,5 +83,5 @@ export function parseMeterLabel(
   }
 
   // Plain string — use as-is
-  return { shopName: expandCamelCase(raw), shopNumber: null, areaSqm: 0 };
+  return { shopName: expandCamelCase(raw), shopNumber: null, areaSqm: 0, prefix: null };
 }
