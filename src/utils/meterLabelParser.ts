@@ -61,7 +61,7 @@ export function parseMeterLabel(
 
     const shopName = nameParts.map(expandCamelCase).join(" ") || "Unknown";
 
-    return { shopName, shopNumber, areaSqm };
+    return { shopName, shopNumber, areaSqm, prefix: parts[0].toUpperCase() };
   }
 
   // Non-PDB: try to find area anywhere (e.g. "SomeName_500m2")
