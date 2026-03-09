@@ -160,19 +160,32 @@ export function useMonthlyConsumption(meterId: string | null): UseMonthlyConsump
           const rawDataAny = data.raw_data as unknown;
           
           if (Array.isArray(rawDataAny)) {
-            // Check if it's an array with embedded CSV
             const firstItem = rawDataAny[0] as Record<string, unknown> | undefined;
+
+            // Embedded CSV
             if (rawDataAny.length === 1 && firstItem?.csvContent && typeof firstItem.csvContent === 'string') {
               points = parseEmbeddedCSV(firstItem.csvContent);
-            } else if (rawDataAny.length > 0 && firstItem?.timestamp) {
-              // Array of data points - map to ensure correct structure
+            }
+            // Normalised format: { date, time, value }
+            else if (rawDataAny.length > 0 && firstItem?.date && firstItem?.time && 'value' in firstItem) {
               points = rawDataAny.map((item: unknown) => {
-                const record = item as Record<string, unknown>;
+                const r = item as Record<string, unknown>;
                 return {
-                  timestamp: record.timestamp as string | undefined,
-                  date: record.date as string | undefined,
-                  time: record.time as string | undefined,
-                  value: typeof record.value === 'number' ? record.value : 0
+                  date: String(r.date),
+                  time: String(r.time),
+                  value: typeof r.value === 'number' ? r.value : 0,
+                };
+              });
+            }
+            // Legacy: { timestamp, value }
+            else if (rawDataAny.length > 0 && firstItem?.timestamp) {
+              points = rawDataAny.map((item: unknown) => {
+                const r = item as Record<string, unknown>;
+                return {
+                  timestamp: r.timestamp as string | undefined,
+                  date: r.date as string | undefined,
+                  time: r.time as string | undefined,
+                  value: typeof r.value === 'number' ? r.value : 0,
                 };
               });
             }
