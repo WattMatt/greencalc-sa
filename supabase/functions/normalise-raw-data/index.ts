@@ -76,6 +76,17 @@ function normaliseRawData(rawData: unknown): NormalisedPoint[] | null {
           const time = parts[3].length === 5 ? parts[3] + ":00" : parts[3];
           return { date: `${year}-${month}-${day}`, time, value: val };
         }
+        // Date-only: "YYYY-MM-DD"
+        const dateOnlyMatch = ts.match(/^(\d{4}-\d{2}-\d{2})$/);
+        if (dateOnlyMatch) return { date: dateOnlyMatch[1], time: "00:00:00", value: val };
+
+        // Date-only SA: "DD/MM/YYYY" or "DD-MM-YYYY"
+        const saDateOnly = ts.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (saDateOnly) {
+          const date = `${saDateOnly[3]}-${saDateOnly[2].padStart(2, "0")}-${saDateOnly[1].padStart(2, "0")}`;
+          return { date, time: "00:00:00", value: val };
+        }
+
         return null;
       })
       .filter((p: NormalisedPoint | null): p is NormalisedPoint => p !== null && p.date !== "");
