@@ -490,7 +490,6 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                     )}
                   </>
                 )}
-              </div>
             </div>
 
             {/* Data info */}
