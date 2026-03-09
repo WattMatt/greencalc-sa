@@ -30,6 +30,7 @@ import { AccuracyBadge, AccuracySummary, getAccuracyLevel } from "@/components/s
 import { ScaledMeterPreview } from "./ScaledMeterPreview";
 import { TenantColumnMapper, type TenantMappedData } from "./TenantColumnMapper";
 import { ScadaImportWizard, type ParsedFileResult } from "./ScadaImportWizard";
+import { MeterLibraryImportDialog } from "./MeterLibraryImportDialog";
 
 interface Tenant {
   id: string;
