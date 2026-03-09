@@ -277,8 +277,11 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
   // Profile scope toggle: global vs local
   const [profileScope, setProfileScope] = useState<'global' | 'local'>('global');
   
-  // Scada Import Wizard state
+// Scada Import Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
+  
+  // Meter Library Import Dialog state
+  const [meterLibraryImportOpen, setMeterLibraryImportOpen] = useState(false);
   
   // Column mapper state (still used after wizard completes)
   const [columnMapperOpen, setColumnMapperOpen] = useState(false);
