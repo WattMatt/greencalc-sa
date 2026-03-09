@@ -43,6 +43,7 @@ interface ParsedRow {
   shopName: string;
   shopNumber: string | null;
   areaSqm: number;
+  prefix: string | null;
   selected: boolean;
 }
 
@@ -78,6 +79,7 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
             shopName: parsed.shopName,
             shopNumber: parsed.shopNumber || m.shop_number || null,
             areaSqm: parsed.areaSqm || m.area_sqm || 0,
+            prefix: parsed.prefix,
             selected: false,
           };
         })
@@ -215,13 +217,14 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10">
-                      <Checkbox
-                        checked={selectedCount === rows.length}
-                        onCheckedChange={(c) => toggleAll(!!c)}
-                      />
-                    </TableHead>
-                    <TableHead>Meter Label</TableHead>
+                     <TableHead className="w-10">
+                       <Checkbox
+                         checked={selectedCount === rows.length}
+                         onCheckedChange={(c) => toggleAll(!!c)}
+                       />
+                     </TableHead>
+                     <TableHead className="w-16">Prefix</TableHead>
+                     <TableHead>Meter Label</TableHead>
                     <TableHead>Tenant Name</TableHead>
                     <TableHead className="w-28">Area (m²)</TableHead>
                     <TableHead className="w-28">Data Points</TableHead>
@@ -230,13 +233,20 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
                 <TableBody>
                   {rows.map((row, idx) => (
                     <TableRow key={row.meter.id} className={row.selected ? "bg-accent/30" : ""}>
-                      <TableCell>
-                        <Checkbox
-                          checked={row.selected}
-                          onCheckedChange={() => toggleRow(idx)}
-                        />
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground font-mono max-w-48 truncate">
+                       <TableCell>
+                         <Checkbox
+                           checked={row.selected}
+                           onCheckedChange={() => toggleRow(idx)}
+                         />
+                       </TableCell>
+                       <TableCell>
+                         {row.prefix ? (
+                           <Badge variant="outline" className="text-xs font-mono">
+                             {row.prefix}
+                           </Badge>
+                         ) : null}
+                       </TableCell>
+                       <TableCell className="text-xs text-muted-foreground font-mono max-w-48 truncate">
                         {row.meter.meter_label || row.meter.shop_name || row.meter.site_name}
                       </TableCell>
                       <TableCell>

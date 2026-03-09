@@ -13,6 +13,7 @@ export interface ParsedMeterLabel {
   shopName: string;
   shopNumber: string | null;
   areaSqm: number;
+  prefix: string | null;
 }
 
 /**
@@ -32,7 +33,7 @@ export function parseMeterLabel(
   const raw = (label ?? fallbackSiteName ?? "").trim();
 
   if (!raw) {
-    return { shopName: "Unknown", shopNumber: null, areaSqm: 0 };
+    return { shopName: "Unknown", shopNumber: null, areaSqm: 0, prefix: null };
   }
 
   const parts = raw.split("_");
@@ -60,7 +61,7 @@ export function parseMeterLabel(
 
     const shopName = nameParts.map(expandCamelCase).join(" ") || "Unknown";
 
-    return { shopName, shopNumber, areaSqm };
+    return { shopName, shopNumber, areaSqm, prefix: parts[0].toUpperCase() };
   }
 
   // Non-PDB: try to find area anywhere (e.g. "SomeName_500m2")
@@ -78,9 +79,9 @@ export function parseMeterLabel(
     }
 
     const shopName = nameParts.map(expandCamelCase).join(" ") || raw;
-    return { shopName, shopNumber: null, areaSqm };
+    return { shopName, shopNumber: null, areaSqm, prefix: null };
   }
 
   // Plain string — use as-is
-  return { shopName: expandCamelCase(raw), shopNumber: null, areaSqm: 0 };
+  return { shopName: expandCamelCase(raw), shopNumber: null, areaSqm: 0, prefix: null };
 }
