@@ -281,9 +281,7 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
             </div>
 
             {/* Daily View with slider */}
-            (
-              /* Daily View with slider */
-              <div className="space-y-4">
+            <div className="space-y-4">
                 {isLoadingDaily ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin mr-2" />
@@ -492,8 +490,7 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                     )}
                   </>
                 )}
-              </div>
-            )
+            </div>
 
             {/* Data info */}
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground border-t pt-4">
