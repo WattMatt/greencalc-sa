@@ -238,7 +238,7 @@ function getSortedProfilesWithSuggestions(
 type SortColumn = 'shop_number' | 'shop_name' | 'area' | 'kwh';
 type SortDirection = 'asc' | 'desc';
 
-export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId }: TenantManagerProps) {
+export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId, meterDataPrefix }: TenantManagerProps) {
   const queryClient = useQueryClient();
   const csvInputRef = useRef<HTMLInputElement>(null);
 
