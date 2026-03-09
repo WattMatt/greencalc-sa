@@ -1672,6 +1672,7 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
         open={meterLibraryImportOpen}
         onClose={() => setMeterLibraryImportOpen(false)}
         projectId={projectId}
+        meterDataPrefix={meterDataPrefix}
       />
 
       {/* Tenant Column Mapper */}

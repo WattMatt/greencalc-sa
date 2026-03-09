@@ -1300,6 +1300,7 @@ export default function ProjectDetail() {
             tenants={tenants || []}
             shopTypes={shopTypes || []}
             highlightTenantId={highlightTenantId}
+            meterDataPrefix={(project as any)?.meter_data_prefix || undefined}
           />
         </TabsContent>
 

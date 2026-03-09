@@ -206,13 +206,18 @@ export function MeterLibraryImportDialog({ open, onClose, projectId, meterDataPr
           </DialogDescription>
         </DialogHeader>
 
-        {isLoading ? (
+        {!meterDataPrefix ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <p>No meter file prefix configured.</p>
+            <p className="text-xs mt-1">Set the <strong>Meter File Prefix</strong> in Project Parameters first (e.g. "PDB").</p>
+          </div>
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : !rows.length ? (
           <div className="text-center py-12 text-muted-foreground">
-            <p>No unassigned meters with data found in the library.</p>
+            <p>No unassigned meters matching prefix "{meterDataPrefix}" found in the library.</p>
           </div>
         ) : (
           <>
