@@ -85,6 +85,19 @@ export function normaliseRawData(rawData: unknown): NormalisedDataPoint[] {
           return { date: `${year}-${month}-${day}`, time, value: val };
         }
 
+        // Date-only: "YYYY-MM-DD" with no time component
+        const dateOnlyMatch = ts.match(/^(\d{4}-\d{2}-\d{2})$/);
+        if (dateOnlyMatch) {
+          return { date: dateOnlyMatch[1], time: "00:00:00", value: val };
+        }
+
+        // Date-only SA: "DD/MM/YYYY" or "DD-MM-YYYY" with no time
+        const saDateOnly = ts.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (saDateOnly) {
+          const date = `${saDateOnly[3]}-${saDateOnly[2].padStart(2, "0")}-${saDateOnly[1].padStart(2, "0")}`;
+          return { date, time: "00:00:00", value: val };
+        }
+
         return null;
       })
       .filter((p): p is NormalisedDataPoint => p !== null && p.date !== "");
