@@ -207,6 +207,7 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
       capacity: project.connection_size_kva || prev.capacity,
       systemConfig: parseSystemConfig(project.system_type),
       clientName: project.client_name || prev.clientName,
+      meterDataPrefix: (project as any).meter_data_prefix || prev.meterDataPrefix,
       budget: project.budget || prev.budget,
       targetDate: project.target_date ? new Date(project.target_date) : prev.targetDate,
     }));
