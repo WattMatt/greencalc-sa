@@ -1667,6 +1667,12 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
         onComplete={handleWizardComplete}
       />
 
+      <MeterLibraryImportDialog
+        open={meterLibraryImportOpen}
+        onClose={() => setMeterLibraryImportOpen(false)}
+        projectId={projectId}
+      />
+
       {/* Tenant Column Mapper */}
       {columnMapperData && (
         <TenantColumnMapper
