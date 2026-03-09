@@ -233,13 +233,20 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
                 <TableBody>
                   {rows.map((row, idx) => (
                     <TableRow key={row.meter.id} className={row.selected ? "bg-accent/30" : ""}>
-                      <TableCell>
-                        <Checkbox
-                          checked={row.selected}
-                          onCheckedChange={() => toggleRow(idx)}
-                        />
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground font-mono max-w-48 truncate">
+                       <TableCell>
+                         <Checkbox
+                           checked={row.selected}
+                           onCheckedChange={() => toggleRow(idx)}
+                         />
+                       </TableCell>
+                       <TableCell>
+                         {row.prefix ? (
+                           <Badge variant="outline" className="text-xs font-mono">
+                             {row.prefix}
+                           </Badge>
+                         ) : null}
+                       </TableCell>
+                       <TableCell className="text-xs text-muted-foreground font-mono max-w-48 truncate">
                         {row.meter.meter_label || row.meter.shop_name || row.meter.site_name}
                       </TableCell>
                       <TableCell>
