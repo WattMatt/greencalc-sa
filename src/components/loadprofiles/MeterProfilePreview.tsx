@@ -7,8 +7,10 @@ import { Slider } from "@/components/ui/slider";
 import { format } from "date-fns";
 import { ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea } from "recharts";
 import { Activity, Calendar, Zap, Clock, Loader2, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useMonthlyConsumption } from "./hooks/useMonthlyConsumption";
 import { useDailyConsumption } from "./hooks/useDailyConsumption";
+import { useState } from "react";
 
 interface MeterProfilePreviewProps {
   isOpen: boolean;
