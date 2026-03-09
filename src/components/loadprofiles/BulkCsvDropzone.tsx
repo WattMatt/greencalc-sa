@@ -392,7 +392,7 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
           file_name: file.name,
           raw_data: normaliseRawData(rows.map(row => ({
             timestamp: `${row[dateCol] || ''} ${timeCol >= 0 ? (row[timeCol] || '') : ''}`.trim(),
-            value: parseFloat(row[valueCol]?.replace(/[^\\d.-]/g, '') || '0') || 0
+            value: parseFloat(row[valueCol]?.replace(/[^\d.-]/g, '') || '0') || 0
           })).filter(d => d.value !== 0 || d.timestamp)),
           site_id: siteId || null,
         })
