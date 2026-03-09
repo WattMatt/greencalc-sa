@@ -1,29 +1,20 @@
 
 
-# Plan: Storage-first CSV retrieval with re-upload message
+# Plan: Use filename as meter label for all new uploads
 
-## Changes
+## Change
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+In `src/components/loadprofiles/BulkCsvDropzone.tsx`, line 385, replace:
 
-Reorder `loadMeterForWizard` to check storage **first**:
+```typescript
+const displayName = config.meterName || file.name.replace(/\.csv$/i, '');
+```
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+with:
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+```typescript
+const displayName = file.name.replace(/\.csv$/i, '');
+```
 
-Same reordering:
-
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
-
-### No other files change
-
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
+This removes the PnP metadata `meterName` override, so every new upload always uses the sanitised filename as the meter label. One line change, no other files affected.
 
