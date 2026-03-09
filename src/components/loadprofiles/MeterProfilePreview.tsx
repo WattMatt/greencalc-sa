@@ -491,7 +491,7 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                   </>
                 )}
               </div>
-            )
+            </div>
 
             {/* Data info */}
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground border-t pt-4">
