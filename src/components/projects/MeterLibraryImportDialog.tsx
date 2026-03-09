@@ -46,7 +46,7 @@ interface ParsedRow {
   selected: boolean;
 }
 
-export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibraryImportDialogProps) {
+export function MeterLibraryImportDialog({ open, onClose, projectId, meterDataPrefix }: MeterLibraryImportDialogProps) {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [initialised, setInitialised] = useState(false);
