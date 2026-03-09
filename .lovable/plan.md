@@ -1,29 +1,40 @@
 
 
-# Plan: Storage-first CSV retrieval with re-upload message
+# Plan: Always create new meters on bulk CSV upload
 
-## Changes
+## Summary
+Remove the fuzzy matching logic from `BulkCsvDropzone.tsx` so every uploaded CSV always creates a new meter in the meter library. No more matched/unmatched distinction.
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+## Changes to `src/components/loadprofiles/BulkCsvDropzone.tsx`
 
-Reorder `loadMeterForWizard` to check storage **first**:
+### 1. Remove matching infrastructure
+- Remove the `meters` query (lines 233-249) — no longer needed
+- Remove `matchFilesToMeters` import and the `matchFilesToMeters` call in `handleFiles` (line 296)
+- Remove the `createNewForUnmatched` state variable
+- Remove the `MatchResult` / `MeterInfo` types from imports
+- Simplify `FileMatchInfo` — drop the `match` field
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+### 2. Simplify `handleFiles` (lines 270-310)
+- Read file contents as before
+- Set every file's status to `'pending'` with no match object
+- Remove the matched/unmatched toast — just say `"X files loaded"`
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+### 3. Simplify `processFile` (lines 330-516)
+- Remove lines 435-466 (the `match?.meterId` check, the `createNewForUnmatched` guard, and the "skipped" return)
+- **Always** create a new meter via `supabase.from("scada_imports").insert(...)` using the auto-detected `config.meterName` or sanitised filename
+- Then update the new meter with the processed profile data and upload CSV to storage (same as current flow)
 
-Same reordering:
+### 4. Simplify UI
+- **Drop zone text**: Change from "Files will be automatically matched to existing meters" to "Each file will create a new meter"
+- **Stats bar**: Remove matched/unmatched counts — just show total files and results
+- **Remove** the "Create new meters for unmatched files" checkbox (lines 655-664)
+- **File list rows**: Remove the match/confidence badge display — just show filename and status
+- Remove `getConfidenceBadge` helper function
 
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+### 5. Clean up imports
+- Remove unused imports: `matchFilesToMeters`, `MatchResult`, `MeterInfo`, `normalizeName`, `Link2`, `Link2Off`, `Checkbox`
 
 ### No other files change
-
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- `fuzzyMatcher.ts` stays (used elsewhere)
 - No database changes
 
