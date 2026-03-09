@@ -43,6 +43,7 @@ interface ParsedRow {
   shopName: string;
   shopNumber: string | null;
   areaSqm: number;
+  prefix: string | null;
   selected: boolean;
 }
 
