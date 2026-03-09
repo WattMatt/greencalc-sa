@@ -217,13 +217,14 @@ export function MeterLibraryImportDialog({ open, onClose, projectId }: MeterLibr
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10">
-                      <Checkbox
-                        checked={selectedCount === rows.length}
-                        onCheckedChange={(c) => toggleAll(!!c)}
-                      />
-                    </TableHead>
-                    <TableHead>Meter Label</TableHead>
+                     <TableHead className="w-10">
+                       <Checkbox
+                         checked={selectedCount === rows.length}
+                         onCheckedChange={(c) => toggleAll(!!c)}
+                       />
+                     </TableHead>
+                     <TableHead className="w-16">Prefix</TableHead>
+                     <TableHead>Meter Label</TableHead>
                     <TableHead>Tenant Name</TableHead>
                     <TableHead className="w-28">Area (m²)</TableHead>
                     <TableHead className="w-28">Data Points</TableHead>
