@@ -390,10 +390,37 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
           site_name: displayName,
           shop_name: displayName,
           file_name: file.name,
-          raw_data: normaliseRawData(rows.map(row => ({
-            timestamp: `${row[dateCol] || ''} ${timeCol >= 0 ? (row[timeCol] || '') : ''}`.trim(),
-            value: parseFloat(row[valueCol]?.replace(/[^\d.-]/g, '') || '0') || 0
-          })).filter(d => d.value !== 0 || d.timestamp)),
+          raw_data: rows.map(row => {
+            let dateStr = (row[dateCol] || '').trim();
+            let timeStr = timeCol >= 0 ? (row[timeCol] || '').trim() : '';
+            const value = parseFloat(row[valueCol]?.replace(/[^\d.-]/g, '') || '0') || 0;
+
+            // If no separate time column, check if date cell contains combined datetime
+            if (!timeStr && dateStr.includes(' ')) {
+              const spaceIdx = dateStr.indexOf(' ');
+              timeStr = dateStr.substring(spaceIdx + 1).trim();
+              dateStr = dateStr.substring(0, spaceIdx).trim();
+            }
+
+            // Normalise date to YYYY-MM-DD
+            let isoDate = dateStr;
+            // YYYY/MM/DD or YYYY-MM-DD
+            const ymdMatch = dateStr.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+            if (ymdMatch) {
+              isoDate = `${ymdMatch[1]}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[3].padStart(2, '0')}`;
+            } else {
+              // DD/MM/YYYY or DD-MM-YYYY
+              const dmyMatch = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+              if (dmyMatch) {
+                isoDate = `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+              }
+            }
+
+            // Normalise time to HH:MM:SS
+            const isoTime = timeStr ? (timeStr.length === 5 ? timeStr + ':00' : timeStr) : '00:00:00';
+
+            return { date: isoDate, time: isoTime, value };
+          }).filter(d => d.date && (d.value !== 0 || d.time !== '00:00:00')),
           site_id: siteId || null,
         })
         .select("id")
