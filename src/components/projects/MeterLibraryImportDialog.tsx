@@ -30,12 +30,12 @@ interface MeterRow {
   load_profile_weekend: number[] | null;
   date_range_start: string | null;
   date_range_end: string | null;
-  raw_data: unknown;
   file_name: string | null;
   value_unit: string | null;
   detected_interval_minutes: number | null;
   weekday_days: number | null;
   weekend_days: number | null;
+  csv_file_path: string | null;
   csv_file_path: string | null;
 }
 
