@@ -23,6 +23,8 @@ interface FinancialConfigPaneProps {
   onBlendedRateTypeChange?: (type: BlendedRateType) => void;
   useHourlyTouRates: boolean;
   onUseHourlyTouRatesChange?: (value: boolean) => void;
+  excludeLoadProfile: boolean;
+  onExcludeLoadProfileChange?: (value: boolean) => void;
   financialResults: { annualSavings: number; systemCost: number; paybackYears: number; roi: number };
   advancedResults: AdvancedFinancialResults | null;
   basicFinancialMetrics: { npv: number; irr: number; mirr: number; lcoe: number; projectLifeYears: number; discountRate: number };
