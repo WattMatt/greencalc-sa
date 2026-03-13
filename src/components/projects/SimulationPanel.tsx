@@ -151,6 +151,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [specificYieldOverride, setSpecificYieldOverride] = useState<number | null>(null);
   const [productionReductionPercent, setProductionReductionPercent] = useState(15);
   
+  const [excludeLoadProfile, setExcludeLoadProfile] = useState(false);
   const [loadedSimulationName, setLoadedSimulationName] = useState<string | null>(null);
   const [loadedSimulationDate, setLoadedSimulationDate] = useState<string | null>(null);
   const hasInitializedFromSaved = useRef(false);
@@ -277,7 +278,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     selectedDayIndex, showAnnualAverage,
     dayDateInfo: { dayOfWeek: dayDateInfo.dayOfWeek, month: dayDateInfo.month },
     comparisonTabViewed,
-    systemCosts, blendedRateType, useHourlyTouRates,
+    systemCosts, blendedRateType, useHourlyTouRates, excludeLoadProfile,
     advancedConfig, touSettingsData, touPeriodToWindows,
   });
 
@@ -476,6 +477,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 hasFinancialData={engine.hasFinancialData} annualBlendedRates={engine.annualBlendedRates}
                 blendedRateType={blendedRateType} onBlendedRateTypeChange={onBlendedRateTypeChange}
                 useHourlyTouRates={useHourlyTouRates} onUseHourlyTouRatesChange={onUseHourlyTouRatesChange}
+                excludeLoadProfile={excludeLoadProfile} onExcludeLoadProfileChange={setExcludeLoadProfile}
                 financialResults={engine.financialResults} advancedResults={engine.advancedResults}
                 basicFinancialMetrics={engine.basicFinancialMetrics} unifiedPaybackPeriod={engine.unifiedPaybackPeriod}
                 threeYearOM={engine.threeYearOM} solarCapacity={solarCapacity}

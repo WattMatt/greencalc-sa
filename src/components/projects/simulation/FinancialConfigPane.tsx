@@ -4,6 +4,7 @@
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,6 +23,8 @@ interface FinancialConfigPaneProps {
   onBlendedRateTypeChange?: (type: BlendedRateType) => void;
   useHourlyTouRates: boolean;
   onUseHourlyTouRatesChange?: (value: boolean) => void;
+  excludeLoadProfile: boolean;
+  onExcludeLoadProfileChange?: (value: boolean) => void;
   financialResults: { annualSavings: number; systemCost: number; paybackYears: number; roi: number };
   advancedResults: AdvancedFinancialResults | null;
   basicFinancialMetrics: { npv: number; irr: number; mirr: number; lcoe: number; projectLifeYears: number; discountRate: number };
@@ -44,6 +47,8 @@ export function FinancialConfigPane({
   onBlendedRateTypeChange,
   useHourlyTouRates,
   onUseHourlyTouRatesChange,
+  excludeLoadProfile,
+  onExcludeLoadProfileChange,
   financialResults,
   advancedResults,
   basicFinancialMetrics,
@@ -180,6 +185,17 @@ export function FinancialConfigPane({
           </CardContent>
         </Card>
       )}
+
+      <div className="flex items-center gap-2 px-1">
+        <Checkbox
+          id="exclude-load-profile"
+          checked={excludeLoadProfile}
+          onCheckedChange={(checked) => onExcludeLoadProfileChange?.(checked === true)}
+        />
+        <Label htmlFor="exclude-load-profile" className="text-xs font-medium cursor-pointer">
+          Exclude load profile from financial analysis (solar-only revenue)
+        </Label>
+      </div>
 
       <Card>
         <CardHeader className="pb-3">
