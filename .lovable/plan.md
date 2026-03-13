@@ -1,53 +1,29 @@
 
 
-## Sync All Data to External Supabase Instance
+# Plan: Storage-first CSV retrieval with re-upload message
 
-### What we'll build
+## Changes
 
-An edge function `replicate-to-external` that reads all tables from the current database and upserts them into `https://lyctmmqndqegptzkajhz.supabase.co`.
+### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
 
-### Prerequisites (secrets needed)
+Reorder `loadMeterForWizard` to check storage **first**:
 
-We need two new secrets:
-- **TARGET_SUPABASE_URL** — `https://lyctmmqndqegptzkajhz.supabase.co`
-- **TARGET_SUPABASE_SERVICE_ROLE_KEY** — The service role key from the target project (found in the target project's API settings). This is required because the anon key won't have write access.
+1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
+2. If storage returns CSV, use it
+3. Only if storage returns null, check legacy `rawData[0].csvContent`
+4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-### How it works
+### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
 
-1. The edge function connects to both databases using service role keys
-2. For each table, it reads all rows from the local database
-3. It upserts them into the target database (matching on `id`)
-4. Tables are synced in dependency order to avoid foreign key violations
+Same reordering:
 
-### Tables to sync (in order)
+1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
+2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
+3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-1. `provinces`
-2. `shop_type_categories`
-3. `shop_types`
-4. `sites`
-5. `projects`
-6. `project_tenants`
-7. `scada_imports`
-8. `generation_records`, `generation_readings`, `generation_daily_records`, `generation_source_guarantees`
-9. `pv_layouts`, `project_solar_data`
-10. `tariff_plans`, `tariff_rates`, `municipalities`
-11. `gantt_tasks`, `gantt_milestones`, `gantt_baselines`, `gantt_task_dependencies`
-12. `proposals`, `sandbox_simulations`, `stacked_profiles`
-13. `project_document_folders`, `project_schematics`, `project_schematic_meter_positions`, `project_meter_connections`
-14. `organization_branding`, `profiles`, `report_analytics`
-15. Remaining tables: `checklist_template_groups`, `handover_checklist_items`, `checklist_document_links`, `downtime_slot_overrides`, `eskom_batch_status`, `extraction_runs`
+### No other files change
 
-### Important caveat
-
-The target Supabase instance must already have matching table schemas. The function only syncs **data**, not schema. You'll need to either:
-- Run the same migrations on the target instance, or
-- Let me know and I can generate a full schema SQL dump for you to run on the target
-
-### Technical details
-
-- Edge function: `supabase/functions/replicate-to-external/index.ts`
-- Pagination: 1000 rows per batch to stay within query limits
-- Upsert with `onConflict: 'id'` to handle re-runs safely
-- Returns a summary of rows synced per table
-- Storage bucket files are NOT synced (only database rows)
+- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
+- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- No database changes
 
