@@ -66,6 +66,7 @@ export interface SimulationEngineConfig {
   tmyInverterLossMultiplier: number;
   annualPVsystResult: any;
   reductionFactor: number;
+  overrideScaleFactor: number;
 
   // Navigation
   selectedDayIndex: number;
