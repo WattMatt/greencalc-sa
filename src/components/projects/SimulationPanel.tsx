@@ -246,23 +246,21 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   // ── Compute effective reduction factor (incorporating user overrides) ──
   const effectiveReductionFactor = useMemo(() => {
-    const baseAnnualSolar = engine?.annualEnergyResults?.totalAnnualSolar;
+    // Use PVsyst-calculated values as the "unscaled" baseline
     const calculatedYield = annualPVsystResult?.specificYield
-      ?? (baseAnnualSolar && solarCapacity > 0 ? baseAnnualSolar / solarCapacity / reductionFactor : 0);
+      ?? (solarCapacity > 0 ? (selectedLocation.ghi * 365 * 0.15) / solarCapacity : 0);
+    const calculatedDailyOutput = annualPVsystResult
+      ? annualPVsystResult.eGrid / 365
+      : (solarCapacity > 0 ? selectedLocation.ghi * solarCapacity * 0.15 : 0);
 
     let scaleFactor = 1.0;
     if (specificYieldOverride !== null && calculatedYield > 0) {
       scaleFactor = specificYieldOverride / calculatedYield;
-    } else if (dailyOutputOverride !== null) {
-      const calculatedDaily = annualPVsystResult
-        ? annualPVsystResult.eGrid / 365
-        : (baseAnnualSolar ? baseAnnualSolar / reductionFactor / 365 : 0);
-      if (calculatedDaily > 0) {
-        scaleFactor = dailyOutputOverride / calculatedDaily;
-      }
+    } else if (dailyOutputOverride !== null && calculatedDailyOutput > 0) {
+      scaleFactor = dailyOutputOverride / calculatedDailyOutput;
     }
     return reductionFactor * scaleFactor;
-  }, [reductionFactor, specificYieldOverride, dailyOutputOverride, annualPVsystResult, solarCapacity, engine?.annualEnergyResults?.totalAnnualSolar]);
+  }, [reductionFactor, specificYieldOverride, dailyOutputOverride, annualPVsystResult, solarCapacity, selectedLocation.ghi]);
 
   // ── Simulation engine hook ──
   const engine = useSimulationEngine({
@@ -275,7 +273,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     solarDataSource, solcastPvProfileData,
     solarProfile, solarProfileSolcast, solarProfileGeneric: solarProfileGenericSimplified,
     tmySolarProfile8760, tmyDcProfile8760, tmyInverterLossMultiplier,
-    annualPVsystResult, reductionFactor,
+    annualPVsystResult, reductionFactor: effectiveReductionFactor,
     selectedDayIndex, showAnnualAverage,
     dayDateInfo: { dayOfWeek: dayDateInfo.dayOfWeek, month: dayDateInfo.month },
     comparisonTabViewed,
