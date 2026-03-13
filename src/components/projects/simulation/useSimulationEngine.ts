@@ -395,7 +395,9 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
   }), [tariff, selectedBlendedRate]);
 
   // ── Helper: override annual results for solar-only financials ──
-  const toSolarOnly = (results: ReturnType<typeof runAnnualEnergySimulation>) => ({
+  const toSolarOnly = (results: ReturnType<typeof runAnnualEnergySimulation> | null) => {
+    if (!results) return results;
+    return {
     ...results,
     totalAnnualLoad: 0,
     totalAnnualGridImport: 0,
@@ -406,7 +408,8 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     selfConsumptionRate: 100,
     solarCoverageRate: 100,
     peakReduction: 0,
-  });
+    };
+  };
 
   // ── Financial results ──
   const financialResults = useMemo(() => {
