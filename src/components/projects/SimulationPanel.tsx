@@ -150,6 +150,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [dailyOutputOverride, setDailyOutputOverride] = useState<number | null>(null);
   const [specificYieldOverride, setSpecificYieldOverride] = useState<number | null>(null);
   const [productionReductionPercent, setProductionReductionPercent] = useState(15);
+  const [excludeLoadFromFinancials, setExcludeLoadFromFinancials] = useState(false);
   
   const [loadedSimulationName, setLoadedSimulationName] = useState<string | null>(null);
   const [loadedSimulationDate, setLoadedSimulationDate] = useState<string | null>(null);
