@@ -1,17 +1,29 @@
 
 
-## Fix: Solar Sun Hours Should Include Peak Rates
+# Plan: Storage-first CSV retrieval with re-upload message
 
-### Problem
-`calculateSolarHoursBlendedRate()` (line 309-326) hardcodes only Standard and Off-Peak rates, ignoring Peak entirely. The comment says "ZERO Peak TOU exposure" — but with a 06:00–18:00 window, peak hours **do** fall within the solar window depending on TOU settings.
+## Changes
 
-The `countSolarTOUHours()` function correctly counts peak hours in the window, so `ANNUAL_HOURS_SOLAR[season].peak` is non-zero. These peak hours inflate the `total` denominator, but peak rate × peak hours is missing from the numerator → blended rate is artificially low.
+### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
 
-### Fix
-**File: `src/lib/tariffCalculations.ts`** (lines 309-326)
-- Add `peakRate = getCombinedRate(rates, 'Peak', season, tariff)` 
-- Include `hours.peak * peakRate` in the weighted sum (same pattern as All Hours)
-- Update the comment to remove the "ZERO Peak TOU exposure" assumption
+Reorder `loadMeterForWizard` to check storage **first**:
 
-This makes the solar calculation use the same formula as All Hours — the **only** difference becomes the hour window (06:00–18:00 vs 00:00–24:00), which is exactly what you'd expect.
+1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
+2. If storage returns CSV, use it
+3. Only if storage returns null, check legacy `rawData[0].csvContent`
+4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+
+### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+
+Same reordering:
+
+1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
+2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
+3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+
+### No other files change
+
+- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
+- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- No database changes
 
