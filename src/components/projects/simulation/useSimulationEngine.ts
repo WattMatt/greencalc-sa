@@ -394,23 +394,36 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     exportRatePerKwh: 0,
   }), [tariff, selectedBlendedRate]);
 
+  // ── Helper: override annual results for solar-only financials ──
+  const toSolarOnly = (results: ReturnType<typeof runAnnualEnergySimulation>) => ({
+    ...results,
+    totalAnnualLoad: 0,
+    totalAnnualGridImport: 0,
+    totalAnnualGridExport: results.totalAnnualSolar,
+    totalAnnualSolarUsed: results.totalAnnualSolar,
+    peakLoad: 0,
+    peakGridImport: 0,
+    selfConsumptionRate: 100,
+    solarCoverageRate: 100,
+    peakReduction: 0,
+  });
+
   // ── Financial results ──
-  const financialResults = useMemo(() =>
-    calculateFinancialsFromAnnual(annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity),
-    [annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity]
-  );
+  const financialResults = useMemo(() => {
+    const results = excludeLoadProfile ? toSolarOnly(annualEnergyResults) : annualEnergyResults;
+    return calculateFinancialsFromAnnual(results, tariffData, systemCosts, solarCapacity, batteryCapacity);
+  }, [annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, excludeLoadProfile]);
 
-  const financialResultsGeneric = useMemo(() =>
-    calculateFinancialsFromAnnual(annualEnergyResultsGeneric, tariffData, systemCosts, solarCapacity, batteryCapacity),
-    [annualEnergyResultsGeneric, tariffData, systemCosts, solarCapacity, batteryCapacity]
-  );
+  const financialResultsGeneric = useMemo(() => {
+    const results = excludeLoadProfile ? toSolarOnly(annualEnergyResultsGeneric) : annualEnergyResultsGeneric;
+    return calculateFinancialsFromAnnual(results, tariffData, systemCosts, solarCapacity, batteryCapacity);
+  }, [annualEnergyResultsGeneric, tariffData, systemCosts, solarCapacity, batteryCapacity, excludeLoadProfile]);
 
-  const financialResultsSolcast = useMemo(() =>
-    annualEnergyResultsSolcast
-      ? calculateFinancialsFromAnnual(annualEnergyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity)
-      : null,
-    [annualEnergyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity]
-  );
+  const financialResultsSolcast = useMemo(() => {
+    if (!annualEnergyResultsSolcast) return null;
+    const results = excludeLoadProfile ? toSolarOnly(annualEnergyResultsSolcast) : annualEnergyResultsSolcast;
+    return calculateFinancialsFromAnnual(results, tariffData, systemCosts, solarCapacity, batteryCapacity);
+  }, [annualEnergyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity, excludeLoadProfile]);
 
   // ── 3-Year O&M ──
   const threeYearOM = useMemo(() => {
