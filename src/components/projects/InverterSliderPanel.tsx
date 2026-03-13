@@ -129,6 +129,11 @@ export function InverterSliderPanel({
             <span className="text-xs text-muted-foreground">kW</span>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground ml-1">
+          System Size (DC): <span className="font-medium text-foreground">
+            {moduleMetrics?.actualDcCapacityKwp.toFixed(1) ?? (desiredAcCapacity * config.dcAcRatio).toFixed(1)} kWp
+          </span>
+        </p>
       </div>
 
       {/* 2. Inverter Size Dropdown */}
