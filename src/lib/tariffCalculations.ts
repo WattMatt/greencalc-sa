@@ -7,7 +7,7 @@
  * 
  * Two blended rate methodologies:
  * 1. All Hours (24/7/365): 8,760 hours annual
- * 2. Solar Sun Hours (6h window): 2,190 hours annual - Core solar generation window
+ * 2. Solar Sun Hours (12h window): 4,380 hours annual - Full daylight generation window (06:00–18:00)
  */
 
 import { TOUSettings, TOUHourMap, DEFAULT_TOU_SETTINGS } from "@/components/projects/load-profile/types";
