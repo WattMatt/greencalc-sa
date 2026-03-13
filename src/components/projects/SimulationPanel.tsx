@@ -244,6 +244,24 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     productionReductionPercent, inverterConfig, project, projectId, includesSolar,
   });
 
+  // ── Compute effective reduction factor (incorporating user overrides) ──
+  const effectiveReductionFactor = useMemo(() => {
+    // Use PVsyst-calculated values as the "unscaled" baseline
+    const calculatedYield = annualPVsystResult?.specificYield
+      ?? (solarCapacity > 0 ? (selectedLocation.ghi * 365 * 0.15) / solarCapacity : 0);
+    const calculatedDailyOutput = annualPVsystResult
+      ? annualPVsystResult.eGrid / 365
+      : (solarCapacity > 0 ? selectedLocation.ghi * solarCapacity * 0.15 : 0);
+
+    let scaleFactor = 1.0;
+    if (specificYieldOverride !== null && calculatedYield > 0) {
+      scaleFactor = specificYieldOverride / calculatedYield;
+    } else if (dailyOutputOverride !== null && calculatedDailyOutput > 0) {
+      scaleFactor = dailyOutputOverride / calculatedDailyOutput;
+    }
+    return reductionFactor * scaleFactor;
+  }, [reductionFactor, specificYieldOverride, dailyOutputOverride, annualPVsystResult, solarCapacity, selectedLocation.ghi]);
+
   // ── Simulation engine hook ──
   const engine = useSimulationEngine({
     projectId, project, tenants, shopTypes,
@@ -255,7 +273,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     solarDataSource, solcastPvProfileData,
     solarProfile, solarProfileSolcast, solarProfileGeneric: solarProfileGenericSimplified,
     tmySolarProfile8760, tmyDcProfile8760, tmyInverterLossMultiplier,
-    annualPVsystResult, reductionFactor,
+    annualPVsystResult, reductionFactor: effectiveReductionFactor,
     selectedDayIndex, showAnnualAverage,
     dayDateInfo: { dayOfWeek: dayDateInfo.dayOfWeek, month: dayDateInfo.month },
     comparisonTabViewed,
@@ -462,7 +480,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 basicFinancialMetrics={engine.basicFinancialMetrics} unifiedPaybackPeriod={engine.unifiedPaybackPeriod}
                 threeYearOM={engine.threeYearOM} solarCapacity={solarCapacity}
                 annualEnergyResults={engine.annualEnergyResults} annualPVsystResult={annualPVsystResult}
-                reductionFactor={reductionFactor} inverterConfig={inverterConfig}
+                reductionFactor={effectiveReductionFactor} inverterConfig={inverterConfig}
                 systemCosts={systemCosts} advancedConfig={advancedConfig} projectLocation={project?.location}
               />
             ),
@@ -479,7 +497,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         peakReduction={engine.annualEnergyResults.peakReduction}
         includesSolar={includesSolar}
         annualPVsystResult={annualPVsystResult}
-        reductionFactor={reductionFactor}
+        reductionFactor={effectiveReductionFactor}
       />
 
       {engine.advancedResults && <AdvancedResultsDisplay results={engine.advancedResults} />}

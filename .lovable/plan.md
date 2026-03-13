@@ -1,40 +1,29 @@
 
 
-## Fix: Specific Yield Override Should Drive Simulation Output
+# Plan: Storage-first CSV retrieval with re-upload message
 
-### Problem
-The `specificYieldOverride` and `dailyOutputOverride` fields in the Solar Modules pane are cosmetic — they update the displayed input value but are never fed into the simulation engine or KPI cards. The engine always uses its own calculated solar output regardless of what the user types.
+## Changes
 
-### Solution
-When the user sets a `specificYieldOverride`, scale the simulation's solar production accordingly. The simplest approach:
+### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
 
-1. **Derive an override-based reduction factor** — If the user overrides specific yield, calculate a scaling ratio: `overrideYield / calculatedYield`. Multiply this with the existing `reductionFactor` to produce an `effectiveReductionFactor`.
+Reorder `loadMeterForWizard` to check storage **first**:
 
-2. **Pass `effectiveReductionFactor` to the engine and KPI cards** instead of `reductionFactor` — This way the 8,760-hour simulation scales all solar output by the user's override, and all downstream metrics (Annual Production, Grid Import, Self-Consumption, financials) update automatically.
+1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
+2. If storage returns CSV, use it
+3. Only if storage returns null, check legacy `rawData[0].csvContent`
+4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-3. **Same for `dailyOutputOverride`** — If set, derive the implied annual production and compute the scaling ratio from that.
+### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
 
-4. **Priority**: If both overrides are set, `specificYieldOverride` takes precedence (since daily output can be derived from it).
+Same reordering:
 
-### Files to Change
+1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
+2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
+3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-**`src/components/projects/SimulationPanel.tsx`**
-- Compute `effectiveReductionFactor` from overrides + base `reductionFactor`
-- Pass `effectiveReductionFactor` to `useSimulationEngine()` and `SimulationKPICards` instead of `reductionFactor`
+### No other files change
 
-### Logic
-```
-calculatedYield = annualPVsystResult?.specificYield ?? (annualSolar / solarCapacity)
-if specificYieldOverride:
-  scaleFactor = specificYieldOverride / calculatedYield
-elif dailyOutputOverride:
-  calculatedDaily = annualSolar / 365
-  scaleFactor = dailyOutputOverride / calculatedDaily
-else:
-  scaleFactor = 1.0
-
-effectiveReductionFactor = reductionFactor * scaleFactor
-```
-
-This keeps the override mechanism simple — one multiplication — and all existing downstream logic (engine, KPIs, financials) works unchanged since they already consume `reductionFactor`.
+- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
+- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- No database changes
 
