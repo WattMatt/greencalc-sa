@@ -1,29 +1,52 @@
 
+Goal
+- Make specific yield / daily output overrides actually recalculate annual simulation outputs (Annual Production, Grid Import, self-consumption, financials), not just UI fields.
 
-# Plan: Storage-first CSV retrieval with re-upload message
+What I found
+- `SimulationPanel.tsx` computes `effectiveReductionFactor` correctly from overrides.
+- `useSimulationEngine.ts` receives `reductionFactor` but does not apply it to the solar profiles used by `runAnnualEnergySimulation`.
+- Main annual simulation uses:
+  - `chartSolarProfile` (from load-profile chart data), which is currently unscaled by override/base reduction.
+  - Optional `tmySolarProfile8760`, which is already base-reduced in `useSolarProfiles`.
+- Result: override changes do not propagate into the annual engine totals.
 
-## Changes
+Implementation plan
+1) Split scaling intent in `SimulationPanel.tsx`
+- Keep:
+  - `baseReductionFactor` = existing production reduction from solar profiles hook.
+  - `overrideScaleFactor` = user override ratio (specific yield first, then daily output).
+  - `effectiveReductionFactor = baseReductionFactor * overrideScaleFactor`.
+- Pass both factors to `useSimulationEngine`:
+  - `baseReductionFactor`
+  - `overrideScaleFactor`
+  - (and keep `effectiveReductionFactor` for KPI/financial display props).
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+2) Apply scaling where simulation inputs are built (`useSimulationEngine.ts`)
+- Extend `SimulationEngineConfig` with `baseReductionFactor` and `overrideScaleFactor`.
+- Build scaled solar inputs with memoization:
+  - `scaledChartSolarProfile = chartSolarProfile * (baseReductionFactor * overrideScaleFactor)` for primary annual simulation path.
+  - `scaledTmySolarProfile8760 = tmySolarProfile8760 * overrideScaleFactor` (TMY already has base reduction applied upstream).
+  - `scaledSolarProfileGeneric = solarProfileGeneric * overrideScaleFactor`.
+  - `scaledSolarProfileSolcast = solarProfileSolcast * overrideScaleFactor`.
+- Use these scaled arrays in all `runAnnualEnergySimulation(...)` calls (main + comparison).
 
-Reorder `loadMeterForWizard` to check storage **first**:
+3) Keep UI totals consistent
+- Continue using `effectiveReductionFactor` in KPI/financial cards where already wired.
+- Ensure main source-of-truth annual totals come from the newly scaled engine outputs.
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+Technical details
+- Avoid double-applying base reduction for TMY and generic/solcast profiles (they already include base reduction from `useSolarProfiles`).
+- Guard against invalid math:
+  - If baseline yield/daily is 0, fallback `overrideScaleFactor = 1`.
+  - Prevent `NaN`/`Infinity` from propagating.
+- Update hook dependency arrays so override edits trigger recomputation immediately.
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
-
-Same reordering:
-
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
-
-### No other files change
-
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
-
+Validation checklist
+- Change “Specific yield” and confirm these update live:
+  - Annual Production
+  - Grid Import
+  - Self-Consumption / Peak Reduction
+  - Financial outputs tied to annual kWh
+- Change “Expected daily output” and verify same behavior.
+- Reset buttons should return outputs to calculated baseline.
+- Test with and without TMY data source to confirm scaling logic is correct in both paths.
