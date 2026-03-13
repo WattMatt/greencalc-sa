@@ -227,22 +227,42 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
   }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, cfg.batteryAuxPowerW, batteryStrategy, dispatchConfig, touSettingsData]);
 
   const chartSolarProfile = useMemo(() => stableChartData.map(d => d.pvGeneration || 0), [stableChartData]);
-  const effectiveSolarProfile = includesSolar ? chartSolarProfile : loadProfile.map(() => 0);
+  const effectiveSolarProfile = useMemo(() => {
+    const base = includesSolar ? chartSolarProfile : loadProfile.map(() => 0);
+    if (overrideScaleFactor === 1) return base;
+    return base.map(v => v * overrideScaleFactor);
+  }, [includesSolar, chartSolarProfile, loadProfile, overrideScaleFactor]);
+
+  // Scale TMY and comparison profiles by override factor
+  const scaledTmySolarProfile8760 = useMemo(() => {
+    if (!tmySolarProfile8760 || overrideScaleFactor === 1) return tmySolarProfile8760;
+    return tmySolarProfile8760.map(v => v * overrideScaleFactor);
+  }, [tmySolarProfile8760, overrideScaleFactor]);
+
+  const scaledSolarProfileGeneric = useMemo(() => {
+    if (overrideScaleFactor === 1) return solarProfileGeneric;
+    return solarProfileGeneric.map(v => v * overrideScaleFactor);
+  }, [solarProfileGeneric, overrideScaleFactor]);
+
+  const scaledSolarProfileSolcast = useMemo(() => {
+    if (!solarProfileSolcast || overrideScaleFactor === 1) return solarProfileSolcast;
+    return solarProfileSolcast.map(v => v * overrideScaleFactor);
+  }, [solarProfileSolcast, overrideScaleFactor]);
 
   // ── 8,760-hour annual simulation ──
   const annualEnergyResults = useMemo(() =>
-    runAnnualEnergySimulation(loadProfile, effectiveSolarProfile, energyConfig, touSettingsData, tmySolarProfile8760),
-    [loadProfile, effectiveSolarProfile, energyConfig, touSettingsData, tmySolarProfile8760]
+    runAnnualEnergySimulation(loadProfile, effectiveSolarProfile, energyConfig, touSettingsData, scaledTmySolarProfile8760),
+    [loadProfile, effectiveSolarProfile, energyConfig, touSettingsData, scaledTmySolarProfile8760]
   );
 
   const annualEnergyResultsGeneric = useMemo(() =>
-    comparisonTabViewed ? runAnnualEnergySimulation(loadProfile, solarProfileGeneric, energyConfig, touSettingsData) : null,
-    [comparisonTabViewed, loadProfile, solarProfileGeneric, energyConfig, touSettingsData]
+    comparisonTabViewed ? runAnnualEnergySimulation(loadProfile, scaledSolarProfileGeneric, energyConfig, touSettingsData) : null,
+    [comparisonTabViewed, loadProfile, scaledSolarProfileGeneric, energyConfig, touSettingsData]
   );
 
   const annualEnergyResultsSolcast = useMemo(() =>
-    comparisonTabViewed && solarProfileSolcast ? runAnnualEnergySimulation(loadProfile, solarProfileSolcast, energyConfig, touSettingsData) : null,
-    [comparisonTabViewed, loadProfile, solarProfileSolcast, energyConfig, touSettingsData]
+    comparisonTabViewed && scaledSolarProfileSolcast ? runAnnualEnergySimulation(loadProfile, scaledSolarProfileSolcast, energyConfig, touSettingsData) : null,
+    [comparisonTabViewed, loadProfile, scaledSolarProfileSolcast, energyConfig, touSettingsData]
   );
 
   // ── Day slices (O(1) direct indexing instead of O(8760) filter) ──
