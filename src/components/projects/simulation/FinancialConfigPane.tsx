@@ -47,6 +47,8 @@ export function FinancialConfigPane({
   onBlendedRateTypeChange,
   useHourlyTouRates,
   onUseHourlyTouRatesChange,
+  excludeLoadProfile,
+  onExcludeLoadProfileChange,
   financialResults,
   advancedResults,
   basicFinancialMetrics,
