@@ -497,7 +497,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         peakReduction={engine.annualEnergyResults.peakReduction}
         includesSolar={includesSolar}
         annualPVsystResult={annualPVsystResult}
-        reductionFactor={reductionFactor}
+        reductionFactor={effectiveReductionFactor}
       />
 
       {engine.advancedResults && <AdvancedResultsDisplay results={engine.advancedResults} />}
