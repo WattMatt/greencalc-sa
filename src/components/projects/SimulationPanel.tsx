@@ -244,23 +244,23 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     productionReductionPercent, inverterConfig, project, projectId, includesSolar,
   });
 
-  // ── Compute effective reduction factor (incorporating user overrides) ──
-  const effectiveReductionFactor = useMemo(() => {
-    // Use PVsyst-calculated values as the "unscaled" baseline
+  // ── Compute override scale factor (user yield/daily output overrides) ──
+  const overrideScaleFactor = useMemo(() => {
     const calculatedYield = annualPVsystResult?.specificYield
       ?? (solarCapacity > 0 ? (selectedLocation.ghi * 365 * 0.15) / solarCapacity : 0);
     const calculatedDailyOutput = annualPVsystResult
       ? annualPVsystResult.eGrid / 365
       : (solarCapacity > 0 ? selectedLocation.ghi * solarCapacity * 0.15 : 0);
 
-    let scaleFactor = 1.0;
     if (specificYieldOverride !== null && calculatedYield > 0) {
-      scaleFactor = specificYieldOverride / calculatedYield;
+      return specificYieldOverride / calculatedYield;
     } else if (dailyOutputOverride !== null && calculatedDailyOutput > 0) {
-      scaleFactor = dailyOutputOverride / calculatedDailyOutput;
+      return dailyOutputOverride / calculatedDailyOutput;
     }
-    return reductionFactor * scaleFactor;
-  }, [reductionFactor, specificYieldOverride, dailyOutputOverride, annualPVsystResult, solarCapacity, selectedLocation.ghi]);
+    return 1.0;
+  }, [specificYieldOverride, dailyOutputOverride, annualPVsystResult, solarCapacity, selectedLocation.ghi]);
+
+  const effectiveReductionFactor = reductionFactor * overrideScaleFactor;
 
   // ── Simulation engine hook ──
   const engine = useSimulationEngine({
@@ -273,7 +273,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     solarDataSource, solcastPvProfileData,
     solarProfile, solarProfileSolcast, solarProfileGeneric: solarProfileGenericSimplified,
     tmySolarProfile8760, tmyDcProfile8760, tmyInverterLossMultiplier,
-    annualPVsystResult, reductionFactor: effectiveReductionFactor,
+    annualPVsystResult, reductionFactor: effectiveReductionFactor, overrideScaleFactor,
     selectedDayIndex, showAnnualAverage,
     dayDateInfo: { dayOfWeek: dayDateInfo.dayOfWeek, month: dayDateInfo.month },
     comparisonTabViewed,
