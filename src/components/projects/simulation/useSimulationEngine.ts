@@ -462,30 +462,31 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
 
   const advancedResults = useMemo<AdvancedFinancialResults | null>(() => {
     if (!isAdvancedEnabled || !hasFinancialData) return null;
+    const src = excludeLoadProfile ? toSolarOnly(annualEnergyResults) : annualEnergyResults;
     const dailyAdapter = {
-      totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,
-      totalDailySolar: annualEnergyResults.totalAnnualSolar / 365,
-      totalGridImport: annualEnergyResults.totalAnnualGridImport / 365,
-      totalGridExport: annualEnergyResults.totalAnnualGridExport / 365,
-      totalSolarUsed: annualEnergyResults.totalAnnualSolarUsed / 365,
-      totalBatteryCharge: annualEnergyResults.totalAnnualBatteryCharge / 365,
-      totalBatteryDischarge: annualEnergyResults.totalAnnualBatteryDischarge / 365,
-      peakLoad: annualEnergyResults.peakLoad,
-      peakGridImport: annualEnergyResults.peakGridImport,
-      selfConsumptionRate: annualEnergyResults.selfConsumptionRate,
-      solarCoverageRate: annualEnergyResults.solarCoverageRate,
-      peakReduction: annualEnergyResults.peakReduction,
-      batteryCycles: annualEnergyResults.batteryCycles,
+      totalDailyLoad: src.totalAnnualLoad / 365,
+      totalDailySolar: src.totalAnnualSolar / 365,
+      totalGridImport: src.totalAnnualGridImport / 365,
+      totalGridExport: src.totalAnnualGridExport / 365,
+      totalSolarUsed: src.totalAnnualSolarUsed / 365,
+      totalBatteryCharge: src.totalAnnualBatteryCharge / 365,
+      totalBatteryDischarge: src.totalAnnualBatteryDischarge / 365,
+      peakLoad: src.peakLoad,
+      peakGridImport: src.peakGridImport,
+      selfConsumptionRate: src.selfConsumptionRate,
+      solarCoverageRate: src.solarCoverageRate,
+      peakReduction: src.peakReduction,
+      batteryCycles: src.batteryCycles,
       batteryUtilization: 0,
-      revenueKwh: annualEnergyResults.totalAnnualSolarUsed / 365 + annualEnergyResults.totalAnnualBatteryDischarge / 365 + annualEnergyResults.totalAnnualGridExport / 365,
-      totalBatteryChargeFromGrid: annualEnergyResults.totalAnnualBatteryChargeFromGrid / 365,
+      revenueKwh: src.totalAnnualSolarUsed / 365 + src.totalAnnualBatteryDischarge / 365 + src.totalAnnualGridExport / 365,
+      totalBatteryChargeFromGrid: src.totalAnnualBatteryChargeFromGrid / 365,
       hourlyData: [],
     };
     return runAdvancedSimulation(
       dailyAdapter, tariffData, systemCosts, solarCapacity, batteryCapacity,
-      advancedConfig, tariffRates ?? undefined, touSettingsData, annualEnergyResults
+      advancedConfig, tariffRates ?? undefined, touSettingsData, src
     );
-  }, [isAdvancedEnabled, hasFinancialData, annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData]);
+  }, [isAdvancedEnabled, hasFinancialData, annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData, excludeLoadProfile]);
 
   const unifiedPaybackPeriod = useMemo(() => {
     if (!advancedResults) return null;

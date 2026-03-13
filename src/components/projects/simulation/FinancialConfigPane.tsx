@@ -186,6 +186,17 @@ export function FinancialConfigPane({
         </Card>
       )}
 
+      <div className="flex items-center gap-2 px-1">
+        <Checkbox
+          id="exclude-load-profile"
+          checked={excludeLoadProfile}
+          onCheckedChange={(checked) => onExcludeLoadProfileChange?.(checked === true)}
+        />
+        <Label htmlFor="exclude-load-profile" className="text-xs font-medium cursor-pointer">
+          Exclude load profile from financial analysis (solar-only revenue)
+        </Label>
+      </div>
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
