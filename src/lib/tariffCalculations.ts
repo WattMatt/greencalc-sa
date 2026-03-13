@@ -7,7 +7,7 @@
  * 
  * Two blended rate methodologies:
  * 1. All Hours (24/7/365): 8,760 hours annual
- * 2. Solar Sun Hours (6h window): 2,190 hours annual - Core solar generation window
+ * 2. Solar Sun Hours (12h window): 4,380 hours annual - Full daylight generation window (06:00–18:00)
  */
 
 import { TOUSettings, TOUHourMap, DEFAULT_TOU_SETTINGS } from "@/components/projects/load-profile/types";
@@ -47,8 +47,8 @@ function countTOUHours(hourMap: TOUHourMap): { peak: number; standard: number; o
   return { peak, standard, offPeak };
 }
 
-/** Count TOU hours within a solar window (default 6h: 09:00–15:00) */
-function countSolarTOUHours(hourMap: TOUHourMap, start = 9, end = 15): { peak: number; standard: number; offPeak: number } {
+/** Count TOU hours within a solar window (default 12h: 06:00–18:00) */
+function countSolarTOUHours(hourMap: TOUHourMap, start = 6, end = 18): { peak: number; standard: number; offPeak: number } {
   let peak = 0, standard = 0, offPeak = 0;
   for (let h = start; h < end; h++) {
     const p = hourMap[h] || 'off-peak';
