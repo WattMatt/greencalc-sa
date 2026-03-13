@@ -280,6 +280,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     comparisonTabViewed,
     systemCosts, blendedRateType, useHourlyTouRates,
     advancedConfig, touSettingsData, touPeriodToWindows,
+    excludeLoadFromFinancials,
   });
 
   // Auto-save hook
