@@ -1,29 +1,30 @@
 
 
-# Plan: Storage-first CSV retrieval with re-upload message
+## Delete Today's Tariff Upload
 
-## Changes
+There are **120 tariff plans** and **385 associated tariff rates** uploaded today (2026-03-13) for municipalities including Rand West City, Mogale City, Merafong City, and City of Johannesburg.
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+### Plan
 
-Reorder `loadMeterForWizard` to check storage **first**:
+Create a small edge function (or use a database migration) to delete the data in the correct order:
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+1. **Delete tariff_rates first** (child rows) — 385 rows where `tariff_plan_id` belongs to today's upload
+2. **Delete tariff_plans** — 120 rows where `created_at::date = '2026-03-13'`
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+The SQL to execute:
 
-Same reordering:
+```sql
+DELETE FROM tariff_rates 
+WHERE tariff_plan_id IN (
+  SELECT id FROM tariff_plans WHERE created_at::date = '2026-03-13'
+);
 
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+DELETE FROM tariff_plans 
+WHERE created_at::date = '2026-03-13';
+```
 
-### No other files change
+Also check and clean up any related `extraction_runs` or `eskom_batch_status` records from today if applicable.
 
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
+### File changes
+- No permanent code changes needed — this is a one-time data deletion operation executed via the database tools.
 
