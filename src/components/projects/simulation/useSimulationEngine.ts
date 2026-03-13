@@ -408,7 +408,8 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     selfConsumptionRate: 100,
     solarCoverageRate: 100,
     peakReduction: 0,
-  });
+    };
+  };
 
   // ── Financial results ──
   const financialResults = useMemo(() => {
