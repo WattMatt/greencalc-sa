@@ -244,6 +244,26 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     productionReductionPercent, inverterConfig, project, projectId, includesSolar,
   });
 
+  // ── Compute effective reduction factor (incorporating user overrides) ──
+  const effectiveReductionFactor = useMemo(() => {
+    const baseAnnualSolar = engine?.annualEnergyResults?.totalAnnualSolar;
+    const calculatedYield = annualPVsystResult?.specificYield
+      ?? (baseAnnualSolar && solarCapacity > 0 ? baseAnnualSolar / solarCapacity / reductionFactor : 0);
+
+    let scaleFactor = 1.0;
+    if (specificYieldOverride !== null && calculatedYield > 0) {
+      scaleFactor = specificYieldOverride / calculatedYield;
+    } else if (dailyOutputOverride !== null) {
+      const calculatedDaily = annualPVsystResult
+        ? annualPVsystResult.eGrid / 365
+        : (baseAnnualSolar ? baseAnnualSolar / reductionFactor / 365 : 0);
+      if (calculatedDaily > 0) {
+        scaleFactor = dailyOutputOverride / calculatedDaily;
+      }
+    }
+    return reductionFactor * scaleFactor;
+  }, [reductionFactor, specificYieldOverride, dailyOutputOverride, annualPVsystResult, solarCapacity, engine?.annualEnergyResults?.totalAnnualSolar]);
+
   // ── Simulation engine hook ──
   const engine = useSimulationEngine({
     projectId, project, tenants, shopTypes,
