@@ -78,6 +78,7 @@ export interface SimulationEngineConfig {
   systemCosts: SystemCostsData;
   blendedRateType: BlendedRateType;
   useHourlyTouRates: boolean;
+  excludeLoadProfile: boolean;
   advancedConfig: AdvancedSimulationConfig;
 
   // TOU
