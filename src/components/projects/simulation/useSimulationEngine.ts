@@ -154,7 +154,7 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     tmySolarProfile8760, tmyDcProfile8760, tmyInverterLossMultiplier,
     annualPVsystResult, reductionFactor, overrideScaleFactor,
     selectedDayIndex, showAnnualAverage, dayDateInfo, comparisonTabViewed,
-    systemCosts, blendedRateType, useHourlyTouRates,
+    systemCosts, blendedRateType, useHourlyTouRates, excludeLoadProfile,
     advancedConfig, touSettingsData, touPeriodToWindows,
   } = cfg;
 
