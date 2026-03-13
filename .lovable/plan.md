@@ -1,30 +1,14 @@
 
 
-## Delete Today's Tariff Upload
+## Change Solar Sun Hours Window to 6am–6pm
 
-There are **120 tariff plans** and **385 associated tariff rates** uploaded today (2026-03-13) for municipalities including Rand West City, Mogale City, Merafong City, and City of Johannesburg.
+Update the default solar generation window from the current 6-hour range (09:00–15:00) to a 12-hour range (06:00–18:00). This affects blended rate calculations throughout the app.
 
-### Plan
+### Changes
 
-Create a small edge function (or use a database migration) to delete the data in the correct order:
+**File: `src/lib/tariffCalculations.ts`**
+- Line 51: Change default parameters in `countSolarTOUHours` from `start = 9, end = 15` to `start = 6, end = 18`
+- Update the file header comment from "6h window" / "2,190 hours annual" to "12h window" / "4,380 hours annual"
 
-1. **Delete tariff_rates first** (child rows) — 385 rows where `tariff_plan_id` belongs to today's upload
-2. **Delete tariff_plans** — 120 rows where `created_at::date = '2026-03-13'`
-
-The SQL to execute:
-
-```sql
-DELETE FROM tariff_rates 
-WHERE tariff_plan_id IN (
-  SELECT id FROM tariff_plans WHERE created_at::date = '2026-03-13'
-);
-
-DELETE FROM tariff_plans 
-WHERE created_at::date = '2026-03-13';
-```
-
-Also check and clean up any related `extraction_runs` or `eskom_batch_status` records from today if applicable.
-
-### File changes
-- No permanent code changes needed — this is a one-time data deletion operation executed via the database tools.
+That single default parameter change propagates to all solar blended rate calculations (seasonal, annual, solar hour breakdowns) since every caller uses the defaults.
 
