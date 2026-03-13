@@ -278,7 +278,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     selectedDayIndex, showAnnualAverage,
     dayDateInfo: { dayOfWeek: dayDateInfo.dayOfWeek, month: dayDateInfo.month },
     comparisonTabViewed,
-    systemCosts, blendedRateType, useHourlyTouRates,
+    systemCosts, blendedRateType, useHourlyTouRates, excludeLoadProfile,
     advancedConfig, touSettingsData, touPeriodToWindows,
   });
 
