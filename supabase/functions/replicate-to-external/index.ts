@@ -15,6 +15,8 @@ const TABLES_IN_ORDER = [
   "checklist_templates",
   "sites",
   "municipalities",
+  "tariff_plans",
+  "tariff_rates",
   "projects",
   "project_tenants",
   "scada_imports",
