@@ -480,7 +480,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 basicFinancialMetrics={engine.basicFinancialMetrics} unifiedPaybackPeriod={engine.unifiedPaybackPeriod}
                 threeYearOM={engine.threeYearOM} solarCapacity={solarCapacity}
                 annualEnergyResults={engine.annualEnergyResults} annualPVsystResult={annualPVsystResult}
-                reductionFactor={reductionFactor} inverterConfig={inverterConfig}
+                reductionFactor={effectiveReductionFactor} inverterConfig={inverterConfig}
                 systemCosts={systemCosts} advancedConfig={advancedConfig} projectLocation={project?.location}
               />
             ),
