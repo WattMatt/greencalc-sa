@@ -151,7 +151,7 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     solarDataSource, solcastPvProfileData,
     solarProfile, solarProfileSolcast, solarProfileGeneric,
     tmySolarProfile8760, tmyDcProfile8760, tmyInverterLossMultiplier,
-    annualPVsystResult, reductionFactor,
+    annualPVsystResult, reductionFactor, overrideScaleFactor,
     selectedDayIndex, showAnnualAverage, dayDateInfo, comparisonTabViewed,
     systemCosts, blendedRateType, useHourlyTouRates,
     advancedConfig, touSettingsData, touPeriodToWindows,
