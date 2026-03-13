@@ -303,8 +303,8 @@ export function calculateAllHoursBlendedRate(
 }
 
 /**
- * Calculate blended rate for 6-hour solar window (Solar Sun Hours)
- * Core solar generation window with ZERO Peak TOU exposure
+ * Calculate blended rate for solar window (Solar Sun Hours, 06:00–18:00)
+ * Same weighted-average formula as All Hours — only the hour window differs
  */
 export function calculateSolarHoursBlendedRate(
   rates: TariffRate[], 
@@ -313,13 +313,14 @@ export function calculateSolarHoursBlendedRate(
 ): number {
   const hours = ANNUAL_HOURS_SOLAR[season];
   
-  // Note: Peak = 0 for solar window, so we only need Standard and Off-Peak
+  const peakRate = getCombinedRate(rates, 'Peak', season, tariff);
   const standardRate = getCombinedRate(rates, 'Standard', season, tariff);
   const offPeakRate = getCombinedRate(rates, 'Off-Peak', season, tariff);
   
   if (hours.total === 0) return 0;
   
   return (
+    hours.peak * peakRate +
     hours.standard * standardRate +
     hours.offPeak * offPeakRate
   ) / hours.total;
