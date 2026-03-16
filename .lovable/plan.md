@@ -1,29 +1,33 @@
 
 
-# Plan: Storage-first CSV retrieval with re-upload message
+## Update Annual Production & Daily Output Formulas
 
-## Changes
+### New Calculation Chain
+The user wants to add a DC/AC ratio division step to convert DC-side energy to AC-side output:
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+```text
+1. DC Capacity      = AC System Size × DC/AC Ratio
+2. Specific Yield   = Annual GHI × 0.85 × (1 - reduction%)
+3. Annual Production = (DC Capacity × Specific Yield) ÷ DC/AC Ratio
+4. Daily Output     = Annual Production ÷ 365
+```
 
-Reorder `loadMeterForWizard` to check storage **first**:
+This effectively means Annual Production = AC System Size × Specific Yield (the DC/AC ratio cancels out), but the user wants the explicit chain preserved for transparency.
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+### Changes in `src/components/projects/SimulationPanel.tsx`
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+1. **Line ~251-253**: Update `simplifiedDailyOutput` calculation:
+   ```typescript
+   const simplifiedAnnualProduction = simplifiedDcCapacity * simplifiedSpecificYield / inverterConfig.dcAcRatio;
+   const simplifiedDailyOutput = simplifiedAnnualProduction / 365;
+   ```
 
-Same reordering:
+2. **Line ~506**: Update `annualSolar` passed to KPI cards:
+   ```typescript
+   annualSolar={... simplifiedDcCapacity * simplifiedSpecificYield / inverterConfig.dcAcRatio}
+   ```
 
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
-
-### No other files change
-
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
+3. **Update all tooltip breakdowns** (~lines 522-548) to show the new formula chain:
+   - Solar Generated: `(DC Capacity × Specific Yield ÷ DC/AC Ratio) ÷ 365`
+   - Annual Production: `DC Capacity × Specific Yield ÷ DC/AC Ratio` with DC/AC Ratio as an input
 
