@@ -1,30 +1,29 @@
 
 
-## Bug: Annual Production KPI Still Uses Engine's Bell-Curve Value
+# Plan: Storage-first CSV retrieval with re-upload message
 
-### Problem
+## Changes
 
-The "Annual Production" KPI card displays **5,338,518 kWh** (from the engine's `totalAnnualSolar`) instead of the correct **~3,013,340 kWh** (from the GHI-based `simplifiedDailyOutput`).
+### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
 
-The Daily Output and Specific Yield fields in the Solar Modules pane were fixed to use `simplifiedDailyOutput`, but the KPI card on line 504 still passes `engine.annualEnergyResults.totalAnnualSolar` directly:
+Reorder `loadMeterForWizard` to check storage **first**:
 
-```typescript
-annualSolar={engine.annualEnergyResults.totalAnnualSolar}
-```
+1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
+2. If storage returns CSV, use it
+3. Only if storage returns null, check legacy `rawData[0].csvContent`
+4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-In simplified mode, the engine's solar total comes from the hardcoded bell-curve `pvGeneration` profile (~14,626 kWh/day), not the GHI-based profile (~8,256 kWh/day).
+### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
 
-### Fix
+Same reordering:
 
-**File: `src/components/projects/SimulationPanel.tsx`, line 504**
+1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
+2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
+3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-Replace the `annualSolar` prop to use `simplifiedDailyOutput * 365` in simplified mode:
+### No other files change
 
-```typescript
-annualSolar={annualPVsystResult 
-  ? engine.annualEnergyResults.totalAnnualSolar 
-  : simplifiedDailyOutput * 365}
-```
-
-This ensures the Annual Production KPI card matches the Daily Output and Specific Yield values already corrected in the Solar Modules pane.
+- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
+- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- No database changes
 

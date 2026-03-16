@@ -501,7 +501,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
       <SimulationKPICards
         annualLoad={engine.annualEnergyResults.totalAnnualLoad}
-        annualSolar={engine.annualEnergyResults.totalAnnualSolar}
+        annualSolar={annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDailyOutput * 365}
         annualGridImport={engine.annualEnergyResults.totalAnnualGridImport}
         selfConsumptionRate={engine.annualEnergyResults.selfConsumptionRate}
         peakReduction={engine.annualEnergyResults.peakReduction}
