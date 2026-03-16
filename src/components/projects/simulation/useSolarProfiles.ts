@@ -13,6 +13,7 @@
 import { useMemo, useEffect } from "react";
 import { useSolcastForecast } from "@/hooks/useSolcastForecast";
 import { usePVGISProfile } from "@/hooks/usePVGISProfile";
+import { useGlobalSolarAtlas } from "@/hooks/useGlobalSolarAtlas";
 import { convertTMYToSolarGeneration } from "@/utils/calculators/tmySolarConversion";
 import { useSolcastPVProfile } from "../load-profile/hooks/useSolcastPVProfile";
 import {
