@@ -236,7 +236,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const {
     solcastLoading, pvgisLoadingTMY, pvgisLoadingMonthly,
     solarProfile, solarProfileSolcast, solarProfileGenericSimplified,
-    solcastPvProfileData, annualPVsystResult,
+    solcastPvProfileData, annualPVsystResult, annualGHI,
     tmyDcProfile8760, tmySolarProfile8760, tmyInverterLossMultiplier,
     selectedLocation, isLoadingData, hasRealData, activeDataSourceLabel,
     reductionFactor,
@@ -245,20 +245,21 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     productionReductionPercent, inverterConfig, project, projectId, includesSolar,
   });
 
-  // ── GHI-based simplified daily output (sum of 24h solarProfile) ──
-  const simplifiedDailyOutput = useMemo(() =>
-    solarProfile.reduce((sum, v) => sum + v, 0),
-    [solarProfile]
-  );
+  // ── Simplified DC capacity & yield (direct from GHI) ──
+  const simplifiedDcCapacity = solarCapacity * inverterConfig.dcAcRatio;
+  const simplifiedSpecificYield = annualGHI * 0.85 * (1 - productionReductionPercent / 100);
+  const simplifiedDailyOutput = simplifiedDcCapacity > 0
+    ? simplifiedDcCapacity * simplifiedSpecificYield / 365
+    : 0;
 
   // ── Compute override scale factor (user yield/daily output overrides) ──
   const overrideScaleFactor = useMemo(() => {
-    const dcCapacity = moduleMetrics.actualDcCapacityKwp;
+    const dcCapacity = simplifiedDcCapacity;
     const dailyOut = annualPVsystResult
       ? annualPVsystResult.eGrid / 365
       : simplifiedDailyOutput;
     const calcYield = annualPVsystResult?.specificYield
-      ?? (dcCapacity > 0 ? (dailyOut * 365) / dcCapacity : 0);
+      ?? simplifiedSpecificYield;
 
     if (specificYieldOverride !== null && calcYield > 0) {
       return specificYieldOverride / calcYield;
@@ -267,7 +268,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     }
     return 1.0;
   }, [specificYieldOverride, dailyOutputOverride, annualPVsystResult,
-      moduleMetrics.actualDcCapacityKwp, simplifiedDailyOutput]);
+      simplifiedDcCapacity, simplifiedSpecificYield, simplifiedDailyOutput]);
 
   const effectiveReductionFactor = reductionFactor * overrideScaleFactor;
 
@@ -467,7 +468,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 specificYieldOverride={specificYieldOverride} onSpecificYieldOverrideChange={setSpecificYieldOverride}
                 productionReductionPercent={productionReductionPercent} onProductionReductionPercentChange={setProductionReductionPercent}
                 calculatedDailyOutput={annualPVsystResult ? Math.round(annualPVsystResult.eGrid / 365) : Math.round(simplifiedDailyOutput)}
-                calculatedSpecificYield={annualPVsystResult ? Math.round(annualPVsystResult.specificYield) : Math.round(moduleMetrics.actualDcCapacityKwp > 0 ? (simplifiedDailyOutput * 365) / moduleMetrics.actualDcCapacityKwp : 0)}
+                calculatedSpecificYield={annualPVsystResult ? Math.round(annualPVsystResult.specificYield) : Math.round(simplifiedSpecificYield)}
+                dcCapacity={simplifiedDcCapacity}
                 solarCapacity={solarCapacity}
               />
             ),
@@ -501,7 +503,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
       <SimulationKPICards
         annualLoad={engine.annualEnergyResults.totalAnnualLoad}
-        annualSolar={annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDailyOutput * 365}
+        annualSolar={annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDcCapacity * simplifiedSpecificYield}
         annualGridImport={engine.annualEnergyResults.totalAnnualGridImport}
         selfConsumptionRate={engine.annualEnergyResults.selfConsumptionRate}
         peakReduction={engine.annualEnergyResults.peakReduction}
@@ -517,10 +519,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             ],
           },
           solarGenerated: {
-            formula: 'Annual Solar ÷ 365',
+            formula: 'DC Capacity × Specific Yield ÷ 365',
             inputs: [
-              { label: 'Annual Solar', value: `${Math.round(annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDailyOutput * 365).toLocaleString()} kWh` },
-              { label: 'Result', value: `${Math.round((annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDailyOutput * 365) / 365).toLocaleString()} kWh/day` },
+              { label: 'DC Capacity', value: `${simplifiedDcCapacity.toFixed(1)} kWp` },
+              { label: 'Specific Yield', value: `${Math.round(simplifiedSpecificYield).toLocaleString()} kWh/kWp/yr` },
+              { label: 'Annual Solar', value: `${Math.round(annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDcCapacity * simplifiedSpecificYield).toLocaleString()} kWh` },
+              { label: 'Result', value: `${Math.round((annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDcCapacity * simplifiedSpecificYield) / 365).toLocaleString()} kWh/day` },
             ],
           },
           annualProduction: annualPVsystResult
@@ -533,10 +537,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 ],
               }
             : {
-                formula: 'Daily Output × 365',
+                formula: 'DC Capacity × Specific Yield',
                 inputs: [
-                  { label: 'Daily Output', value: `${Math.round(simplifiedDailyOutput).toLocaleString()} kWh` },
-                  { label: 'Result', value: `${Math.round(simplifiedDailyOutput * 365).toLocaleString()} kWh` },
+                  { label: 'DC Capacity', value: `${simplifiedDcCapacity.toFixed(1)} kWp` },
+                  { label: 'Specific Yield', value: `${Math.round(simplifiedSpecificYield).toLocaleString()} kWh/kWp/yr` },
+                  { label: 'Annual GHI', value: `${Math.round(annualGHI).toLocaleString()} kWh/m²/yr` },
+                  { label: 'System Efficiency', value: '85%' },
+                  { label: 'Production Reduction', value: `${productionReductionPercent}%` },
+                  { label: 'Result', value: `${Math.round(simplifiedDcCapacity * simplifiedSpecificYield).toLocaleString()} kWh` },
                 ],
               },
           gridImport: {

@@ -21,6 +21,7 @@ interface SolarModulesPaneProps {
   calculatedDailyOutput: number;
   calculatedSpecificYield: number;
   solarCapacity: number;
+  dcCapacity?: number;
 }
 
 export function SolarModulesPane({
@@ -30,6 +31,7 @@ export function SolarModulesPane({
   specificYieldOverride, onSpecificYieldOverrideChange,
   productionReductionPercent, onProductionReductionPercentChange,
   calculatedDailyOutput, calculatedSpecificYield, solarCapacity,
+  dcCapacity,
 }: SolarModulesPaneProps) {
   return (
     <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
@@ -52,6 +54,12 @@ export function SolarModulesPane({
             onSolarCapacityChange={onSolarCapacityChange}
           />
         </div>
+        {dcCapacity !== undefined && dcCapacity > 0 && (
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+            <Label className="text-muted-foreground text-[10px]">DC capacity</Label>
+            <span className="font-mono text-xs text-foreground">{dcCapacity.toFixed(1)} kWp</span>
+          </div>
+        )}
         <div className="pt-2 border-t space-y-2 text-[10px]">
           <div className="flex items-center justify-between gap-2">
             <Label className="text-muted-foreground text-[10px]">Expected daily output</Label>
