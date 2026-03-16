@@ -6,17 +6,31 @@
  */
 
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { MetricTooltip } from "./MetricTooltip";
 import type { AnnualPVsystResult } from "@/lib/pvsystLossChain";
 
+interface MetricBreakdown {
+  formula: string;
+  inputs: { label: string; value: string }[];
+}
+
 interface SimulationKPICardsProps {
-  annualLoad: number;          // kWh/year
-  annualSolar: number;         // kWh/year
-  annualGridImport: number;    // kWh/year
-  selfConsumptionRate: number; // %
-  peakReduction: number;       // %
+  annualLoad: number;
+  annualSolar: number;
+  annualGridImport: number;
+  selfConsumptionRate: number;
+  peakReduction: number;
   includesSolar: boolean;
   annualPVsystResult: AnnualPVsystResult | null;
-  reductionFactor: number;     // 1 - (productionReductionPercent / 100)
+  reductionFactor: number;
+  breakdowns?: {
+    dailyLoad?: MetricBreakdown;
+    solarGenerated?: MetricBreakdown;
+    annualProduction?: MetricBreakdown;
+    gridImport?: MetricBreakdown;
+    selfConsumption?: MetricBreakdown;
+    peakReduction?: MetricBreakdown;
+  };
 }
 
 export function SimulationKPICards({
