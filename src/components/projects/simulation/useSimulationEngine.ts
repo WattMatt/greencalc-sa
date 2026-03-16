@@ -412,11 +412,37 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     };
   };
 
+  // ── Solar alignment factor ──
+  // In simplified mode (no PVsyst), the algebraic chain (GHI × 0.85 × DC ÷ DC:AC)
+  // may differ from the sum of hourly profile values. Compute a ratio to align
+  // the engine's totalAnnualSolar with the simplified effectiveAnnualProduction.
+  const solarAlignmentFactor = useMemo(() => {
+    if (annualPVsystResult) return 1; // PVsyst mode — engine results are authoritative
+    const engineSolar = annualEnergyResults.totalAnnualSolar;
+    if (engineSolar <= 0 || effectiveAnnualProduction <= 0) return 1;
+    return effectiveAnnualProduction / engineSolar;
+  }, [annualPVsystResult, annualEnergyResults.totalAnnualSolar, effectiveAnnualProduction]);
+
+  // ── Aligned annual results for financials ──
+  // Scales all solar-derived values so financials match the KPI "Annual Production"
+  const alignedAnnualResults = useMemo(() => {
+    if (solarAlignmentFactor === 1) return annualEnergyResults;
+    const f = solarAlignmentFactor;
+    return {
+      ...annualEnergyResults,
+      totalAnnualSolar: annualEnergyResults.totalAnnualSolar * f,
+      totalAnnualSolarUsed: annualEnergyResults.totalAnnualSolarUsed * f,
+      totalAnnualSolarDirectToLoad: (annualEnergyResults.totalAnnualSolarDirectToLoad ?? 0) * f,
+      totalAnnualGridExport: annualEnergyResults.totalAnnualGridExport * f,
+      totalAnnualGridImport: annualEnergyResults.totalAnnualGridImport + annualEnergyResults.totalAnnualSolarUsed * (1 - f),
+    };
+  }, [annualEnergyResults, solarAlignmentFactor]);
+
   // ── Financial results ──
   const financialResults = useMemo(() => {
-    const results = excludeLoadProfile ? toSolarOnly(annualEnergyResults) : annualEnergyResults;
+    const results = excludeLoadProfile ? toSolarOnly(alignedAnnualResults) : alignedAnnualResults;
     return calculateFinancialsFromAnnual(results, tariffData, systemCosts, solarCapacity, batteryCapacity);
-  }, [annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, excludeLoadProfile]);
+  }, [alignedAnnualResults, tariffData, systemCosts, solarCapacity, batteryCapacity, excludeLoadProfile]);
 
   const financialResultsGeneric = useMemo(() => {
     const results = excludeLoadProfile ? toSolarOnly(annualEnergyResultsGeneric) : annualEnergyResultsGeneric;
@@ -447,13 +473,13 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     calculateFinancialMetrics({
       systemCost: financialResults.systemCost,
       annualSavings: financialResults.annualSavings,
-      annualGeneration: annualEnergyResults.totalAnnualSolar,
+      annualGeneration: alignedAnnualResults.totalAnnualSolar,
       projectLifeYears: systemCosts.projectDurationYears ?? 20,
       discountRate: (systemCosts.lcoeDiscountRate ?? 9) / 100,
       financeRate: (systemCosts.mirrFinanceRate ?? 9) / 100,
       reinvestmentRate: (systemCosts.mirrReinvestmentRate ?? 10) / 100,
     }),
-    [financialResults, annualEnergyResults, systemCosts]
+    [financialResults, alignedAnnualResults, systemCosts]
   );
 
   // ── Advanced simulation ──
@@ -466,7 +492,7 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
 
   const advancedResults = useMemo<AdvancedFinancialResults | null>(() => {
     if (!isAdvancedEnabled || !hasFinancialData) return null;
-    const src = excludeLoadProfile ? toSolarOnly(annualEnergyResults) : annualEnergyResults;
+    const src = excludeLoadProfile ? toSolarOnly(alignedAnnualResults) : alignedAnnualResults;
     const dailyAdapter = {
       totalDailyLoad: src.totalAnnualLoad / 365,
       totalDailySolar: src.totalAnnualSolar / 365,
@@ -490,7 +516,7 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
       dailyAdapter, tariffData, systemCosts, solarCapacity, batteryCapacity,
       advancedConfig, tariffRates ?? undefined, touSettingsData, src
     );
-  }, [isAdvancedEnabled, hasFinancialData, annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData, excludeLoadProfile]);
+  }, [isAdvancedEnabled, hasFinancialData, alignedAnnualResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData, excludeLoadProfile]);
 
   const unifiedPaybackPeriod = useMemo(() => {
     if (!advancedResults) return null;
