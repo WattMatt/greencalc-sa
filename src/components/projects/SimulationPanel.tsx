@@ -508,6 +508,61 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         includesSolar={includesSolar}
         annualPVsystResult={annualPVsystResult}
         reductionFactor={effectiveReductionFactor}
+        breakdowns={{
+          dailyLoad: {
+            formula: 'Annual Load ÷ 365',
+            inputs: [
+              { label: 'Annual Load', value: `${Math.round(engine.annualEnergyResults.totalAnnualLoad).toLocaleString()} kWh` },
+              { label: 'Result', value: `${Math.round(engine.annualEnergyResults.totalAnnualLoad / 365).toLocaleString()} kWh/day` },
+            ],
+          },
+          solarGenerated: {
+            formula: 'Annual Solar ÷ 365',
+            inputs: [
+              { label: 'Annual Solar', value: `${Math.round(annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDailyOutput * 365).toLocaleString()} kWh` },
+              { label: 'Result', value: `${Math.round((annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDailyOutput * 365) / 365).toLocaleString()} kWh/day` },
+            ],
+          },
+          annualProduction: annualPVsystResult
+            ? {
+                formula: 'eGrid × Reduction Factor',
+                inputs: [
+                  { label: 'eGrid (PVsyst)', value: `${Math.round(annualPVsystResult.eGrid).toLocaleString()} kWh` },
+                  { label: 'Reduction Factor', value: `${(effectiveReductionFactor * 100).toFixed(1)}%` },
+                  { label: 'Result', value: `${Math.round(annualPVsystResult.eGrid * effectiveReductionFactor).toLocaleString()} kWh` },
+                ],
+              }
+            : {
+                formula: 'Daily Output × 365',
+                inputs: [
+                  { label: 'Daily Output', value: `${Math.round(simplifiedDailyOutput).toLocaleString()} kWh` },
+                  { label: 'Result', value: `${Math.round(simplifiedDailyOutput * 365).toLocaleString()} kWh` },
+                ],
+              },
+          gridImport: {
+            formula: 'Annual Grid Import ÷ 365',
+            inputs: [
+              { label: 'Annual Grid Import', value: `${Math.round(engine.annualEnergyResults.totalAnnualGridImport).toLocaleString()} kWh` },
+              { label: 'Result', value: `${Math.round(engine.annualEnergyResults.totalAnnualGridImport / 365).toLocaleString()} kWh/day` },
+            ],
+          },
+          selfConsumption: {
+            formula: '(Solar Used On-Site ÷ Total Solar) × 100',
+            inputs: [
+              { label: 'Solar Used On-Site', value: `${Math.round(engine.annualEnergyResults.totalAnnualSolarUsed).toLocaleString()} kWh` },
+              { label: 'Total Solar', value: `${Math.round(engine.annualEnergyResults.totalAnnualSolar).toLocaleString()} kWh` },
+              { label: 'Result', value: `${Math.round(engine.annualEnergyResults.selfConsumptionRate)}%` },
+            ],
+          },
+          peakReduction: {
+            formula: '(Peak Load − Peak Grid Import) ÷ Peak Load × 100',
+            inputs: [
+              { label: 'Peak Load', value: `${engine.annualEnergyResults.peakLoad.toFixed(1)} kW` },
+              { label: 'Peak Grid Import', value: `${engine.annualEnergyResults.peakGridImport.toFixed(1)} kW` },
+              { label: 'Result', value: `${Math.round(engine.annualEnergyResults.peakReduction)}%` },
+            ],
+          },
+        }}
       />
 
       {engine.advancedResults && <AdvancedResultsDisplay results={engine.advancedResults} />}
