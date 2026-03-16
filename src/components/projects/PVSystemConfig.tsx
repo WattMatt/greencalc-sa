@@ -102,6 +102,7 @@ export function getDefaultPVConfig(): PVSystemConfigData {
     groundCoverageRatio: 0.4,
     bifacial: false,
     albedo: 0.2,
+    useDetailedLosses: false,
   };
 }
 
