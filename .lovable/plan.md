@@ -1,29 +1,32 @@
 
+Problem diagnosed
 
-# Plan: Storage-first CSV retrieval with re-upload message
+- The “1 kWh/kWp/yr” value is caused by a unit mismatch in the simplified PVGIS monthly path.
+- `pvgis-monthly` returns `typicalDay.hourlyGhi` in kWh/m²/hour (example from Kingswalk cache: hour 12 ≈ 0.63), but `generateSolarProfile(...)` expects W/m² and divides by 1000 internally.
+- Result: simplified daily energy is reduced by ~1000×, so specific yield collapses to ~1 instead of ~1300–1400.
 
-## Changes
+Implementation plan
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+1) Normalize PVGIS monthly hourly irradiance before profile generation  
+- File: `src/components/projects/simulation/useSolarProfiles.ts`
+- In `pvgisHourlyProfile` mapping, add source-aware unit normalization:
+  - For `solarDataSource === "pvgis_monthly"`, detect low-range hourly values (kWh-scale) and convert to W/m² (`×1000`) for `ghi`, `dni`, `dhi`.
+  - Keep `pvgis_tmy` untouched (already W/m²).
 
-Reorder `loadMeterForWizard` to check storage **first**:
+2) Keep logic backward-compatible with existing cached data  
+- Use a simple heuristic (e.g., monthly peak irradiance threshold) so old cached monthly records (kWh-based) are fixed immediately without forcing a refresh.
+- If future monthly payloads are already W/m², they won’t be multiplied again.
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+3) Preserve current display calculations  
+- Keep current `simplifiedDailyOutput` and `calculatedSpecificYield` formulas in `SimulationPanel.tsx` (they are now structurally correct and DC-based).
+- No denominator changes needed beyond what is already done.
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+Validation plan
 
-Same reordering:
-
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
-
-### No other files change
-
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
-
+- Kingswalk, `pvgis_monthly` + simplified mode:
+  - Expected daily output returns to realistic MWh/day range (not single digits).
+  - Specific yield returns to expected ~1.3–1.4 MWh/kWp/yr band.
+- Cross-check no regressions:
+  - `pvgis_tmy` simplified values remain consistent.
+  - PVsyst mode values remain unchanged.
+  - Override fields still scale from corrected baseline.
