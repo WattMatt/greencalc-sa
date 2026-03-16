@@ -273,6 +273,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   const effectiveReductionFactor = reductionFactor * overrideScaleFactor;
 
+  // ── Effective values incorporating user overrides ──
+  const effectiveSpecificYield = simplifiedSpecificYield * overrideScaleFactor;
+  const effectiveAnnualProduction = simplifiedAnnualProduction * overrideScaleFactor;
+  const effectiveDailyOutput = effectiveAnnualProduction / 365;
+
   // ── Simulation engine hook ──
   const engine = useSimulationEngine({
     projectId, project, tenants, shopTypes,
