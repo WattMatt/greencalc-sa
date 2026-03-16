@@ -203,9 +203,20 @@ export function useSolarProfiles(config: UseSolarProfilesConfig) {
     return baseProfile.map(v => v * reductionFactor);
   }, [pvConfig, moduleMetrics.actualDcCapacityKwp, reductionFactor]);
 
+  // ── GSA simplified solar profile ──
+  const solarProfileGSASimplified = useMemo(() => {
+    if (!gsaHourlyProfile) return null;
+    const baseProfile = generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, gsaHourlyProfile);
+    return baseProfile.map(v => v * reductionFactor);
+  }, [pvConfig, moduleMetrics.actualDcCapacityKwp, gsaHourlyProfile, reductionFactor]);
+
   // ── Annual GHI ──
   const annualGHI = useMemo(() => {
     const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+    if (solarDataSource === "gsa" && gsaData?.annual?.data?.GHI) {
+      return gsaData.annual.data.GHI; // Already in kWh/m²/yr
+    }
 
     if (solarDataSource === "pvgis_monthly" && pvgisMonthlyData?.monthly) {
       return pvgisMonthlyData.monthly.reduce((sum, m) => {
@@ -224,7 +235,7 @@ export function useSolarProfiles(config: UseSolarProfilesConfig) {
     }
 
     return selectedLocation.ghi * 365;
-  }, [solarDataSource, pvgisMonthlyData, pvgisTmyData, pvgisHourlyProfile, selectedLocation.ghi]);
+  }, [solarDataSource, gsaData, pvgisMonthlyData, pvgisTmyData, pvgisHourlyProfile, selectedLocation.ghi]);
 
   // ── PVsyst ANNUAL result ──
   const annualPVsystResult = useMemo<AnnualPVsystResult | null>(() => {
