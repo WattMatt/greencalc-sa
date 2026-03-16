@@ -528,10 +528,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             formula: '(DC Capacity × Specific Yield ÷ DC/AC Ratio) ÷ 365',
             inputs: [
               { label: 'DC Capacity', value: `${simplifiedDcCapacity.toFixed(1)} kWp` },
-              { label: 'Specific Yield', value: `${Math.round(simplifiedSpecificYield).toLocaleString()} kWh/kWp/yr` },
+              { label: 'Specific Yield', value: `${Math.round(effectiveSpecificYield).toLocaleString()} kWh/kWp/yr` },
               { label: 'DC/AC Ratio', value: `${inverterConfig.dcAcRatio}` },
-              { label: 'Annual Production', value: `${Math.round(annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedAnnualProduction).toLocaleString()} kWh` },
-              { label: 'Result', value: `${Math.round((annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedAnnualProduction) / 365).toLocaleString()} kWh/day` },
+              { label: 'Annual Production', value: `${Math.round(annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : effectiveAnnualProduction).toLocaleString()} kWh` },
+              { label: 'Result', value: `${Math.round((annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : effectiveAnnualProduction) / 365).toLocaleString()} kWh/day` },
+              ...(overrideScaleFactor !== 1 ? [{ label: 'Override Scale', value: `${(overrideScaleFactor * 100).toFixed(1)}%` }] : []),
             ],
           },
           annualProduction: annualPVsystResult
@@ -547,12 +548,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 formula: 'DC Capacity × Specific Yield ÷ DC/AC Ratio',
                 inputs: [
                   { label: 'DC Capacity', value: `${simplifiedDcCapacity.toFixed(1)} kWp` },
-                  { label: 'Specific Yield', value: `${Math.round(simplifiedSpecificYield).toLocaleString()} kWh/kWp/yr` },
+                  { label: 'Specific Yield', value: `${Math.round(effectiveSpecificYield).toLocaleString()} kWh/kWp/yr` },
                   { label: 'DC/AC Ratio', value: `${inverterConfig.dcAcRatio}` },
                   { label: 'Annual GHI', value: `${Math.round(annualGHI).toLocaleString()} kWh/m²/yr` },
                   { label: 'System Efficiency', value: '85%' },
                   { label: 'Production Reduction', value: `${productionReductionPercent}%` },
-                  { label: 'Result', value: `${Math.round(simplifiedAnnualProduction).toLocaleString()} kWh` },
+                  ...(overrideScaleFactor !== 1 ? [{ label: 'Override Scale', value: `${(overrideScaleFactor * 100).toFixed(1)}%` }] : []),
+                  { label: 'Result', value: `${Math.round(effectiveAnnualProduction).toLocaleString()} kWh` },
                 ],
               },
           gridImport: {
