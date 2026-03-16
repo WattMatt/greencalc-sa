@@ -249,10 +249,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const overrideScaleFactor = useMemo(() => {
     const dcCapacity = moduleMetrics.actualDcCapacityKwp;
     const calculatedYield = annualPVsystResult?.specificYield
-      ?? (dcCapacity > 0 ? engine.annualEnergyResults.totalAnnualSolar / dcCapacity : 0);
+      ?? (dcCapacity > 0 ? (selectedLocation.ghi * 365 * 0.15) : 0);
     const calculatedDailyOutput = annualPVsystResult
       ? annualPVsystResult.eGrid / 365
-      : (dcCapacity > 0 ? engine.annualEnergyResults.totalAnnualSolar / 365 : 0);
+      : (dcCapacity > 0 ? selectedLocation.ghi * dcCapacity * 0.15 : 0);
 
     if (specificYieldOverride !== null && calculatedYield > 0) {
       return specificYieldOverride / calculatedYield;
@@ -260,7 +260,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       return dailyOutputOverride / calculatedDailyOutput;
     }
     return 1.0;
-  }, [specificYieldOverride, dailyOutputOverride, annualPVsystResult, solarCapacity, selectedLocation.ghi]);
+  }, [specificYieldOverride, dailyOutputOverride, annualPVsystResult, moduleMetrics.actualDcCapacityKwp, selectedLocation.ghi]);
 
   const effectiveReductionFactor = reductionFactor * overrideScaleFactor;
 
