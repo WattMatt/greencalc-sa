@@ -325,14 +325,27 @@ export function useSolarProfiles(config: UseSolarProfilesConfig) {
   // ── Loading / status flags ──
   const isLoadingData = solarDataSource === "solcast"
     ? solcastLoading
-    : solarDataSource === "pvgis_tmy"
-      ? pvgisLoadingTMY
-      : pvgisLoadingMonthly;
+    : solarDataSource === "gsa"
+      ? gsaLoading
+      : solarDataSource === "pvgis_tmy"
+        ? pvgisLoadingTMY
+        : pvgisLoadingMonthly;
 
-  const hasRealData = solarDataSource === "solcast" ? !!solcastHourlyProfile : !!pvgisHourlyProfile;
+  const hasRealData = solarDataSource === "solcast"
+    ? !!solcastHourlyProfile
+    : solarDataSource === "gsa"
+      ? !!gsaData
+      : !!pvgisHourlyProfile;
+
+  // ── GSA specific yield (kWh/kWp/yr) ──
+  const gsaSpecificYield = gsaData?.annual?.data?.PVOUT_csi ?? null;
 
   // ── Active data source label ──
   const activeDataSourceLabel = useMemo(() => {
+    if (solarDataSource === "gsa" && gsaData?.annual?.data) {
+      const dailyGhi = gsaData.annual.data.GHI / 365;
+      return `GSA: ${dailyGhi.toFixed(1)} kWh/m²/day • ${gsaData.annual.data.PVOUT_csi.toFixed(0)} kWh/kWp/yr`;
+    }
     if (solarDataSource === "solcast" && solcastData?.summary?.average_daily_ghi_kwh_m2) {
       return `Solcast: ${solcastData.summary.average_daily_ghi_kwh_m2.toFixed(1)} kWh/m²/day`;
     }
@@ -343,7 +356,7 @@ export function useSolarProfiles(config: UseSolarProfilesConfig) {
       return `PVGIS TMY: ${pvgisTmyData.summary.peakSunHours.toFixed(1)} kWh/m²/day`;
     }
     return `${selectedLocation?.ghi || 5.0} kWh/m²/day`;
-  }, [solarDataSource, solcastData, pvgisMonthlyData, pvgisTmyData, selectedLocation?.ghi]);
+  }, [solarDataSource, gsaData, solcastData, pvgisMonthlyData, pvgisTmyData, selectedLocation?.ghi]);
 
   return {
     // Data sources
