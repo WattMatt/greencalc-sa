@@ -24,7 +24,7 @@ interface SimulationToolbarProps {
 
 export function SimulationToolbar({
   selectedLocationName, activeDataSourceLabel, hasRealData, locationGhi,
-  solarDataSource, onSolarDataSourceChange, solcastLoading, pvgisLoadingMonthly, pvgisLoadingTMY,
+  solarDataSource, onSolarDataSourceChange, solcastLoading, pvgisLoadingMonthly, pvgisLoadingTMY, gsaLoading,
   lossCalculationMode, onLossCalculationModeChange,
   isAutoSaving, lastSavedAt,
 }: SimulationToolbarProps) {
