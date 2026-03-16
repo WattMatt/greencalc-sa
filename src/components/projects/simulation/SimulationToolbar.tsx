@@ -12,6 +12,7 @@ interface SimulationToolbarProps {
   locationGhi: number;
   solarDataSource: SolarDataSource;
   onSolarDataSourceChange: (v: SolarDataSource) => void;
+  gsaLoading: boolean;
   solcastLoading: boolean;
   pvgisLoadingMonthly: boolean;
   pvgisLoadingTMY: boolean;
