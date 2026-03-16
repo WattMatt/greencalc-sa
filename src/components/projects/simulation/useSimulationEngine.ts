@@ -67,7 +67,6 @@ export interface SimulationEngineConfig {
   annualPVsystResult: any;
   reductionFactor: number;
   overrideScaleFactor: number;
-  effectiveAnnualProduction: number; // Simplified chain target (used to align engine totals)
 
   // Navigation
   selectedDayIndex: number;
@@ -153,7 +152,7 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     solarDataSource, solcastPvProfileData,
     solarProfile, solarProfileSolcast, solarProfileGeneric,
     tmySolarProfile8760, tmyDcProfile8760, tmyInverterLossMultiplier,
-    annualPVsystResult, reductionFactor, overrideScaleFactor, effectiveAnnualProduction,
+    annualPVsystResult, reductionFactor, overrideScaleFactor,
     selectedDayIndex, showAnnualAverage, dayDateInfo, comparisonTabViewed,
     systemCosts, blendedRateType, useHourlyTouRates, excludeLoadProfile,
     advancedConfig, touSettingsData, touPeriodToWindows,
@@ -412,37 +411,11 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     };
   };
 
-  // ── Solar alignment factor ──
-  // In simplified mode (no PVsyst), the algebraic chain (GHI × 0.85 × DC ÷ DC:AC)
-  // may differ from the sum of hourly profile values. Compute a ratio to align
-  // the engine's totalAnnualSolar with the simplified effectiveAnnualProduction.
-  const solarAlignmentFactor = useMemo(() => {
-    if (annualPVsystResult) return 1; // PVsyst mode — engine results are authoritative
-    const engineSolar = annualEnergyResults.totalAnnualSolar;
-    if (engineSolar <= 0 || effectiveAnnualProduction <= 0) return 1;
-    return effectiveAnnualProduction / engineSolar;
-  }, [annualPVsystResult, annualEnergyResults.totalAnnualSolar, effectiveAnnualProduction]);
-
-  // ── Aligned annual results for financials ──
-  // Scales all solar-derived values so financials match the KPI "Annual Production"
-  const alignedAnnualResults = useMemo(() => {
-    if (solarAlignmentFactor === 1) return annualEnergyResults;
-    const f = solarAlignmentFactor;
-    return {
-      ...annualEnergyResults,
-      totalAnnualSolar: annualEnergyResults.totalAnnualSolar * f,
-      totalAnnualSolarUsed: annualEnergyResults.totalAnnualSolarUsed * f,
-      totalAnnualSolarDirectToLoad: (annualEnergyResults.totalAnnualSolarDirectToLoad ?? 0) * f,
-      totalAnnualGridExport: annualEnergyResults.totalAnnualGridExport * f,
-      totalAnnualGridImport: annualEnergyResults.totalAnnualGridImport + annualEnergyResults.totalAnnualSolarUsed * (1 - f),
-    };
-  }, [annualEnergyResults, solarAlignmentFactor]);
-
   // ── Financial results ──
   const financialResults = useMemo(() => {
-    const results = excludeLoadProfile ? toSolarOnly(alignedAnnualResults) : alignedAnnualResults;
+    const results = excludeLoadProfile ? toSolarOnly(annualEnergyResults) : annualEnergyResults;
     return calculateFinancialsFromAnnual(results, tariffData, systemCosts, solarCapacity, batteryCapacity);
-  }, [alignedAnnualResults, tariffData, systemCosts, solarCapacity, batteryCapacity, excludeLoadProfile]);
+  }, [annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, excludeLoadProfile]);
 
   const financialResultsGeneric = useMemo(() => {
     const results = excludeLoadProfile ? toSolarOnly(annualEnergyResultsGeneric) : annualEnergyResultsGeneric;
@@ -473,13 +446,13 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     calculateFinancialMetrics({
       systemCost: financialResults.systemCost,
       annualSavings: financialResults.annualSavings,
-      annualGeneration: alignedAnnualResults.totalAnnualSolar,
+      annualGeneration: annualEnergyResults.totalAnnualSolar,
       projectLifeYears: systemCosts.projectDurationYears ?? 20,
       discountRate: (systemCosts.lcoeDiscountRate ?? 9) / 100,
       financeRate: (systemCosts.mirrFinanceRate ?? 9) / 100,
       reinvestmentRate: (systemCosts.mirrReinvestmentRate ?? 10) / 100,
     }),
-    [financialResults, alignedAnnualResults, systemCosts]
+    [financialResults, annualEnergyResults, systemCosts]
   );
 
   // ── Advanced simulation ──
@@ -492,7 +465,7 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
 
   const advancedResults = useMemo<AdvancedFinancialResults | null>(() => {
     if (!isAdvancedEnabled || !hasFinancialData) return null;
-    const src = excludeLoadProfile ? toSolarOnly(alignedAnnualResults) : alignedAnnualResults;
+    const src = excludeLoadProfile ? toSolarOnly(annualEnergyResults) : annualEnergyResults;
     const dailyAdapter = {
       totalDailyLoad: src.totalAnnualLoad / 365,
       totalDailySolar: src.totalAnnualSolar / 365,
@@ -516,7 +489,7 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
       dailyAdapter, tariffData, systemCosts, solarCapacity, batteryCapacity,
       advancedConfig, tariffRates ?? undefined, touSettingsData, src
     );
-  }, [isAdvancedEnabled, hasFinancialData, alignedAnnualResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData, excludeLoadProfile]);
+  }, [isAdvancedEnabled, hasFinancialData, annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData, excludeLoadProfile]);
 
   const unifiedPaybackPeriod = useMemo(() => {
     if (!advancedResults) return null;

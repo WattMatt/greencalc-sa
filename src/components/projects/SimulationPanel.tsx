@@ -289,7 +289,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     solarDataSource, solcastPvProfileData,
     solarProfile, solarProfileSolcast, solarProfileGeneric: solarProfileGenericSimplified,
     tmySolarProfile8760, tmyDcProfile8760, tmyInverterLossMultiplier,
-    annualPVsystResult, reductionFactor: effectiveReductionFactor, overrideScaleFactor, effectiveAnnualProduction,
+    annualPVsystResult, reductionFactor: effectiveReductionFactor, overrideScaleFactor,
     selectedDayIndex, showAnnualAverage,
     dayDateInfo: { dayOfWeek: dayDateInfo.dayOfWeek, month: dayDateInfo.month },
     comparisonTabViewed,
