@@ -97,7 +97,7 @@ export function SimulationToolbar({
 
         {hasRealData && (
           <Badge variant="outline" className="text-xs">
-            {solarDataSource === "solcast" ? "Forecast" : solarDataSource === "pvgis_tmy" ? "Typical Year" : "19-Yr Avg"}
+            {solarDataSource === "solcast" ? "Forecast" : solarDataSource === "gsa" ? "Global Solar Atlas" : solarDataSource === "pvgis_tmy" ? "Typical Year" : "19-Yr Avg"}
           </Badge>
         )}
       </div>
