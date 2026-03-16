@@ -32,7 +32,7 @@ import {
 import { InverterConfig } from "../InverterSizing";
 
 // Solar data source type
-export type SolarDataSource = "solcast" | "pvgis_monthly" | "pvgis_tmy";
+export type SolarDataSource = "solcast" | "pvgis_monthly" | "pvgis_tmy" | "gsa";
 
 // Longitude values for SA cities (matching SA_SOLAR_LOCATIONS)
 const SA_LOCATION_LONGITUDES: Record<string, number> = {
