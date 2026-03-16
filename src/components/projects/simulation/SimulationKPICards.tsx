@@ -42,13 +42,22 @@ export function SimulationKPICards({
   includesSolar,
   annualPVsystResult,
   reductionFactor,
+  breakdowns = {},
 }: SimulationKPICardsProps) {
+  const wrap = (key: keyof typeof breakdowns, node: React.ReactNode) => {
+    const b = breakdowns[key];
+    if (!b) return node;
+    return <MetricTooltip formula={b.formula} inputs={b.inputs}>{node}</MetricTooltip>;
+  };
+
   return (
     <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
       <Card>
         <CardHeader className="pb-2">
           <CardDescription>Daily Load</CardDescription>
-          <CardTitle className="text-2xl">{Math.round(annualLoad / 365)} kWh</CardTitle>
+          <CardTitle className="text-2xl">
+            {wrap('dailyLoad', <>{Math.round(annualLoad / 365)} kWh</>)}
+          </CardTitle>
         </CardHeader>
       </Card>
       {includesSolar && (
@@ -56,7 +65,7 @@ export function SimulationKPICards({
           <CardHeader className="pb-2">
             <CardDescription>Solar Generated</CardDescription>
             <CardTitle className="text-2xl text-amber-500">
-              {Math.round(annualSolar / 365)} kWh
+              {wrap('solarGenerated', <>{Math.round(annualSolar / 365)} kWh</>)}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -66,9 +75,9 @@ export function SimulationKPICards({
           <CardHeader className="pb-2">
             <CardDescription>Annual Production</CardDescription>
             <CardTitle className="text-2xl text-chart-2">
-              {annualPVsystResult
+              {wrap('annualProduction', <>{annualPVsystResult
                 ? Math.round(annualPVsystResult.eGrid * reductionFactor).toLocaleString()
-                : Math.round(annualSolar).toLocaleString()} kWh
+                : Math.round(annualSolar).toLocaleString()} kWh</>)}
             </CardTitle>
             {annualPVsystResult && (
               <p className="text-xs text-muted-foreground">
@@ -81,14 +90,16 @@ export function SimulationKPICards({
       <Card>
         <CardHeader className="pb-2">
           <CardDescription>Grid Import</CardDescription>
-          <CardTitle className="text-2xl">{Math.round(annualGridImport / 365)} kWh</CardTitle>
+          <CardTitle className="text-2xl">
+            {wrap('gridImport', <>{Math.round(annualGridImport / 365)} kWh</>)}
+          </CardTitle>
         </CardHeader>
       </Card>
       <Card>
         <CardHeader className="pb-2">
           <CardDescription>Self-Consumption</CardDescription>
           <CardTitle className="text-2xl text-green-600">
-            {Math.round(selfConsumptionRate)}%
+            {wrap('selfConsumption', <>{Math.round(selfConsumptionRate)}%</>)}
           </CardTitle>
         </CardHeader>
       </Card>
@@ -96,7 +107,7 @@ export function SimulationKPICards({
         <CardHeader className="pb-2">
           <CardDescription>Peak Reduction</CardDescription>
           <CardTitle className="text-2xl">
-            {Math.round(peakReduction)}%
+            {wrap('peakReduction', <>{Math.round(peakReduction)}%</>)}
           </CardTitle>
         </CardHeader>
       </Card>
