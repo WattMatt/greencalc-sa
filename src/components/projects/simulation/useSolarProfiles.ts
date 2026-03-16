@@ -281,13 +281,15 @@ export function useSolarProfiles(config: UseSolarProfilesConfig) {
     switch (solarDataSource) {
       case "solcast":
         return solarProfileSolcastSimplified ?? solarProfileGenericSimplified;
+      case "gsa":
+        return solarProfileGSASimplified ?? solarProfileGenericSimplified;
       case "pvgis_monthly":
       case "pvgis_tmy":
         return solarProfilePVGISSimplified ?? solarProfileGenericSimplified;
       default:
         return solarProfileGenericSimplified;
     }
-  }, [lossCalculationMode, solarDataSource, solarProfilePVsyst, solarProfileSolcastSimplified, solarProfilePVGISSimplified, solarProfileGenericSimplified]);
+  }, [lossCalculationMode, solarDataSource, solarProfilePVsyst, solarProfileSolcastSimplified, solarProfileGSASimplified, solarProfilePVGISSimplified, solarProfileGenericSimplified]);
 
   // ── TMY 8,760-hour conversion ──
   const tmyConversionResult = useMemo(() => {
