@@ -245,22 +245,29 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     productionReductionPercent, inverterConfig, project, projectId, includesSolar,
   });
 
+  // ── GHI-based simplified daily output (sum of 24h solarProfile) ──
+  const simplifiedDailyOutput = useMemo(() =>
+    solarProfile.reduce((sum, v) => sum + v, 0),
+    [solarProfile]
+  );
+
   // ── Compute override scale factor (user yield/daily output overrides) ──
   const overrideScaleFactor = useMemo(() => {
     const dcCapacity = moduleMetrics.actualDcCapacityKwp;
-    const calculatedYield = annualPVsystResult?.specificYield
-      ?? (dcCapacity > 0 ? (selectedLocation.ghi * 365 * 0.15) : 0);
-    const calculatedDailyOutput = annualPVsystResult
+    const dailyOut = annualPVsystResult
       ? annualPVsystResult.eGrid / 365
-      : (dcCapacity > 0 ? selectedLocation.ghi * dcCapacity * 0.15 : 0);
+      : simplifiedDailyOutput;
+    const calcYield = annualPVsystResult?.specificYield
+      ?? (dcCapacity > 0 ? (dailyOut * 365) / dcCapacity : 0);
 
-    if (specificYieldOverride !== null && calculatedYield > 0) {
-      return specificYieldOverride / calculatedYield;
-    } else if (dailyOutputOverride !== null && calculatedDailyOutput > 0) {
-      return dailyOutputOverride / calculatedDailyOutput;
+    if (specificYieldOverride !== null && calcYield > 0) {
+      return specificYieldOverride / calcYield;
+    } else if (dailyOutputOverride !== null && dailyOut > 0) {
+      return dailyOutputOverride / dailyOut;
     }
     return 1.0;
-  }, [specificYieldOverride, dailyOutputOverride, annualPVsystResult, moduleMetrics.actualDcCapacityKwp, selectedLocation.ghi]);
+  }, [specificYieldOverride, dailyOutputOverride, annualPVsystResult,
+      moduleMetrics.actualDcCapacityKwp, simplifiedDailyOutput]);
 
   const effectiveReductionFactor = reductionFactor * overrideScaleFactor;
 
