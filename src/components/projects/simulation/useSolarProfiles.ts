@@ -203,12 +203,25 @@ export function useSolarProfiles(config: UseSolarProfilesConfig) {
     return baseProfile.map(v => v * reductionFactor);
   }, [pvConfig, moduleMetrics.actualDcCapacityKwp, reductionFactor]);
 
-  // ── GSA simplified solar profile ──
+  // ── GSA simplified solar profile (scaled to match GSA PVOUT_csi × 0.85) ──
   const solarProfileGSASimplified = useMemo(() => {
     if (!gsaHourlyProfile) return null;
     const baseProfile = generateSolarProfile(pvConfig, moduleMetrics.actualDcCapacityKwp, gsaHourlyProfile);
-    return baseProfile.map(v => v * reductionFactor);
-  }, [pvConfig, moduleMetrics.actualDcCapacityKwp, gsaHourlyProfile, reductionFactor]);
+    // Apply fixed 15% system loss (not productionReductionPercent)
+    const profileWith85 = baseProfile.map(v => v * 0.85);
+
+    // Scale profile so annual total matches: dcCapacity × PVOUT_csi × 0.85 / dcAcRatio
+    const pvoutCsi = gsaData?.annual?.data?.PVOUT_csi;
+    if (pvoutCsi && moduleMetrics.actualDcCapacityKwp > 0) {
+      const targetAnnualKwh = moduleMetrics.actualDcCapacityKwp * pvoutCsi * 0.85 / inverterConfig.dcAcRatio;
+      const currentDailyTotal = profileWith85.reduce((sum, v) => sum + v, 0);
+      if (currentDailyTotal > 0) {
+        const scaleFactor = targetAnnualKwh / (currentDailyTotal * 365);
+        return profileWith85.map(v => v * scaleFactor);
+      }
+    }
+    return profileWith85;
+  }, [pvConfig, moduleMetrics.actualDcCapacityKwp, gsaHourlyProfile, gsaData, inverterConfig.dcAcRatio]);
 
   // ── Annual GHI ──
   const annualGHI = useMemo(() => {
