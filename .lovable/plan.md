@@ -1,29 +1,36 @@
 
 
-# Plan: Storage-first CSV retrieval with re-upload message
+## Problem Analysis
 
-## Changes
+The simulation has **two disconnected calculation paths** for GSA:
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+1. **Simplified yield** (line 251-257): `gsaSpecificYield × 0.85` → used only for KPI card display and the "Specific Yield" / "Daily Output" fields in SolarModulesPane.
 
-Reorder `loadMeterForWizard` to check storage **first**:
+2. **8760 engine** (the actual simulation): Uses `solarProfileGSASimplified` — a synthetic bell-curve profile derived from GSA monthly GHI data, processed through `generateSolarProfile()` with `reductionFactor = 1 - productionReductionPercent/100`. This profile's annual sum does NOT equal `dcCapacity × gsaSpecificYield × 0.85 / dcAcRatio`. All KPIs for Grid Import, Self-Consumption, and Peak Reduction come from this engine path.
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+**Result**: The displayed specific yield may show one number, but the engine uses a different total solar generation — so all downstream values (grid import, self-consumption, financials) are inconsistent with the stated specific yield.
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+---
 
-Same reordering:
+## Plan
 
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+### 1. Fix GSA specific yield display (SimulationPanel.tsx)
+- Confirm `simplifiedSpecificYield = gsaSpecificYield * 0.85` is active (already changed)
+- For Kingswalk: 1812 × 0.85 = **1540 kWh/kWp/yr**
 
-### No other files change
+### 2. Scale GSA solar profile to match simplified yield (useSolarProfiles.ts)
+When `solarDataSource === "gsa"`, scale `solarProfileGSASimplified` so its annual total equals the target annual production:
+- **Target annual production** = `dcCapacity × gsaSpecificYield × 0.85 / dcAcRatio`
+- **Current profile total** = `sum(solarProfileGSASimplified) × 365`
+- **Scale factor** = target / current profile total
+- Apply this scale factor to the GSA profile before returning it
 
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
+This ensures the 8760 engine's solar input matches the GSA-derived production, and all downstream KPIs (grid import, self-consumption, peak reduction, financials) recalculate correctly.
+
+### 3. Remove double-application of reductionFactor for GSA profile (useSolarProfiles.ts)
+Currently `solarProfileGSASimplified` applies `reductionFactor` (= `1 - productionReductionPercent/100`). Since GSA now uses a fixed 15% reduction, change the GSA profile to apply `× 0.85` instead of `× reductionFactor`. This keeps the `productionReductionPercent` slider from affecting GSA.
+
+### Files changed
+- `src/components/projects/simulation/useSolarProfiles.ts` — Scale GSA profile to match target yield, use fixed 0.85 instead of reductionFactor
+- `src/components/projects/SimulationPanel.tsx` — Already correct (line 252: `gsaSpecificYield * 0.85`)
 
