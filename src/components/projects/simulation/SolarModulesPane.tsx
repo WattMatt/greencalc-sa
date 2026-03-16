@@ -31,6 +31,7 @@ export function SolarModulesPane({
   specificYieldOverride, onSpecificYieldOverrideChange,
   productionReductionPercent, onProductionReductionPercentChange,
   calculatedDailyOutput, calculatedSpecificYield, solarCapacity,
+  dcCapacity,
 }: SolarModulesPaneProps) {
   return (
     <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
