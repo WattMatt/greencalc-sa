@@ -248,9 +248,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // ── Simplified DC capacity & yield (direct from GHI) ──
   const simplifiedDcCapacity = solarCapacity * inverterConfig.dcAcRatio;
   const simplifiedSpecificYield = annualGHI * 0.85 * (1 - productionReductionPercent / 100);
-  const simplifiedDailyOutput = simplifiedDcCapacity > 0
-    ? simplifiedDcCapacity * simplifiedSpecificYield / 365
+  const simplifiedAnnualProduction = simplifiedDcCapacity > 0
+    ? simplifiedDcCapacity * simplifiedSpecificYield / inverterConfig.dcAcRatio
     : 0;
+  const simplifiedDailyOutput = simplifiedAnnualProduction / 365;
 
   // ── Compute override scale factor (user yield/daily output overrides) ──
   const overrideScaleFactor = useMemo(() => {
