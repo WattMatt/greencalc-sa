@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { NumericInput } from '@/components/ui/numeric-input';
@@ -25,7 +25,16 @@ export function SolarForecastCard({
   const [longitude, setLongitude] = useState(defaultLongitude);
   const { data, isLoading, error, fetchData } = useGlobalSolarAtlas();
 
-  const handleFetch = () => fetchData(latitude, longitude);
+  useEffect(() => {
+    setLatitude(defaultLatitude);
+    setLongitude(defaultLongitude);
+  }, [defaultLatitude, defaultLongitude]);
+
+  const handleFetch = () => {
+    setLatitude(defaultLatitude);
+    setLongitude(defaultLongitude);
+    fetchData(defaultLatitude, defaultLongitude);
+  };
 
   const annual = data?.annual?.data;
   const monthly = data?.monthly?.data;
