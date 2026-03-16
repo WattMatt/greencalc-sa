@@ -96,6 +96,8 @@ export function useSolarProfiles(config: UseSolarProfilesConfig) {
     fetchMonthlyRadiation,
   } = usePVGISProfile();
 
+  const { data: gsaData, isLoading: gsaLoading, fetchData: fetchGSA } = useGlobalSolarAtlas();
+
   // ── Location coordinates ──
   const selectedLocation = SA_SOLAR_LOCATIONS[pvConfig.location];
   const hasCoordinates = selectedLocation?.lat !== undefined || (project?.latitude && project?.longitude);
