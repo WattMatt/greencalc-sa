@@ -1,32 +1,29 @@
 
 
-## Add Formula Hover Tooltips to KPI Cards
+# Plan: Storage-first CSV retrieval with re-upload message
 
-### What
-Add hover tooltips to the 6 KPI cards at the bottom of the Profile Builder tab (Daily Load, Solar Generated, Annual Production, Grid Import, Self-Consumption, Peak Reduction). On hover, each card shows the formula and actual values used — matching the existing `FinancialMetricRow` tooltip pattern.
+## Changes
 
-### Changes
+### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
 
-**1. Create `src/components/projects/simulation/MetricTooltip.tsx`**
-- Reusable HoverCard wrapper accepting `formula: string` and `inputs: {label, value}[]`
-- Wraps children (the numeric value) with dashed underline + cursor-help
-- On hover shows formula header + inputs table (same visual style as `FinancialMetricRow` tooltips)
+Reorder `loadMeterForWizard` to check storage **first**:
 
-**2. Update `SimulationKPICards.tsx`**
-- Add a `breakdowns` prop: a record mapping each metric to `{ formula, inputs[] }`
-- Wrap each `CardTitle` value in `MetricTooltip`
+1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
+2. If storage returns CSV, use it
+3. Only if storage returns null, check legacy `rawData[0].csvContent`
+4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-**3. Update `SimulationPanel.tsx` (~line 502)**
-- Build breakdown objects using values already in scope and pass to `SimulationKPICards`:
+### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
 
-| Card | Formula | Inputs |
-|------|---------|--------|
-| Daily Load | `Annual Load ÷ 365` | `annualLoad` |
-| Solar Generated | `Annual Solar ÷ 365` | `annualSolar` |
-| Annual Production | PVsyst: `eGrid × reductionFactor`; Simplified: `dailyOutput × 365` | relevant values |
-| Grid Import | `Annual Grid Import ÷ 365` | `annualGridImport` |
-| Self-Consumption | `(Solar Used On-Site ÷ Total Solar) × 100` | `totalSolarUsed`, `totalSolar` |
-| Peak Reduction | `(Peak Load − Peak Grid Import) ÷ Peak Load × 100` | `peakLoad`, `peakGridImport` |
+Same reordering:
 
-All values are already available via `engine.annualEnergyResults` and existing local variables — no new computation needed, just formatting them into breakdown objects.
+1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
+2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
+3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+
+### No other files change
+
+- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
+- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- No database changes
 
