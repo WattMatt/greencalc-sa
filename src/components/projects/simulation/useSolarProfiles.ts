@@ -123,6 +123,13 @@ export function useSolarProfiles(config: UseSolarProfilesConfig) {
     }
   }, [solarDataSource, hasCoordinates, effectiveLat, effectiveLng, pvgisMonthlyData, pvgisLoadingMonthly, projectId]);
 
+  // GSA auto-fetch
+  useEffect(() => {
+    if (solarDataSource === "gsa" && hasCoordinates && !gsaData && !gsaLoading) {
+      fetchGSA(effectiveLat, effectiveLng);
+    }
+  }, [solarDataSource, hasCoordinates, effectiveLat, effectiveLng, gsaData, gsaLoading]);
+
   // ── Hourly irradiance profiles ──
   const solcastHourlyProfile = useMemo<HourlyIrradianceData[] | undefined>(() => {
     if (!solcastData?.hourly || solcastData.hourly.length === 0) return undefined;
