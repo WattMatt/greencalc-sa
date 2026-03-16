@@ -245,11 +245,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     productionReductionPercent, inverterConfig, project, projectId, includesSolar,
   });
 
-  // ── GHI-based simplified daily output (sum of 24h solarProfile) ──
-  const simplifiedDailyOutput = useMemo(() =>
-    solarProfile.reduce((sum, v) => sum + v, 0),
-    [solarProfile]
-  );
+  // ── Simplified DC capacity & yield (direct from GHI) ──
+  const simplifiedDcCapacity = solarCapacity * inverterConfig.dcAcRatio;
+  const simplifiedSpecificYield = annualGHI * 0.85 * (1 - productionReductionPercent / 100);
+  const simplifiedDailyOutput = simplifiedDcCapacity > 0
+    ? simplifiedDcCapacity * simplifiedSpecificYield / 365
+    : 0;
 
   // ── Compute override scale factor (user yield/daily output overrides) ──
   const overrideScaleFactor = useMemo(() => {
