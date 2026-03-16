@@ -294,6 +294,22 @@ export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity, p
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Detailed Losses Toggle */}
+        <div className="flex items-center justify-between rounded-md border p-3 bg-muted/30">
+          <div className="space-y-0.5">
+            <Label className="text-xs font-medium">Include detailed losses</Label>
+            <p className="text-[10px] text-muted-foreground">
+              {config.useDetailedLosses
+                ? "Tilt, azimuth, module type, inverter & individual losses applied"
+                : "Flat 15% system loss (n_system = 85%)"}
+            </p>
+          </div>
+          <Switch
+            checked={config.useDetailedLosses}
+            onCheckedChange={(checked) => updateConfig({ useDetailedLosses: checked })}
+          />
+        </div>
+
         {/* Location Display */}
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
