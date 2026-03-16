@@ -155,6 +155,25 @@ export function useSolarProfiles(config: UseSolarProfilesConfig) {
     }));
   }, [solarDataSource, pvgisTmyData, pvgisMonthlyData]);
 
+  // ── GSA synthetic hourly profile from monthly GHI ──
+  const gsaHourlyProfile = useMemo<HourlyIrradianceData[] | undefined>(() => {
+    if (!gsaData?.monthly?.data?.GHI) return undefined;
+    const monthlyGhi = gsaData.monthly.data.GHI; // 12 monthly values in kWh/m²
+    const avgDailyGhi = monthlyGhi.reduce((a, b) => a + b, 0) / 12 / 30; // rough daily avg kWh/m²
+    // Build a bell-curve hourly profile peaking at solar noon
+    const peakHour = 12;
+    const sigma = 2.5;
+    const rawWeights = Array.from({ length: 24 }, (_, h) => Math.exp(-0.5 * ((h - peakHour) / sigma) ** 2));
+    const totalWeight = rawWeights.reduce((a, b) => a + b, 0);
+    return rawWeights.map((w, hour) => ({
+      hour,
+      ghi: (w / totalWeight) * avgDailyGhi * 1000, // Convert kWh/m² to W/m²
+      dni: 0,
+      dhi: 0,
+      temp: gsaData.annual?.data?.TEMP ?? 25,
+    }));
+  }, [gsaData]);
+
   // ── Solcast PV Profile for chart rendering ──
   const {
     pvProfile: solcastPvProfileData,
