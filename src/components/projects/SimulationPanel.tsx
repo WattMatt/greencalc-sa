@@ -237,6 +237,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     solcastLoading, pvgisLoadingTMY, pvgisLoadingMonthly,
     solarProfile, solarProfileSolcast, solarProfileGenericSimplified,
     solcastPvProfileData, annualPVsystResult, annualGHI,
+    gsaData, gsaLoading, gsaSpecificYield,
     tmyDcProfile8760, tmySolarProfile8760, tmyInverterLossMultiplier,
     selectedLocation, isLoadingData, hasRealData, activeDataSourceLabel,
     reductionFactor,
@@ -245,9 +246,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     productionReductionPercent, inverterConfig, project, projectId, includesSolar,
   });
 
-  // ── Simplified DC capacity & yield (direct from GHI) ──
+  // ── Simplified DC capacity & yield (direct from GHI, or GSA PVOUT_csi) ──
   const simplifiedDcCapacity = solarCapacity * inverterConfig.dcAcRatio;
-  const simplifiedSpecificYield = annualGHI * 0.85 * (1 - productionReductionPercent / 100);
+  const simplifiedSpecificYield = solarDataSource === "gsa" && gsaSpecificYield
+    ? gsaSpecificYield * (1 - productionReductionPercent / 100)
+    : annualGHI * 0.85 * (1 - productionReductionPercent / 100);
   const simplifiedAnnualProduction = simplifiedDcCapacity > 0
     ? simplifiedDcCapacity * simplifiedSpecificYield / inverterConfig.dcAcRatio
     : 0;
@@ -359,6 +362,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         solcastLoading={solcastLoading}
         pvgisLoadingMonthly={pvgisLoadingMonthly}
         pvgisLoadingTMY={pvgisLoadingTMY}
+        gsaLoading={gsaLoading}
         lossCalculationMode={lossCalculationMode}
         onLossCalculationModeChange={setLossCalculationMode}
         isAutoSaving={isAutoSaving}

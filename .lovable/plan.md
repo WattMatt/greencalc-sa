@@ -1,42 +1,29 @@
 
 
-## Replace PVGIS with Global Solar Atlas in the Simulation Engine
+# Plan: Storage-first CSV retrieval with re-upload message
 
-### Problem
-The simulation engine currently uses PVGIS (JRC) as its solar data source for GHI and derives specific yield via `GHI × 0.85`. You want Global Solar Atlas (GSA) to be the primary data source instead, providing both **kWh/m²/yr (GHI)** and **kWh/kWp (PVOUT_csi)** directly.
+## Changes
 
-### What Changes
+### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
 
-**1. Add `"gsa"` as a new `SolarDataSource` in `useSolarProfiles.ts`**
-- Import `useGlobalSolarAtlas` hook
-- Add auto-fetch effect: when `solarDataSource === "gsa"`, call the GSA edge function with project lat/lng
-- Compute `annualGHI` from GSA's `annual.GHI` when source is `"gsa"`
-- Expose GSA's `PVOUT_csi` (specific yield) so SimulationPanel can use it directly instead of `GHI × 0.85`
-- Generate a synthetic 24-hour profile from GSA monthly GHI data (same pattern as PVGIS monthly)
-- Expose `gsaSpecificYield` and `gsaData` in the return object
+Reorder `loadMeterForWizard` to check storage **first**:
 
-**2. Update `SimulationPanel.tsx`**
-- When `solarDataSource === "gsa"` and GSA data is available, use `gsaSpecificYield` directly as `simplifiedSpecificYield` instead of `annualGHI × 0.85`
-- This gives you the GSA-sourced kWh/kWp flowing into Annual Production, Daily Output, and all downstream KPIs
+1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
+2. If storage returns CSV, use it
+3. Only if storage returns null, check legacy `rawData[0].csvContent`
+4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-**3. Update `SimulationToolbar.tsx`**
-- Add a 4th toggle button: **"GSA"** (with Sun icon) alongside Solcast, PVGIS, TMY
-- Wire up the new `"gsa"` data source value
+### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
 
-**4. Add `SolarForecastCard` to the Solar Forecast tab**
-- In `ProjectDetail.tsx`, render `<SolarForecastCard>` below `ProjectLocationMap` in the "solar-forecast" tab, passing project lat/lng as defaults
-- This gives users a visual display of GSA data alongside the map
+Same reordering:
 
-### Data Flow (Simplified Mode)
-```text
-GSA API → PVOUT_csi (kWh/kWp/yr) → simplifiedSpecificYield
-        → GHI (kWh/m²/yr)        → annualGHI (for PVsyst mode)
-        → Monthly GHI[12]        → synthetic 24-hour profile → solarProfile
-```
+1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
+2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
+3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-### Files Modified
-- `src/components/projects/simulation/useSolarProfiles.ts` — add GSA hook, auto-fetch, annualGHI from GSA, expose gsaSpecificYield
-- `src/components/projects/SimulationPanel.tsx` — use GSA specific yield when source is "gsa"
-- `src/components/projects/simulation/SimulationToolbar.tsx` — add GSA toggle button
-- `src/pages/ProjectDetail.tsx` — render SolarForecastCard in solar-forecast tab
+### No other files change
+
+- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
+- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- No database changes
 

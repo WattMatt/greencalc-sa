@@ -1382,7 +1382,7 @@ export default function ProjectDetail() {
           <FloorPlanMarkup projectId={id!} latestSimulation={latestSimulation} />
         </TabsContent>
 
-        <TabsContent value="solar-forecast" className="mt-6">
+        <TabsContent value="solar-forecast" className="mt-6 space-y-6">
           <ProjectLocationMap
             projectId={id!}
             latitude={project.latitude}
@@ -1391,6 +1391,11 @@ export default function ProjectDetail() {
             onLocationUpdate={() => {
               queryClient.invalidateQueries({ queryKey: ["project", id] });
             }}
+          />
+          <SolarForecastCard
+            projectLocation={project.location}
+            defaultLatitude={project.latitude ?? -26.2044}
+            defaultLongitude={project.longitude ?? 28.0456}
           />
         </TabsContent>
 

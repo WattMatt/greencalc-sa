@@ -20,7 +20,7 @@ import type { BlendedRateType } from "../TariffSelector";
 import type { AnnualEnergySimulationResults } from "./EnergySimulationEngine";
 
 type TOUPeriod = 'off-peak' | 'standard' | 'peak';
-type SolarDataSource = "solcast" | "pvgis_monthly" | "pvgis_tmy";
+type SolarDataSource = "solcast" | "pvgis_monthly" | "pvgis_tmy" | "gsa";
 
 export interface AutoSaveConfig {
   projectId: string;

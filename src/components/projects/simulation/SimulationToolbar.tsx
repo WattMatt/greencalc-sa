@@ -12,6 +12,7 @@ interface SimulationToolbarProps {
   locationGhi: number;
   solarDataSource: SolarDataSource;
   onSolarDataSourceChange: (v: SolarDataSource) => void;
+  gsaLoading: boolean;
   solcastLoading: boolean;
   pvgisLoadingMonthly: boolean;
   pvgisLoadingTMY: boolean;
@@ -23,7 +24,7 @@ interface SimulationToolbarProps {
 
 export function SimulationToolbar({
   selectedLocationName, activeDataSourceLabel, hasRealData, locationGhi,
-  solarDataSource, onSolarDataSourceChange, solcastLoading, pvgisLoadingMonthly, pvgisLoadingTMY,
+  solarDataSource, onSolarDataSourceChange, solcastLoading, pvgisLoadingMonthly, pvgisLoadingTMY, gsaLoading,
   lossCalculationMode, onLossCalculationModeChange,
   isAutoSaving, lastSavedAt,
 }: SimulationToolbarProps) {
@@ -72,6 +73,10 @@ export function SimulationToolbar({
             {pvgisLoadingTMY ? <Loader2 className="h-3 w-3 animate-spin" /> : <Database className="h-3 w-3" />}
             TMY
           </ToggleGroupItem>
+          <ToggleGroupItem value="gsa" size="sm" className="text-xs gap-1 px-3" disabled={gsaLoading}>
+            {gsaLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sun className="h-3 w-3" />}
+            GSA
+          </ToggleGroupItem>
         </ToggleGroup>
 
         <ToggleGroup
@@ -92,7 +97,7 @@ export function SimulationToolbar({
 
         {hasRealData && (
           <Badge variant="outline" className="text-xs">
-            {solarDataSource === "solcast" ? "Forecast" : solarDataSource === "pvgis_tmy" ? "Typical Year" : "19-Yr Avg"}
+            {solarDataSource === "solcast" ? "Forecast" : solarDataSource === "gsa" ? "Global Solar Atlas" : solarDataSource === "pvgis_tmy" ? "Typical Year" : "19-Yr Avg"}
           </Badge>
         )}
       </div>
