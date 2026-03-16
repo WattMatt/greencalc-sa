@@ -503,7 +503,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
       <SimulationKPICards
         annualLoad={engine.annualEnergyResults.totalAnnualLoad}
-        annualSolar={annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDailyOutput * 365}
+        annualSolar={annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDcCapacity * simplifiedSpecificYield}
         annualGridImport={engine.annualEnergyResults.totalAnnualGridImport}
         selfConsumptionRate={engine.annualEnergyResults.selfConsumptionRate}
         peakReduction={engine.annualEnergyResults.peakReduction}
@@ -519,10 +519,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             ],
           },
           solarGenerated: {
-            formula: 'Annual Solar ÷ 365',
+            formula: 'DC Capacity × Specific Yield ÷ 365',
             inputs: [
-              { label: 'Annual Solar', value: `${Math.round(annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDailyOutput * 365).toLocaleString()} kWh` },
-              { label: 'Result', value: `${Math.round((annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDailyOutput * 365) / 365).toLocaleString()} kWh/day` },
+              { label: 'DC Capacity', value: `${simplifiedDcCapacity.toFixed(1)} kWp` },
+              { label: 'Specific Yield', value: `${Math.round(simplifiedSpecificYield).toLocaleString()} kWh/kWp/yr` },
+              { label: 'Annual Solar', value: `${Math.round(annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDcCapacity * simplifiedSpecificYield).toLocaleString()} kWh` },
+              { label: 'Result', value: `${Math.round((annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedDcCapacity * simplifiedSpecificYield) / 365).toLocaleString()} kWh/day` },
             ],
           },
           annualProduction: annualPVsystResult
