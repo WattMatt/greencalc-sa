@@ -21,6 +21,7 @@ interface SolarModulesPaneProps {
   calculatedDailyOutput: number;
   calculatedSpecificYield: number;
   solarCapacity: number;
+  dcCapacity?: number;
 }
 
 export function SolarModulesPane({
