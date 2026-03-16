@@ -1,23 +1,29 @@
 
 
-## Fix: Use Flat 15% System Loss & Add Toggle for Extra Losses
+# Plan: Storage-first CSV retrieval with re-upload message
 
-### Problem
-`calculateSystemEfficiency` multiplies together module type efficiency, array type modifier, inverter efficiency, individual system losses, **tilt factor**, and **azimuth factor** — resulting in a complex compounded efficiency far from the simple 85% (n_system = 0.85) model. The user wants a clean 15% system loss by default, with an **opt-in toggle** to include tilt, azimuth, and other extra losses.
+## Changes
 
-### Changes
+### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
 
-**File: `src/components/projects/PVSystemConfig.tsx`**
+Reorder `loadMeterForWizard` to check storage **first**:
 
-1. **Add `useDetailedLosses: boolean` to `PVSystemConfigData` interface** (default `false`)
-2. **Update `getDefaultPVConfig()`** to include `useDetailedLosses: false`
-3. **Simplify `calculateSystemEfficiency()`**:
-   - When `config.useDetailedLosses === false`: return flat `0.85` (i.e. 1 - 0.15)
-   - When `config.useDetailedLosses === true`: use the current full calculation (module type × array modifier × inverter eff × loss multiplier × tilt factor × azimuth factor)
-4. **Add a Switch/Toggle in the PV System Configuration UI** (near the top of the card content):
-   - Label: "Include detailed losses (tilt, azimuth, module type, etc.)"
-   - When OFF: show "System Efficiency: 85%" badge, collapse/hide the detailed loss sliders
-   - When ON: show full efficiency calculation and all configuration controls
+1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
+2. If storage returns CSV, use it
+3. Only if storage returns null, check legacy `rawData[0].csvContent`
+4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-This toggle will automatically propagate to all downstream calculations (daily output, specific yield, annual production) since they all call `calculateSystemEfficiency()`.
+### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+
+Same reordering:
+
+1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
+2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
+3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+
+### No other files change
+
+- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
+- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- No database changes
 

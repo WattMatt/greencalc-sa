@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sun, Settings2, ChevronDown, Info, MapPin, Compass, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 
 
 // South African cities with solar resource data (GHI in kWh/m²/day, DNI in kWh/m²/day)
@@ -75,6 +76,7 @@ export interface PVSystemConfigData {
   groundCoverageRatio: number;
   bifacial: boolean;
   albedo: number;
+  useDetailedLosses: boolean;
 }
 
 interface PVSystemConfigProps {
@@ -100,6 +102,7 @@ export function getDefaultPVConfig(): PVSystemConfigData {
     groundCoverageRatio: 0.4,
     bifacial: false,
     albedo: 0.2,
+    useDetailedLosses: false,
   };
 }
 
@@ -114,6 +117,12 @@ export function calculateTotalLoss(losses: SystemLosses): number {
 }
 
 export function calculateSystemEfficiency(config: PVSystemConfigData): number {
+  // Simple mode: flat 15% system loss = 85% efficiency
+  if (!config.useDetailedLosses) {
+    return 0.85;
+  }
+
+  // Detailed mode: full compound calculation
   const moduleEff = MODULE_TYPES[config.moduleType].efficiency;
   const arrayMod = ARRAY_TYPES[config.arrayType].modifier;
   const inverterEff = config.inverterEfficiency / 100;
@@ -285,6 +294,22 @@ export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity, p
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Detailed Losses Toggle */}
+        <div className="flex items-center justify-between rounded-md border p-3 bg-muted/30">
+          <div className="space-y-0.5">
+            <Label className="text-xs font-medium">Include detailed losses</Label>
+            <p className="text-[10px] text-muted-foreground">
+              {config.useDetailedLosses
+                ? "Tilt, azimuth, module type, inverter & individual losses applied"
+                : "Flat 15% system loss (n_system = 85%)"}
+            </p>
+          </div>
+          <Switch
+            checked={config.useDetailedLosses}
+            onCheckedChange={(checked) => updateConfig({ useDetailedLosses: checked })}
+          />
+        </div>
+
         {/* Location Display */}
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
@@ -338,211 +363,217 @@ export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity, p
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-xs">Module Type</Label>
-            <Select
-              value={config.moduleType}
-              onValueChange={(v: ModuleType) => updateConfig({ moduleType: v })}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(MODULE_TYPES).map(([key, mod]) => (
-                  <SelectItem key={key} value={key} className="text-xs">
-                    <div className="flex flex-col">
-                      <span>{mod.name}</span>
-                      <span className="text-[10px] text-muted-foreground">{mod.description}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {config.useDetailedLosses && (
+            <div className="space-y-2">
+              <Label className="text-xs">Module Type</Label>
+              <Select
+                value={config.moduleType}
+                onValueChange={(v: ModuleType) => updateConfig({ moduleType: v })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(MODULE_TYPES).map(([key, mod]) => (
+                    <SelectItem key={key} value={key} className="text-xs">
+                      <div className="flex flex-col">
+                        <span>{mod.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{mod.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
-        {/* Array Type */}
-        <div className="space-y-2">
-          <Label className="text-xs">Array Type</Label>
-          <Select
-            value={config.arrayType}
-            onValueChange={(v: ArrayType) => updateConfig({ arrayType: v })}
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(ARRAY_TYPES).map(([key, arr]) => (
-                <SelectItem key={key} value={key} className="text-xs">
-                  <div className="flex items-center gap-2">
-                    <span>{arr.name}</span>
-                    {arr.modifier !== 1.0 && (
-                      <Badge variant="outline" className="text-[10px] py-0">
-                        {arr.modifier > 1 ? "+" : ""}{((arr.modifier - 1) * 100).toFixed(0)}%
-                      </Badge>
-                    )}
+        {config.useDetailedLosses && (
+          <>
+            {/* Array Type */}
+            <div className="space-y-2">
+              <Label className="text-xs">Array Type</Label>
+              <Select
+                value={config.arrayType}
+                onValueChange={(v: ArrayType) => updateConfig({ arrayType: v })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(ARRAY_TYPES).map(([key, arr]) => (
+                    <SelectItem key={key} value={key} className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span>{arr.name}</span>
+                        {arr.modifier !== 1.0 && (
+                          <Badge variant="outline" className="text-[10px] py-0">
+                            {arr.modifier > 1 ? "+" : ""}{((arr.modifier - 1) * 100).toFixed(0)}%
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Tilt & Azimuth */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs flex items-center gap-1">
+                    <Compass className="h-3 w-3" />
+                    Tilt Angle
+                  </Label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">{config.tilt}°</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0"
+                            onClick={setOptimalTilt}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Set optimal tilt ({Math.round(Math.abs(location.lat))}° for this location)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+                </div>
+                <Slider
+                  value={[config.tilt]}
+                  onValueChange={([v]) => updateConfig({ tilt: v })}
+                  min={0}
+                  max={90}
+                  step={1}
+                  disabled={config.arrayType.includes("tracking")}
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>Horizontal</span>
+                  <span className="text-primary">Optimal: {Math.round(Math.abs(location.lat))}°</span>
+                  <span>Vertical</span>
+                </div>
+              </div>
 
-        {/* Tilt & Azimuth */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs flex items-center gap-1">
-                <Compass className="h-3 w-3" />
-                Tilt Angle
-              </Label>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground">{config.tilt}°</span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-5 w-5 p-0"
-                        onClick={setOptimalTilt}
-                      >
-                        <RotateCcw className="h-3 w-3" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">Set optimal tilt ({Math.round(Math.abs(location.lat))}° for this location)</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Azimuth</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {config.azimuth === 0 ? "N" : config.azimuth > 0 ? `${config.azimuth}° E` : `${Math.abs(config.azimuth)}° W`}
+                  </span>
+                </div>
+                <Slider
+                  value={[config.azimuth]}
+                  onValueChange={([v]) => updateConfig({ azimuth: v })}
+                  min={-90}
+                  max={90}
+                  step={5}
+                  disabled={config.arrayType === "tracking_2axis"}
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>West</span>
+                  <span className="text-primary">North (optimal)</span>
+                  <span>East</span>
+                </div>
               </div>
             </div>
-            <Slider
-              value={[config.tilt]}
-              onValueChange={([v]) => updateConfig({ tilt: v })}
-              min={0}
-              max={90}
-              step={1}
-              disabled={config.arrayType.includes("tracking")}
-            />
-            <div className="flex justify-between text-[10px] text-muted-foreground">
-              <span>Horizontal</span>
-              <span className="text-primary">Optimal: {Math.round(Math.abs(location.lat))}°</span>
-              <span>Vertical</span>
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Azimuth</Label>
-              <span className="text-xs text-muted-foreground">
-                {config.azimuth === 0 ? "N" : config.azimuth > 0 ? `${config.azimuth}° E` : `${Math.abs(config.azimuth)}° W`}
-              </span>
-            </div>
-            <Slider
-              value={[config.azimuth]}
-              onValueChange={([v]) => updateConfig({ azimuth: v })}
-              min={-90}
-              max={90}
-              step={5}
-              disabled={config.arrayType === "tracking_2axis"}
-            />
-            <div className="flex justify-between text-[10px] text-muted-foreground">
-              <span>West</span>
-              <span className="text-primary">North (optimal)</span>
-              <span>East</span>
-            </div>
-          </div>
-        </div>
-
-        {/* DC/AC Ratio and Inverter Efficiency */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs flex items-center gap-1">
-                DC/AC Ratio
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Info className="h-3 w-3 text-muted-foreground" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[200px]">
-                      <p className="text-xs">Ratio of DC array size to AC inverter size. &gt;1.0 means over-paneling.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <span className="text-xs text-muted-foreground">{config.dcAcRatio.toFixed(2)}</span>
-            </div>
-            <Slider
-              value={[config.dcAcRatio * 100]}
-              onValueChange={([v]) => updateConfig({ dcAcRatio: v / 100 })}
-              min={100}
-              max={150}
-              step={5}
-            />
-            <div className="flex justify-between text-[10px] text-muted-foreground">
-              <span>1:1</span>
-              <span>1.5:1</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Inverter Efficiency</Label>
-              <span className="text-xs text-muted-foreground">{config.inverterEfficiency}%</span>
-            </div>
-            <Slider
-              value={[config.inverterEfficiency]}
-              onValueChange={([v]) => updateConfig({ inverterEfficiency: v })}
-              min={90}
-              max={99}
-              step={0.5}
-            />
-          </div>
-        </div>
-
-        {/* System Losses Collapsible */}
-        <Collapsible open={showLosses} onOpenChange={setShowLosses}>
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" size="sm" className="w-full justify-between text-xs">
-              <span className="flex items-center gap-2">
-                System Losses Calculator
-                <Badge variant="secondary" className="text-[10px]">
-                  {config.totalLossPercent.toFixed(1)}%
-                </Badge>
-              </span>
-              <ChevronDown className={`h-4 w-4 transition-transform ${showLosses ? "rotate-180" : ""}`} />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-3 space-y-3">
-            <div className="flex justify-end">
-              <Button variant="ghost" size="sm" onClick={resetLosses} className="text-xs h-7">
-                <RotateCcw className="h-3 w-3 mr-1" />
-                Reset to Defaults
-              </Button>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              {Object.entries(config.losses).map(([key, value]) => (
-                <LossSlider
-                  key={key}
-                  label={formatLossLabel(key as keyof SystemLosses)}
-                  value={value}
-                  onChange={(v) => updateLoss(key as keyof SystemLosses, v)}
-                  tooltip={getLossTooltip(key as keyof SystemLosses)}
+            {/* DC/AC Ratio and Inverter Efficiency */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs flex items-center gap-1">
+                    DC/AC Ratio
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="h-3 w-3 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[200px]">
+                          <p className="text-xs">Ratio of DC array size to AC inverter size. &gt;1.0 means over-paneling.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                  <span className="text-xs text-muted-foreground">{config.dcAcRatio.toFixed(2)}</span>
+                </div>
+                <Slider
+                  value={[config.dcAcRatio * 100]}
+                  onValueChange={([v]) => updateConfig({ dcAcRatio: v / 100 })}
+                  min={100}
+                  max={150}
+                  step={5}
                 />
-              ))}
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>1:1</span>
+                  <span>1.5:1</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Inverter Efficiency</Label>
+                  <span className="text-xs text-muted-foreground">{config.inverterEfficiency}%</span>
+                </div>
+                <Slider
+                  value={[config.inverterEfficiency]}
+                  onValueChange={([v]) => updateConfig({ inverterEfficiency: v })}
+                  min={90}
+                  max={99}
+                  step={0.5}
+                />
+              </div>
             </div>
 
-            <div className="pt-2 border-t flex justify-between items-center">
-              <span className="text-xs font-medium">Total System Losses</span>
-              <span className={`text-sm font-semibold ${config.totalLossPercent > 20 ? "text-amber-500" : ""}`}>
-                {config.totalLossPercent.toFixed(1)}%
-              </span>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+            {/* System Losses Collapsible */}
+            <Collapsible open={showLosses} onOpenChange={setShowLosses}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full justify-between text-xs">
+                  <span className="flex items-center gap-2">
+                    System Losses Calculator
+                    <Badge variant="secondary" className="text-[10px]">
+                      {config.totalLossPercent.toFixed(1)}%
+                    </Badge>
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showLosses ? "rotate-180" : ""}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3 space-y-3">
+                <div className="flex justify-end">
+                  <Button variant="ghost" size="sm" onClick={resetLosses} className="text-xs h-7">
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Reset to Defaults
+                  </Button>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  {Object.entries(config.losses).map(([key, value]) => (
+                    <LossSlider
+                      key={key}
+                      label={formatLossLabel(key as keyof SystemLosses)}
+                      value={value}
+                      onChange={(v) => updateLoss(key as keyof SystemLosses, v)}
+                      tooltip={getLossTooltip(key as keyof SystemLosses)}
+                    />
+                  ))}
+                </div>
+
+                <div className="pt-2 border-t flex justify-between items-center">
+                  <span className="text-xs font-medium">Total System Losses</span>
+                  <span className={`text-sm font-semibold ${config.totalLossPercent > 20 ? "text-amber-500" : ""}`}>
+                    {config.totalLossPercent.toFixed(1)}%
+                  </span>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </>
+        )}
 
         {/* Expected Output Summary */}
         <div className="pt-3 border-t space-y-1">
