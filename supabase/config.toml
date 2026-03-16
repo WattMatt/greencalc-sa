@@ -80,3 +80,6 @@ verify_jwt = false
 
 [functions.upload-generation-csv]
 verify_jwt = false
+
+[functions.global-solar-atlas]
+verify_jwt = false
