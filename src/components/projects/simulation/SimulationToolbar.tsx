@@ -73,6 +73,10 @@ export function SimulationToolbar({
             {pvgisLoadingTMY ? <Loader2 className="h-3 w-3 animate-spin" /> : <Database className="h-3 w-3" />}
             TMY
           </ToggleGroupItem>
+          <ToggleGroupItem value="gsa" size="sm" className="text-xs gap-1 px-3" disabled={gsaLoading}>
+            {gsaLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sun className="h-3 w-3" />}
+            GSA
+          </ToggleGroupItem>
         </ToggleGroup>
 
         <ToggleGroup
