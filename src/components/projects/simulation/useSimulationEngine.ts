@@ -67,6 +67,7 @@ export interface SimulationEngineConfig {
   annualPVsystResult: any;
   reductionFactor: number;
   overrideScaleFactor: number;
+  effectiveAnnualProduction: number; // Simplified chain target (used to align engine totals)
 
   // Navigation
   selectedDayIndex: number;
