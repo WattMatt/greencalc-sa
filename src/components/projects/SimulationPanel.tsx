@@ -460,7 +460,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 specificYieldOverride={specificYieldOverride} onSpecificYieldOverrideChange={setSpecificYieldOverride}
                 productionReductionPercent={productionReductionPercent} onProductionReductionPercentChange={setProductionReductionPercent}
                 calculatedDailyOutput={annualPVsystResult ? Math.round(annualPVsystResult.eGrid / 365) : Math.round(engine.annualEnergyResults.totalAnnualSolar / 365)}
-                calculatedSpecificYield={annualPVsystResult ? Math.round(annualPVsystResult.specificYield) : Math.round(engine.annualEnergyResults.totalAnnualSolar / solarCapacity)}
+                calculatedSpecificYield={annualPVsystResult ? Math.round(annualPVsystResult.specificYield) : Math.round(moduleMetrics.actualDcCapacityKwp > 0 ? engine.annualEnergyResults.totalAnnualSolar / moduleMetrics.actualDcCapacityKwp : 0)}
                 solarCapacity={solarCapacity}
               />
             ),
