@@ -268,7 +268,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     }
     return 1.0;
   }, [specificYieldOverride, dailyOutputOverride, annualPVsystResult,
-      moduleMetrics.actualDcCapacityKwp, simplifiedDailyOutput]);
+      simplifiedDcCapacity, simplifiedSpecificYield, simplifiedDailyOutput]);
 
   const effectiveReductionFactor = reductionFactor * overrideScaleFactor;
 
