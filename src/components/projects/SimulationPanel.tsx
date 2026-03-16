@@ -273,6 +273,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   const effectiveReductionFactor = reductionFactor * overrideScaleFactor;
 
+  // ── Effective values incorporating user overrides ──
+  const effectiveSpecificYield = simplifiedSpecificYield * overrideScaleFactor;
+  const effectiveAnnualProduction = simplifiedAnnualProduction * overrideScaleFactor;
+  const effectiveDailyOutput = effectiveAnnualProduction / 365;
+
   // ── Simulation engine hook ──
   const engine = useSimulationEngine({
     projectId, project, tenants, shopTypes,
@@ -504,7 +509,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
       <SimulationKPICards
         annualLoad={engine.annualEnergyResults.totalAnnualLoad}
-        annualSolar={annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedAnnualProduction}
+        annualSolar={annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : effectiveAnnualProduction}
         annualGridImport={engine.annualEnergyResults.totalAnnualGridImport}
         selfConsumptionRate={engine.annualEnergyResults.selfConsumptionRate}
         peakReduction={engine.annualEnergyResults.peakReduction}
@@ -523,10 +528,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             formula: '(DC Capacity × Specific Yield ÷ DC/AC Ratio) ÷ 365',
             inputs: [
               { label: 'DC Capacity', value: `${simplifiedDcCapacity.toFixed(1)} kWp` },
-              { label: 'Specific Yield', value: `${Math.round(simplifiedSpecificYield).toLocaleString()} kWh/kWp/yr` },
+              { label: 'Specific Yield', value: `${Math.round(effectiveSpecificYield).toLocaleString()} kWh/kWp/yr` },
               { label: 'DC/AC Ratio', value: `${inverterConfig.dcAcRatio}` },
-              { label: 'Annual Production', value: `${Math.round(annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedAnnualProduction).toLocaleString()} kWh` },
-              { label: 'Result', value: `${Math.round((annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : simplifiedAnnualProduction) / 365).toLocaleString()} kWh/day` },
+              { label: 'Annual Production', value: `${Math.round(annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : effectiveAnnualProduction).toLocaleString()} kWh` },
+              { label: 'Result', value: `${Math.round((annualPVsystResult ? engine.annualEnergyResults.totalAnnualSolar : effectiveAnnualProduction) / 365).toLocaleString()} kWh/day` },
+              ...(overrideScaleFactor !== 1 ? [{ label: 'Override Scale', value: `${(overrideScaleFactor * 100).toFixed(1)}%` }] : []),
             ],
           },
           annualProduction: annualPVsystResult
@@ -542,12 +548,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 formula: 'DC Capacity × Specific Yield ÷ DC/AC Ratio',
                 inputs: [
                   { label: 'DC Capacity', value: `${simplifiedDcCapacity.toFixed(1)} kWp` },
-                  { label: 'Specific Yield', value: `${Math.round(simplifiedSpecificYield).toLocaleString()} kWh/kWp/yr` },
+                  { label: 'Specific Yield', value: `${Math.round(effectiveSpecificYield).toLocaleString()} kWh/kWp/yr` },
                   { label: 'DC/AC Ratio', value: `${inverterConfig.dcAcRatio}` },
                   { label: 'Annual GHI', value: `${Math.round(annualGHI).toLocaleString()} kWh/m²/yr` },
                   { label: 'System Efficiency', value: '85%' },
                   { label: 'Production Reduction', value: `${productionReductionPercent}%` },
-                  { label: 'Result', value: `${Math.round(simplifiedAnnualProduction).toLocaleString()} kWh` },
+                  ...(overrideScaleFactor !== 1 ? [{ label: 'Override Scale', value: `${(overrideScaleFactor * 100).toFixed(1)}%` }] : []),
+                  { label: 'Result', value: `${Math.round(effectiveAnnualProduction).toLocaleString()} kWh` },
                 ],
               },
           gridImport: {

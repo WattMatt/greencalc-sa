@@ -1,31 +1,29 @@
 
 
-## Update KPI Cards & Tooltips to Reflect Yield/Output Overrides
+# Plan: Storage-first CSV retrieval with re-upload message
 
-### Problem
-When a user enters a specific yield or daily output override, the `overrideScaleFactor` correctly scales the hourly engine profiles, but the KPI cards' simplified-mode values (`annualSolar`, tooltip breakdowns) still show the un-overridden `simplifiedAnnualProduction` and `simplifiedSpecificYield`.
+## Changes
 
-### Solution
-Compute "effective" simplified values that incorporate the override, and use those everywhere in the KPI section.
+### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
 
-### Changes — `src/components/projects/SimulationPanel.tsx`
+Reorder `loadMeterForWizard` to check storage **first**:
 
-**1. After `overrideScaleFactor` (line ~274), compute effective values:**
-```typescript
-const effectiveSpecificYield = simplifiedSpecificYield * overrideScaleFactor;
-const effectiveAnnualProduction = simplifiedAnnualProduction * overrideScaleFactor;
-const effectiveDailyOutput = effectiveAnnualProduction / 365;
-```
+1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
+2. If storage returns CSV, use it
+3. Only if storage returns null, check legacy `rawData[0].csvContent`
+4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-**2. Update `annualSolar` prop on `SimulationKPICards` (line ~507):**
-Replace `simplifiedAnnualProduction` with `effectiveAnnualProduction`.
+### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
 
-**3. Update `calculatedDailyOutput` and `calculatedSpecificYield` passed to `SolarModulesPane` (lines ~471-472):**
-These already show the baseline — no change needed since the override inputs are separate.
+Same reordering:
 
-**4. Update tooltip breakdowns (lines ~522-551):**
-Replace raw `simplifiedSpecificYield`, `simplifiedAnnualProduction` with `effectiveSpecificYield`, `effectiveAnnualProduction` so the hover formulas reflect the actual displayed values. When an override is active, add an "Override Applied" input showing the scale factor.
+1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
+2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
+3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
 
-### Result
-Entering a specific yield of e.g. 1,600 kWh/kWp/yr (vs calculated 1,424) will immediately update: Solar Generated daily, Annual Production, and all downstream KPIs that flow from the engine's scaled profiles — with tooltips showing the overridden values.
+### No other files change
+
+- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
+- `uploadCsvToStorage` already runs on all new imports — no changes needed
+- No database changes
 
