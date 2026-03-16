@@ -76,6 +76,7 @@ export interface PVSystemConfigData {
   groundCoverageRatio: number;
   bifacial: boolean;
   albedo: number;
+  useDetailedLosses: boolean;
 }
 
 interface PVSystemConfigProps {
