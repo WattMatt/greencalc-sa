@@ -129,11 +129,18 @@ export function useSolarProfiles(config: UseSolarProfilesConfig) {
   const pvgisHourlyProfile = useMemo<HourlyIrradianceData[] | undefined>(() => {
     const activeData = solarDataSource === "pvgis_tmy" ? pvgisTmyData : pvgisMonthlyData;
     if (!activeData?.typicalDay?.hourlyGhi) return undefined;
+
+    // PVGIS monthly returns irradiance in kWh/m² (values < 2), but generateSolarProfile
+    // expects W/m². Detect and convert. TMY data is already in W/m².
+    const peakGhi = Math.max(...activeData.typicalDay.hourlyGhi);
+    const needsConversion = solarDataSource === "pvgis_monthly" && peakGhi > 0 && peakGhi < 5;
+    const scale = needsConversion ? 1000 : 1;
+
     return activeData.typicalDay.hourlyGhi.map((ghi, hour) => ({
       hour,
-      ghi,
-      dni: activeData.typicalDay.hourlyDni?.[hour] ?? 0,
-      dhi: activeData.typicalDay.hourlyDhi?.[hour] ?? 0,
+      ghi: ghi * scale,
+      dni: (activeData.typicalDay.hourlyDni?.[hour] ?? 0) * scale,
+      dhi: (activeData.typicalDay.hourlyDhi?.[hour] ?? 0) * scale,
       temp: activeData.typicalDay.hourlyTemp?.[hour] ?? 25,
     }));
   }, [solarDataSource, pvgisTmyData, pvgisMonthlyData]);
