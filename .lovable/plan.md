@@ -1,29 +1,37 @@
 
 
-# Plan: Storage-first CSV retrieval with re-upload message
+## Bug: Specific Yield Using AC Capacity Instead of DC Capacity
 
-## Changes
+### Problem
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+The displayed specific yield of **2,847 kWh/kWp/yr** is approximately double what it should be (~1,339). The root cause is on **line 462 of `SimulationPanel.tsx`**:
 
-Reorder `loadMeterForWizard` to check storage **first**:
+```
+calculatedSpecificYield={annualPVsystResult
+  ? Math.round(annualPVsystResult.specificYield)
+  : Math.round(engine.annualEnergyResults.totalAnnualSolar / solarCapacity)}
+```
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+`solarCapacity` is **AC capacity** (inverterSize × inverterCount = e.g. 1,875 kW), but specific yield must be divided by **DC capacity in kWp** (e.g. 2,250 kWp). With a 1.2 DC/AC ratio, this inflates the result by ~1.2×. Combined with the simplified model's higher generation (no clipping/temperature losses), the result lands at ~2,847.
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+The same issue affects the `overrideScaleFactor` simplified fallback on line 251, which also uses `solarCapacity` instead of DC capacity.
 
-Same reordering:
+### Fix
 
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+**File: `src/components/projects/SimulationPanel.tsx`**
 
-### No other files change
+1. **Line 462** — Replace `solarCapacity` with `moduleMetrics.actualDcCapacityKwp`:
+   ```
+   : Math.round(engine.annualEnergyResults.totalAnnualSolar / moduleMetrics.actualDcCapacityKwp)
+   ```
 
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
+2. **Line 251** — Fix the simplified fallback in `overrideScaleFactor`:
+   ```
+   const calculatedYield = annualPVsystResult?.specificYield
+     ?? (moduleMetrics.actualDcCapacityKwp > 0
+       ? engine.annualEnergyResults.totalAnnualSolar / moduleMetrics.actualDcCapacityKwp
+       : 0);
+   ```
+
+This ensures specific yield always uses DC capacity (kWp) as the denominator, matching the PVsyst path which correctly uses `capacityKwp`.
 
