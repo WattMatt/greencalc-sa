@@ -378,6 +378,11 @@ export function useSolarProfiles(config: UseSolarProfilesConfig) {
     annualPVsystResult,
     annualGHI,
 
+    // GSA
+    gsaData,
+    gsaLoading,
+    gsaSpecificYield,
+
     // TMY 8760
     tmyDcProfile8760,
     tmySolarProfile8760,
