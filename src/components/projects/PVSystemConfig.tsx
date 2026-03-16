@@ -117,6 +117,12 @@ export function calculateTotalLoss(losses: SystemLosses): number {
 }
 
 export function calculateSystemEfficiency(config: PVSystemConfigData): number {
+  // Simple mode: flat 15% system loss = 85% efficiency
+  if (!config.useDetailedLosses) {
+    return 0.85;
+  }
+
+  // Detailed mode: full compound calculation
   const moduleEff = MODULE_TYPES[config.moduleType].efficiency;
   const arrayMod = ARRAY_TYPES[config.arrayType].modifier;
   const inverterEff = config.inverterEfficiency / 100;
