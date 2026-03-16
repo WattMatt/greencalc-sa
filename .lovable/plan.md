@@ -1,29 +1,32 @@
 
 
-# Plan: Storage-first CSV retrieval with re-upload message
+## Analysis: Solar Generation Discrepancy & Degradation
 
-## Changes
+### Why the chart shows ~5.7M kWh instead of ~2.7M kWh
 
-### File 1: `src/components/loadprofiles/MeterLibrary.tsx` (lines 862-898)
+There are **two separate calculation paths** that have diverged:
 
-Reorder `loadMeterForWizard` to check storage **first**:
+| Path | Value | Used By |
+|------|-------|---------|
+| **Simplified chain** | ~2.7M kWh | KPI cards (`effectiveAnnualProduction`) |
+| **8,760-hour engine** | ~5.7M kWh | Financial chart, cashflow, NPV, IRR |
 
-1. Call `downloadCsvFromStorage(meterId)` immediately after fetching the meter record
-2. If storage returns CSV, use it
-3. Only if storage returns null, check legacy `rawData[0].csvContent`
-4. If neither exists, show error: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+The 20-year chart and all financial metrics use `annualEnergyResults.totalAnnualSolar` from the hourly engine. The KPI cards use the simplified algebraic chain (`GHI × 0.85 × DC Capacity ÷ DC/AC Ratio`). The override scale factor was applied to the KPI cards but **not propagated into the 8,760-hour engine's base results** that feed the financial projections.
 
-### File 2: `src/components/loadprofiles/SitesTab.tsx` (lines 1016-1057)
+### Why degradation appears absent
 
-Same reordering:
+Degradation **is** applied in the chart (`energyYield = baseAnnualSolar × panelEfficiency/100`), but at 0.5%/yr the drop from Year 1 to Year 20 is only ~9.5% — from ~5.7M to ~5.2M kWh. On a chart with a Y-axis starting at 0, this looks nearly flat.
 
-1. After fetching meter, call `downloadCsvFromStorage(meterId)` first
-2. Fall back to the existing legacy `csvContent` extraction logic only if storage returns null
-3. If neither exists, update error message to: **"The original CSV file is not available. Please re-upload the file to save and preview the data."**
+### Proposed Fix
 
-### No other files change
+**Unify the source of truth** so the KPI cards and the financial engine use the same annual solar value.
 
-- `CsvImportWizard` already renders the `wizardError` message — no changes needed there
-- `uploadCsvToStorage` already runs on all new imports — no changes needed
-- No database changes
+**In `SimulationPanel.tsx`** — when the 8,760-hour engine runs, pass the `overrideScaleFactor` into `useSimulationEngine` so it scales `totalAnnualSolar` before it enters the financial projections. This ensures:
+- The chart's Year 1 generation matches the KPI "Annual Production"
+- NPV, IRR, LCOE, Payback are all based on the same ~2.7M figure
+- Degradation applies on top of the correct baseline
+
+**In `useSimulationEngine.ts`** — multiply `totalAnnualSolar` (and related solar splits) by the override scale factor before passing to `calculateAdvancedFinancials()`.
+
+**Result**: Chart Year 1 will show ~2.7M kWh, degrading to ~2.5M by Year 20, consistent with the KPI cards and all financial outputs.
 
