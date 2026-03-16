@@ -362,6 +362,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         solcastLoading={solcastLoading}
         pvgisLoadingMonthly={pvgisLoadingMonthly}
         pvgisLoadingTMY={pvgisLoadingTMY}
+        gsaLoading={gsaLoading}
         lossCalculationMode={lossCalculationMode}
         onLossCalculationModeChange={setLossCalculationMode}
         isAutoSaving={isAutoSaving}
