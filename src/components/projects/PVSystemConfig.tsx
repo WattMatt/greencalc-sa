@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sun, Settings2, ChevronDown, Info, MapPin, Compass, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 
 
 // South African cities with solar resource data (GHI in kWh/m²/day, DNI in kWh/m²/day)
