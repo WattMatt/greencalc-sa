@@ -247,11 +247,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   // ── Compute override scale factor (user yield/daily output overrides) ──
   const overrideScaleFactor = useMemo(() => {
+    const dcCapacity = moduleMetrics.actualDcCapacityKwp;
     const calculatedYield = annualPVsystResult?.specificYield
-      ?? (solarCapacity > 0 ? (selectedLocation.ghi * 365 * 0.15) / solarCapacity : 0);
+      ?? (dcCapacity > 0 ? engine.annualEnergyResults.totalAnnualSolar / dcCapacity : 0);
     const calculatedDailyOutput = annualPVsystResult
       ? annualPVsystResult.eGrid / 365
-      : (solarCapacity > 0 ? selectedLocation.ghi * solarCapacity * 0.15 : 0);
+      : (dcCapacity > 0 ? engine.annualEnergyResults.totalAnnualSolar / 365 : 0);
 
     if (specificYieldOverride !== null && calculatedYield > 0) {
       return specificYieldOverride / calculatedYield;
@@ -459,7 +460,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 specificYieldOverride={specificYieldOverride} onSpecificYieldOverrideChange={setSpecificYieldOverride}
                 productionReductionPercent={productionReductionPercent} onProductionReductionPercentChange={setProductionReductionPercent}
                 calculatedDailyOutput={annualPVsystResult ? Math.round(annualPVsystResult.eGrid / 365) : Math.round(engine.annualEnergyResults.totalAnnualSolar / 365)}
-                calculatedSpecificYield={annualPVsystResult ? Math.round(annualPVsystResult.specificYield) : Math.round(engine.annualEnergyResults.totalAnnualSolar / solarCapacity)}
+                calculatedSpecificYield={annualPVsystResult ? Math.round(annualPVsystResult.specificYield) : Math.round(moduleMetrics.actualDcCapacityKwp > 0 ? engine.annualEnergyResults.totalAnnualSolar / moduleMetrics.actualDcCapacityKwp : 0)}
                 solarCapacity={solarCapacity}
               />
             ),
