@@ -535,10 +535,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 ],
               }
             : {
-                formula: 'Daily Output × 365',
+                formula: 'DC Capacity × Specific Yield',
                 inputs: [
-                  { label: 'Daily Output', value: `${Math.round(simplifiedDailyOutput).toLocaleString()} kWh` },
-                  { label: 'Result', value: `${Math.round(simplifiedDailyOutput * 365).toLocaleString()} kWh` },
+                  { label: 'DC Capacity', value: `${simplifiedDcCapacity.toFixed(1)} kWp` },
+                  { label: 'Specific Yield', value: `${Math.round(simplifiedSpecificYield).toLocaleString()} kWh/kWp/yr` },
+                  { label: 'Annual GHI', value: `${Math.round(annualGHI).toLocaleString()} kWh/m²/yr` },
+                  { label: 'System Efficiency', value: '85%' },
+                  { label: 'Production Reduction', value: `${productionReductionPercent}%` },
+                  { label: 'Result', value: `${Math.round(simplifiedDcCapacity * simplifiedSpecificYield).toLocaleString()} kWh` },
                 ],
               },
           gridImport: {
