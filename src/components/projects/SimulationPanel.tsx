@@ -236,7 +236,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const {
     solcastLoading, pvgisLoadingTMY, pvgisLoadingMonthly,
     solarProfile, solarProfileSolcast, solarProfileGenericSimplified,
-    solcastPvProfileData, annualPVsystResult,
+    solcastPvProfileData, annualPVsystResult, annualGHI,
     tmyDcProfile8760, tmySolarProfile8760, tmyInverterLossMultiplier,
     selectedLocation, isLoadingData, hasRealData, activeDataSourceLabel,
     reductionFactor,
