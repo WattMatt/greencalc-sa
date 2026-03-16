@@ -254,12 +254,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   // ── Compute override scale factor (user yield/daily output overrides) ──
   const overrideScaleFactor = useMemo(() => {
-    const dcCapacity = moduleMetrics.actualDcCapacityKwp;
+    const dcCapacity = simplifiedDcCapacity;
     const dailyOut = annualPVsystResult
       ? annualPVsystResult.eGrid / 365
       : simplifiedDailyOutput;
     const calcYield = annualPVsystResult?.specificYield
-      ?? (dcCapacity > 0 ? (dailyOut * 365) / dcCapacity : 0);
+      ?? simplifiedSpecificYield;
 
     if (specificYieldOverride !== null && calcYield > 0) {
       return specificYieldOverride / calcYield;
