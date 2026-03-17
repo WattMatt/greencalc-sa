@@ -5,8 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Sun, Clock, Calculator, Info } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sun, Clock, Calculator, Info, Pencil } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ProjectTariffEditor, useProjectTariffOverride } from "./ProjectTariffEditor";
 
 import {
   calculateAnnualBlendedRates,
