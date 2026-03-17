@@ -226,7 +226,7 @@ function SettingsContent() {
                   )}
                   <div>
                     <p className="font-medium text-foreground">
-                      {orgBranding.company_name || "Green Energy Financial Platform"}
+                      {orgBranding.company_name || "WM Solar"}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       This platform helps South African users model ROI and payback periods for solar and

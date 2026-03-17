@@ -22,9 +22,9 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -40,7 +40,7 @@ serve(async (req) => {
 
     // Support simple path + prompt for TourInfographic component
     if (body.path && body.prompt) {
-      const result = await generateSimpleInfographic(body.path, body.prompt, LOVABLE_API_KEY, supabase);
+      const result = await generateSimpleInfographic(body.path, body.prompt, GEMINI_API_KEY, supabase);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -52,7 +52,7 @@ serve(async (req) => {
       // Generate infographics for multiple tour steps
       const results = [];
       for (const step of tourStep as TourStepContext[]) {
-        const result = await generateInfographic(step, LOVABLE_API_KEY, supabase, SUPABASE_URL);
+        const result = await generateInfographic(step, GEMINI_API_KEY, supabase, SUPABASE_URL);
         results.push(result);
         // Small delay to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -63,7 +63,7 @@ serve(async (req) => {
     }
 
     // Generate single infographic
-    const result = await generateInfographic(tourStep as TourStepContext, LOVABLE_API_KEY, supabase, SUPABASE_URL);
+    const result = await generateInfographic(tourStep as TourStepContext, GEMINI_API_KEY, supabase, SUPABASE_URL);
     
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -107,38 +107,47 @@ async function generateInfographic(
   const infographicPrompt = buildPrompt(step);
 
   try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
-        messages: [
-          {
-            role: "user",
-            content: infographicPrompt,
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            { parts: [{ text: infographicPrompt }] },
+          ],
+          generationConfig: {
+            responseModalities: ["TEXT", "IMAGE"],
           },
-        ],
-        modalities: ["image", "text"],
-      }),
-    });
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
-      throw new Error(`AI Gateway error: ${response.status}`);
+      console.error("Gemini API error:", response.status, errorText);
+      throw new Error(`Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("AI response received");
+    console.log("Gemini response received");
 
-    // Extract the base64 image from the response
-    const imageData = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    
+    // Extract inline image data from Gemini response
+    // Gemini returns: { candidates: [{ content: { parts: [{ inlineData: { mimeType, data } }] } }] }
+    let imageData: string | undefined;
+    const parts = data.candidates?.[0]?.content?.parts;
+    if (parts) {
+      for (const part of parts) {
+        if (part.inlineData?.data) {
+          const mimeType = part.inlineData.mimeType || "image/png";
+          imageData = `data:${mimeType};base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    }
+
     if (!imageData) {
-      console.error("No image in response:", JSON.stringify(data));
+      console.error("No image in Gemini response:", JSON.stringify(data).substring(0, 300));
       return { success: false, error: "No image generated" };
     }
 
@@ -187,38 +196,46 @@ async function generateSimpleInfographic(
   console.log(`Generating simple infographic for path: ${path}`);
 
   try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
-        messages: [
-          {
-            role: "user",
-            content: `Generate a professional 512x256 icon-style infographic illustration: ${prompt}`,
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            { parts: [{ text: `Generate a professional 512x256 icon-style infographic illustration: ${prompt}` }] },
+          ],
+          generationConfig: {
+            responseModalities: ["TEXT", "IMAGE"],
           },
-        ],
-        modalities: ["image", "text"],
-      }),
-    });
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
-      throw new Error(`AI Gateway error: ${response.status}`);
+      console.error("Gemini API error:", response.status, errorText);
+      throw new Error(`Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("AI response received for simple infographic");
+    console.log("Gemini response received for simple infographic");
 
-    // Extract the base64 image from the response
-    const imageData = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    
+    // Extract inline image data from Gemini response
+    let imageData: string | undefined;
+    const parts = data.candidates?.[0]?.content?.parts;
+    if (parts) {
+      for (const part of parts) {
+        if (part.inlineData?.data) {
+          const mimeType = part.inlineData.mimeType || "image/png";
+          imageData = `data:${mimeType};base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    }
+
     if (!imageData) {
-      console.error("No image in response:", JSON.stringify(data));
+      console.error("No image in Gemini response:", JSON.stringify(data).substring(0, 300));
       return { success: false, error: "No image generated" };
     }
 

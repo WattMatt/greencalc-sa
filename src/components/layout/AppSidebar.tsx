@@ -99,10 +99,10 @@ export function AppSidebar() {
               <>
                 <div className="flex flex-col flex-1">
                   <span className="font-semibold text-sidebar-foreground">
-                    {orgBranding.company_name ? orgBranding.company_name.split(' ').slice(0, 2).join(' ') : "Green Energy"}
+                    {orgBranding.company_name ? orgBranding.company_name.split(' ').slice(0, 2).join(' ') : "WM Solar"}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {orgBranding.company_name ? orgBranding.company_name.split(' ').slice(2, 4).join(' ') || "Platform" : "Financial Platform"}
+                    {orgBranding.company_name ? orgBranding.company_name.split(' ').slice(2, 4).join(' ') || "Platform" : "Platform"}
                   </span>
                 </div>
                 <Tooltip>

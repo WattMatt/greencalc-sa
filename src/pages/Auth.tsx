@@ -133,7 +133,7 @@ export default function Auth() {
               <Zap className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl">Green Energy Platform</CardTitle>
+          <CardTitle className="text-2xl">WM Solar</CardTitle>
           <CardDescription>Sign in to access your projects and simulations</CardDescription>
         </CardHeader>
         <CardContent>

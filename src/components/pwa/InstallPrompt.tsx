@@ -82,7 +82,7 @@ export function InstallPrompt() {
             </Button>
           </div>
           <CardDescription className="text-xs">
-            Install Green Energy Platform for faster access and offline use
+            Install WM Solar for faster access and offline use
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-0">

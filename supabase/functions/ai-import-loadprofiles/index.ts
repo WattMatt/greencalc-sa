@@ -377,7 +377,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
     
     let accessToken: string;
     try {
@@ -459,25 +459,27 @@ ANALYZE AND IDENTIFY:
 
 Describe the data structure and provide recommendations for extraction.`;
 
-      const aiRes = await fetchWithRetry("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiRes = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
+          "x-api-key": anthropicApiKey!,
+          "anthropic-version": "2023-06-01",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          messages: [
-            { role: "system", content: `You are an expert in commercial building energy consumption patterns and load profile analysis for South African retail centers.
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 4096,
+          system: `You are an expert in commercial building energy consumption patterns and load profile analysis for South African retail centers.
 You understand HVAC loads, refrigeration cycles, lighting schedules, and how different retail/commercial tenant types consume energy throughout the day.
-Analyze spreadsheet data to identify shop types and their energy consumption characteristics for solar PV and battery storage modeling.` },
+Analyze spreadsheet data to identify shop types and their energy consumption characteristics for solar PV and battery storage modeling.`,
+          messages: [
             { role: "user", content: analysisPrompt }
           ],
         }),
       });
 
       const aiData = await aiRes.json();
-      const analysis = aiData.choices?.[0]?.message?.content || "Unable to analyze";
+      const analysis = aiData.content?.[0]?.text || "Unable to analyze";
 
       return new Response(
         JSON.stringify({ 
@@ -590,112 +592,104 @@ load_profile_weekday: [2, 1, 1, 1, 1, 4, 10, 12, 8, 4, 3, 3, 4, 4, 4, 5, 8, 12, 
 
 BE THOROUGH: Extract ALL distinct shop types. Include source_tab to track where each profile came from.`;
 
-      const aiRes = await fetchWithRetry("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiRes = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
+          "x-api-key": anthropicApiKey!,
+          "anthropic-version": "2023-06-01",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          messages: [
-            { role: "system", content: `You are an expert in commercial building energy consumption and load profile analysis for South African retail environments.
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 8192,
+          system: `You are an expert in commercial building energy consumption and load profile analysis for South African retail environments.
 Extract shop type load profiles from spreadsheet data, intelligently handling various data formats and units.
 Always provide complete 24-hour load profiles (arrays of exactly 24 values representing hours 0-23).
 Normalize profiles so hourly values represent percentage of daily consumption (sum to ~100).
 Be thorough - extract ALL distinct shop types found in the data.
-Flag any data quality issues or estimations made.` },
+Flag any data quality issues or estimations made.`,
+          messages: [
             { role: "user", content: extractPrompt }
           ],
           tools: [{
-            type: "function",
-            function: {
-              name: "save_load_profiles",
-              description: "Save extracted load profiles to the database",
-              parameters: {
-                type: "object",
-                properties: {
-                  confidence_score: { 
-                    type: "integer", 
-                    minimum: 0, 
-                    maximum: 100,
-                    description: "Overall confidence in the extraction accuracy (0-100)" 
-                  },
-                  new_categories: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "New categories to create if existing ones don't fit"
-                  },
-                  extraction_notes: {
-                    type: "string",
-                    description: "Notes about the extraction process, unit conversions, or data quality"
-                  },
-                  profiles: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        name: { type: "string", description: "Specific shop type name (e.g., Fine Dining Restaurant)" },
-                        category: { type: "string", description: "Category name (must match existing or new_categories)" },
-                        description: { type: "string", description: "Brief description of the shop type" },
-                        kwh_per_sqm_month: { type: "number", description: "Consumption in kWh per square meter per month" },
-                        load_profile_weekday: { 
-                          type: "array", 
-                          items: { type: "number" },
-                          minItems: 24,
-                          maxItems: 24,
-                          description: "Exactly 24 values for hourly consumption (% of daily total, hours 0-23)" 
-                        },
-                        load_profile_weekend: { 
-                          type: "array", 
-                          items: { type: "number" },
-                          minItems: 24,
-                          maxItems: 24,
-                          description: "Exactly 24 values for weekend hourly consumption" 
-                        },
-                        trading_hours: {
-                          type: "object",
-                          properties: {
-                            open: { type: "integer", minimum: 0, maximum: 23 },
-                            close: { type: "integer", minimum: 1, maximum: 24 }
-                          },
-                          description: "Operating hours (24-hour format)"
-                        },
-                        confidence: {
-                          type: "integer",
-                          minimum: 0,
-                          maximum: 100,
-                          description: "Confidence score for this specific profile"
-                        },
-                        source_tab: {
-                          type: "string",
-                          description: "Which spreadsheet tab this profile came from"
-                        },
-                        warnings: {
-                          type: "array",
-                          items: { type: "string" },
-                          description: "Any data quality warnings or notes"
-                        }
-                      },
-                      required: ["name", "category", "kwh_per_sqm_month", "load_profile_weekday"]
-                    }
-                  }
+            name: "save_load_profiles",
+            description: "Save extracted load profiles to the database",
+            input_schema: {
+              type: "object",
+              properties: {
+                confidence_score: {
+                  type: "integer",
+                  description: "Overall confidence in the extraction accuracy (0-100)"
                 },
-                required: ["confidence_score", "profiles"]
-              }
+                new_categories: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "New categories to create if existing ones don't fit"
+                },
+                extraction_notes: {
+                  type: "string",
+                  description: "Notes about the extraction process, unit conversions, or data quality"
+                },
+                profiles: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string", description: "Specific shop type name (e.g., Fine Dining Restaurant)" },
+                      category: { type: "string", description: "Category name (must match existing or new_categories)" },
+                      description: { type: "string", description: "Brief description of the shop type" },
+                      kwh_per_sqm_month: { type: "number", description: "Consumption in kWh per square meter per month" },
+                      load_profile_weekday: {
+                        type: "array",
+                        items: { type: "number" },
+                        description: "Exactly 24 values for hourly consumption (% of daily total, hours 0-23)"
+                      },
+                      load_profile_weekend: {
+                        type: "array",
+                        items: { type: "number" },
+                        description: "Exactly 24 values for weekend hourly consumption"
+                      },
+                      trading_hours: {
+                        type: "object",
+                        properties: {
+                          open: { type: "integer" },
+                          close: { type: "integer" }
+                        },
+                        description: "Operating hours (24-hour format)"
+                      },
+                      confidence: {
+                        type: "integer",
+                        description: "Confidence score for this specific profile"
+                      },
+                      source_tab: {
+                        type: "string",
+                        description: "Which spreadsheet tab this profile came from"
+                      },
+                      warnings: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Any data quality warnings or notes"
+                      }
+                    },
+                    required: ["name", "category", "kwh_per_sqm_month", "load_profile_weekday"]
+                  }
+                }
+              },
+              required: ["confidence_score", "profiles"]
             }
           }],
-          tool_choice: { type: "function", function: { name: "save_load_profiles" } }
+          tool_choice: { type: "tool", name: "save_load_profiles" }
         }),
       });
 
       const aiData = await aiRes.json();
-      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      const toolCall = aiData.content?.find((block: any) => block.type === "tool_use");
       
       if (!toolCall) {
         // Fallback: try to extract JSON from text response
         console.log("No tool call, attempting text extraction fallback");
-        const textContent = aiData.choices?.[0]?.message?.content || "";
+        const textBlock = aiData.content?.find((block: any) => block.type === "text");
+        const textContent = textBlock?.text || "";
         const jsonMatch = textContent.match(/\{[\s\S]*"profiles"[\s\S]*\}/);
         
         if (jsonMatch) {
@@ -730,7 +724,7 @@ Flag any data quality issues or estimations made.` },
         );
       }
 
-      const extracted = JSON.parse(toolCall.function.arguments);
+      const extracted = toolCall.input;
       console.log(`Extracted ${extracted.profiles?.length || 0} profiles with ${extracted.confidence_score}% confidence`);
       
       // Validate and normalize all profiles

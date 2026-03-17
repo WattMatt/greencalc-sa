@@ -52,7 +52,7 @@ export function NotificationSettings() {
       if (result === "granted") {
         toast.success("Notifications enabled!");
         // Send test notification
-        new Notification("Green Energy Platform", {
+        new Notification("WM Solar", {
           body: "You'll now receive notifications for important updates",
           icon: "/icons/icon-192x192.png",
         });

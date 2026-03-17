@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
     
     let accessToken: string;
     try {
@@ -197,23 +197,25 @@ Identify:
 
 Be specific about the data structure.`;
 
-      const aiRes = await fetchWithRetry("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiRes = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
+          "x-api-key": anthropicApiKey!,
+          "anthropic-version": "2023-06-01",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 4096,
+          system: "You are an expert in South African electricity tariff structures. Analyze spreadsheet data to identify municipalities, tariff categories, and rate structures.",
           messages: [
-            { role: "system", content: "You are an expert in South African electricity tariff structures. Analyze spreadsheet data to identify municipalities, tariff categories, and rate structures." },
             { role: "user", content: analysisPrompt }
           ],
         }),
       });
 
       const aiData = await aiRes.json();
-      const analysis = aiData.choices?.[0]?.message?.content || "Unable to analyze";
+      const analysis = aiData.content?.[0]?.text || "Unable to analyze";
 
       return new Response(
         JSON.stringify({ 
@@ -360,16 +362,7 @@ If source says 3.9275, extract 3.9275 (not 3.93)
 
 Extract ALL tariffs found. Each municipality may have 10-20+ different tariff structures. Be thorough and accurate.`;
 
-      const aiRes = await fetchWithRetry("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          messages: [
-            { role: "system", content: `You are an expert electricity tariff data extractor for South African municipalities. 
+      const systemContent = `You are an expert electricity tariff data extractor for South African municipalities.
 
 CRITICAL EXTRACTION RULES FROM LEARNED PATTERNS:
 
@@ -400,67 +393,75 @@ CRITICAL EXTRACTION RULES FROM LEARNED PATTERNS:
 6. PRECISION: Keep exact values (3.9275 not 3.93)
 7. CONVERT c/kWh to R/kWh (divide by 100)
 
-If your TOU tariff has empty or minimal rates, YOUR EXTRACTION IS WRONG.` },
+If your TOU tariff has empty or minimal rates, YOUR EXTRACTION IS WRONG.`;
+
+      const aiRes = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": anthropicApiKey!,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 8192,
+          system: systemContent,
+          messages: [
             { role: "user", content: extractPrompt }
           ],
           tools: [{
-            type: "function",
-            function: {
-              name: "save_tariffs",
-              description: "Save NERSA-compliant tariff data with confidence score",
-              parameters: {
-                type: "object",
-                properties: {
-                  confidence_score: { 
-                    type: "integer", 
-                    minimum: 0, 
-                    maximum: 100,
-                    description: "Your confidence in the extraction accuracy (0-100)" 
-                  },
-                  tariffs: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        municipality: { type: "string", description: "Municipality name (without percentage)" },
-                        category: { type: "string", description: "Domestic, Commercial, Industrial, Agricultural, Public Lighting, or Other" },
-                        customer_category: { type: "string", enum: ["Domestic", "Commercial", "Industrial", "Agriculture", "Street Lighting"] },
-                        tariff_name: { type: "string", description: "Full tariff name from document" },
-                        tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"] },
-                        voltage_level: { type: "string", enum: ["LV", "MV", "HV"] },
-                        capacity_kva: { type: "number", description: "Connection capacity in kVA" },
-                        phase_type: { type: "string", enum: ["Single Phase", "Three Phase"] },
-                        amperage_limit: { type: "string", description: "e.g., >20A, 60A, 100A" },
-                        is_prepaid: { type: "boolean" },
-                        fixed_monthly_charge: { type: "number", description: "Basic Charge in R/month" },
-                        demand_charge_per_kva: { type: "number", description: "Per-kVA charges in Rands" },
-                        reactive_energy_charge: { type: "number", description: "Reactive energy charge in R/kVArh" },
-                        rates: {
-                          type: "array",
-                          description: "Energy rates in R/kWh. Convert c/kWh by dividing by 100.",
-                          items: {
-                            type: "object",
-                            properties: {
-                              rate_per_kwh: { type: "number", description: "Energy rate in R/kWh" },
-                              block_start_kwh: { type: "number", description: "For IBT: start of block" },
-                              block_end_kwh: { type: ["number", "null"], description: "For IBT: end of block" },
-                              season: { type: "string", enum: ["All Year", "High/Winter", "Low/Summer"] },
-                              time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"] },
-                              reactive_energy_charge: { type: "number" }
-                            },
-                            required: ["rate_per_kwh"]
-                          }
-                        }
-                      },
-                      required: ["municipality", "category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
-                    }
-                  }
+            name: "save_tariffs",
+            description: "Save NERSA-compliant tariff data with confidence score",
+            input_schema: {
+              type: "object",
+              properties: {
+                confidence_score: {
+                  type: "integer",
+                  description: "Your confidence in the extraction accuracy (0-100)"
                 },
-                required: ["confidence_score", "tariffs"]
-              }
+                tariffs: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      municipality: { type: "string", description: "Municipality name (without percentage)" },
+                      category: { type: "string", description: "Domestic, Commercial, Industrial, Agricultural, Public Lighting, or Other" },
+                      customer_category: { type: "string" },
+                      tariff_name: { type: "string", description: "Full tariff name from document" },
+                      tariff_type: { type: "string" },
+                      voltage_level: { type: "string" },
+                      capacity_kva: { type: "number", description: "Connection capacity in kVA" },
+                      phase_type: { type: "string" },
+                      amperage_limit: { type: "string", description: "e.g., >20A, 60A, 100A" },
+                      is_prepaid: { type: "boolean" },
+                      fixed_monthly_charge: { type: "number", description: "Basic Charge in R/month" },
+                      demand_charge_per_kva: { type: "number", description: "Per-kVA charges in Rands" },
+                      reactive_energy_charge: { type: "number", description: "Reactive energy charge in R/kVArh" },
+                      rates: {
+                        type: "array",
+                        description: "Energy rates in R/kWh. Convert c/kWh by dividing by 100.",
+                        items: {
+                          type: "object",
+                          properties: {
+                            rate_per_kwh: { type: "number", description: "Energy rate in R/kWh" },
+                            block_start_kwh: { type: "number", description: "For IBT: start of block" },
+                            block_end_kwh: { type: "number", description: "For IBT: end of block" },
+                            season: { type: "string" },
+                            time_of_use: { type: "string" },
+                            reactive_energy_charge: { type: "number" }
+                          },
+                          required: ["rate_per_kwh"]
+                        }
+                      }
+                    },
+                    required: ["municipality", "category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
+                  }
+                }
+              },
+              required: ["confidence_score", "tariffs"]
             }
           }],
-          tool_choice: { type: "function", function: { name: "save_tariffs" } }
+          tool_choice: { type: "tool", name: "save_tariffs" }
         }),
       });
 
@@ -474,8 +475,8 @@ If your TOU tariff has empty or minimal rates, YOUR EXTRACTION IS WRONG.` },
       }
 
       const aiData = await aiRes.json();
-      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-      
+      const toolCall = aiData.content?.find((block: any) => block.type === "tool_use");
+
       if (!toolCall) {
         console.error("No tool call in response:", JSON.stringify(aiData));
         return new Response(
@@ -487,7 +488,7 @@ If your TOU tariff has empty or minimal rates, YOUR EXTRACTION IS WRONG.` },
       let extractedTariffs: ExtractedTariff[];
       let confidenceScore: number | null = null;
       try {
-        const args = JSON.parse(toolCall.function.arguments);
+        const args = toolCall.input;
         extractedTariffs = args.tariffs;
         confidenceScore = args.confidence_score ?? null;
         console.log(`AI extracted ${extractedTariffs.length} tariffs with ${confidenceScore}% confidence`);

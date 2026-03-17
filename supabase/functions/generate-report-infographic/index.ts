@@ -71,102 +71,86 @@ const prompts: Record<string, (data: InfographicRequest["data"], tariffData?: In
 async function generateImage(prompt: string, apiKey: string, retries = 2): Promise<string> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     console.log(`Image generation attempt ${attempt + 1}/${retries + 1}`);
-    
-    try {
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-pro-image-preview",
-          messages: [
-            {
-              role: "user",
-              content: `Generate an image: ${prompt}. IMPORTANT: You MUST generate an actual image, not just describe it.`,
-            },
-          ],
-          modalities: ["image", "text"],
-        }),
-      });
 
-      // Always consume the response body to prevent resource leaks
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: `Generate an image: ${prompt}. IMPORTANT: You MUST generate an actual image, not just describe it.` },
+                ],
+              },
+            ],
+            generationConfig: {
+              responseModalities: ["TEXT", "IMAGE"],
+            },
+          }),
+        }
+      );
+
       const responseText = await response.text();
-      
+
       if (!response.ok) {
-        console.error("AI gateway error:", response.status, responseText);
-        
+        console.error("Gemini API error:", response.status, responseText);
         if (response.status === 429) {
           throw { status: 429, message: "Rate limit exceeded. Please try again later." };
         }
-        if (response.status === 402) {
-          throw { status: 402, message: "AI credits exhausted. Please add funds to continue." };
+        if (response.status === 403) {
+          throw { status: 402, message: "Gemini API quota exhausted or access denied." };
         }
-        
-        throw new Error(`AI gateway error: ${response.status}`);
+        throw new Error(`Gemini API error: ${response.status}`);
       }
 
-      // Handle empty response
       if (!responseText || responseText.trim() === '') {
-        console.warn(`Attempt ${attempt + 1}: Empty response from API`);
-        if (attempt < retries) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          continue;
-        }
-        throw new Error("Empty response from AI gateway");
+        console.warn(`Attempt ${attempt + 1}: Empty response from Gemini`);
+        if (attempt < retries) { await new Promise(r => setTimeout(r, 1000)); continue; }
+        throw new Error("Empty response from Gemini API");
       }
 
-      // Parse JSON safely
       let result;
       try {
         result = JSON.parse(responseText);
-      } catch (parseError) {
-        console.warn(`Attempt ${attempt + 1}: Invalid JSON response:`, responseText.substring(0, 200));
-        if (attempt < retries) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          continue;
+      } catch (_parseError) {
+        console.warn(`Attempt ${attempt + 1}: Invalid JSON:`, responseText.substring(0, 200));
+        if (attempt < retries) { await new Promise(r => setTimeout(r, 1000)); continue; }
+        throw new Error("Invalid JSON response from Gemini API");
+      }
+
+      console.log("Gemini response keys:", JSON.stringify(Object.keys(result)));
+
+      // Gemini returns: { candidates: [{ content: { parts: [{ inlineData: { mimeType, data } }] } }] }
+      const parts = result.candidates?.[0]?.content?.parts;
+      if (parts) {
+        for (const part of parts) {
+          if (part.inlineData?.data) {
+            const mimeType = part.inlineData.mimeType || "image/png";
+            const base64Url = `data:${mimeType};base64,${part.inlineData.data}`;
+            console.log("Successfully generated image from Gemini");
+            return base64Url;
+          }
         }
-        throw new Error("Invalid JSON response from AI gateway");
       }
-      
-      console.log("API Response structure:", JSON.stringify(Object.keys(result)));
-      
-      // Check multiple possible image locations in the response
-      const imageUrl = 
-        result.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
-        result.choices?.[0]?.message?.images?.[0]?.url ||
-        result.choices?.[0]?.message?.image_url?.url ||
-        result.data?.[0]?.url;
-      
-      if (imageUrl) {
-        console.log("Successfully generated image");
-        return imageUrl;
-      }
-      
-      console.warn(`Attempt ${attempt + 1}: No image in response, content:`, 
-        result.choices?.[0]?.message?.content?.substring(0, 200));
-      
+
+      console.warn(`Attempt ${attempt + 1}: No image in Gemini response`);
       if (attempt < retries) {
         console.log("Retrying image generation...");
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(r => setTimeout(r, 1000));
       }
     } catch (fetchError) {
       console.error(`Attempt ${attempt + 1} failed:`, fetchError);
-      
-      // Re-throw status errors immediately
       if (typeof fetchError === 'object' && fetchError !== null && 'status' in fetchError) {
         throw fetchError;
       }
-      
-      if (attempt < retries) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        continue;
-      }
+      if (attempt < retries) { await new Promise(r => setTimeout(r, 1000)); continue; }
       throw fetchError;
     }
   }
-  
+
   throw new Error("Failed to generate image after multiple attempts. The AI model did not return an image.");
 }
 
@@ -178,9 +162,9 @@ serve(async (req) => {
   try {
     const { type, data, tariffData } = await req.json() as InfographicRequest;
     
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     const promptFn = prompts[type];
@@ -191,7 +175,7 @@ serve(async (req) => {
     const prompt = promptFn(data, tariffData);
     console.log(`Generating ${type} infographic with prompt:`, prompt.substring(0, 100) + "...");
 
-    const imageUrl = await generateImage(prompt, LOVABLE_API_KEY);
+    const imageUrl = await generateImage(prompt, GEMINI_API_KEY);
 
     console.log(`Successfully generated ${type} infographic`);
 

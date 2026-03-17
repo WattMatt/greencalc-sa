@@ -30,9 +30,9 @@ serve(async (req) => {
   try {
     const { sectionType, projectData } = await req.json();
     
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY is not configured');
     }
 
     // Build the prompt based on section type - now supports ALL report sections
@@ -204,76 +204,68 @@ Conclude with a confident but measured recommendation.`
     console.log(`Generating narrative for section: ${sectionType}`);
 
     // Use tool calling to get structured output
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: SYSTEM_PROMPT,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: prompt }
         ],
         tools: [
           {
-            type: 'function',
-            function: {
-              name: 'generate_narrative',
-              description: 'Generate professional narrative content for a solar proposal section',
-              parameters: {
-                type: 'object',
-                properties: {
-                  narrative: {
-                    type: 'string',
-                    description: 'The professional narrative text for this section, formatted with paragraphs separated by newlines. Keep it concise - 2-4 paragraphs maximum.'
-                  },
-                  keyHighlights: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    description: 'List of 2-4 key highlights or talking points from this section'
-                  }
+            name: 'generate_narrative',
+            description: 'Generate professional narrative content for a solar proposal section',
+            input_schema: {
+              type: 'object',
+              properties: {
+                narrative: {
+                  type: 'string',
+                  description: 'The professional narrative text for this section, formatted with paragraphs separated by newlines. Keep it concise - 2-4 paragraphs maximum.'
                 },
-                required: ['narrative', 'keyHighlights'],
-                additionalProperties: false
-              }
+                keyHighlights: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'List of 2-4 key highlights or talking points from this section'
+                }
+              },
+              required: ['narrative', 'keyHighlights']
             }
           }
         ],
-        tool_choice: { type: 'function', function: { name: 'generate_narrative' } }
+        tool_choice: { type: 'tool', name: 'generate_narrative' }
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
-      
+      console.error('Anthropic API error:', response.status, errorText);
+
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'AI credits exhausted. Please add credits to continue.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      throw new Error(`AI gateway returned ${response.status}`);
+
+      throw new Error(`Anthropic API returned ${response.status}`);
     }
 
     const data = await response.json();
-    
-    // Extract the tool call result
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall?.function?.arguments) {
+
+    // Extract the tool call result (Anthropic format)
+    const toolCall = data.content?.find((block: any) => block.type === 'tool_use');
+    if (!toolCall?.input) {
       throw new Error('No valid response from AI');
     }
 
-    const result = JSON.parse(toolCall.function.arguments);
+    const result = toolCall.input;
 
     console.log(`Generated ${sectionType} narrative with ${result.keyHighlights?.length || 0} highlights`);
 

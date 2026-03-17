@@ -45,9 +45,9 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
     const { type, context }: EnhanceRequest = await req.json();
@@ -64,26 +64,34 @@ serve(async (req) => {
 
     console.log(`Enhancing content: type=${type}, featureArea=${context.featureArea}`);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const anthropicTools = getToolsForType(type).map((t: any) => ({
+      name: t.function.name,
+      description: t.function.description,
+      input_schema: t.function.parameters,
+    }));
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-pro-preview",
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
+        system: systemPrompt,
         messages: [
-          { role: "system", content: systemPrompt },
           { role: "user", content: prompt },
         ],
-        tools: getToolsForType(type),
-        tool_choice: { type: "function", function: { name: getToolNameForType(type) } },
+        tools: anthropicTools,
+        tool_choice: { type: "tool", name: getToolNameForType(type) },
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
+      console.error("Anthropic API error:", response.status, errorText);
 
       if (response.status === 429) {
         return new Response(
@@ -91,25 +99,19 @@ serve(async (req) => {
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required. Please add credits to your workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
 
-      throw new Error(`AI Gateway error: ${response.status}`);
+      throw new Error(`Anthropic API error: ${response.status}`);
     }
 
     const data = await response.json();
     console.log("AI response received");
 
-    // Extract structured content from tool call
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    // Extract structured content from tool call (Anthropic format)
+    const toolCall = data.content?.find((block: any) => block.type === "tool_use");
     let enhancedContent: EnhancedContent;
 
-    if (toolCall?.function?.arguments) {
-      const parsed = JSON.parse(toolCall.function.arguments);
+    if (toolCall?.input) {
+      const parsed = toolCall.input;
       enhancedContent = {
         type,
         content: parsed[Object.keys(parsed)[0]], // Get the main content array/string
@@ -117,9 +119,10 @@ serve(async (req) => {
       };
     } else {
       // Fallback to raw content
+      const textBlock = data.content?.find((block: any) => block.type === "text");
       enhancedContent = {
         type,
-        content: data.choices?.[0]?.message?.content || "No content generated",
+        content: textBlock?.text || "No content generated",
         generatedAt: new Date().toISOString(),
       };
     }

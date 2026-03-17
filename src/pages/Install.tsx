@@ -37,11 +37,11 @@ export default function Install() {
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary/10 mb-4">
             <img 
               src="/icons/icon-192x192.png" 
-              alt="Green Energy Platform"
+              alt="WM Solar"
               className="w-16 h-16 rounded-xl"
             />
           </div>
-          <h1 className="text-3xl font-bold mb-2">Install Green Energy Platform</h1>
+          <h1 className="text-3xl font-bold mb-2">Install WM Solar</h1>
           <p className="text-muted-foreground">
             Get the full app experience on your device
           </p>
@@ -53,7 +53,7 @@ export default function Install() {
               <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-4" />
               <h2 className="text-xl font-semibold mb-2">App Installed!</h2>
               <p className="text-muted-foreground">
-                You're using the installed version of Green Energy Platform
+                You're using the installed version of WM Solar
               </p>
             </CardContent>
           </Card>

@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -216,23 +216,23 @@ Deno.serve(async (req) => {
     if (action === "analyze") {
       const analysisPrompt = `Analyze this South African electricity tariff data and describe its structure:\n\n${extractedText.slice(0, 50000)}\n\nIdentify:\n1. Municipality names found\n2. Tariff categories (Domestic, Commercial, Industrial, etc.)\n3. Tariff types (Fixed, IBT/block tariffs, TOU/time-of-use)\n4. Rate structures (basic charges, energy rates, demand charges)\n5. Any issues or inconsistencies in the data\n\nBe specific and concise.`;
 
-      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
+          "x-api-key": anthropicApiKey!, "anthropic-version": "2023-06-01",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "claude-sonnet-4-20250514", max_tokens: 8192,
+          system: "You are an expert in South African electricity tariff structures.",
           messages: [
-            { role: "system", content: "You are an expert in South African electricity tariff structures." },
             { role: "user", content: analysisPrompt }
           ],
         }),
       });
 
       const aiData = await aiRes.json();
-      const analysis = aiData.choices?.[0]?.message?.content || "Analysis failed";
+      const analysis = aiData.content?.[0]?.text || "Analysis failed";
 
       return new Response(
         JSON.stringify({ 
@@ -370,33 +370,30 @@ Deno.serve(async (req) => {
           console.log("Regex found no matches, falling back to AI extraction...");
           const muniPrompt = `Extract ONLY the municipality names from this South African electricity tariff document.\n\n${extractedText.slice(0, 50000)}\n\nReturn ONLY municipality names, one per line. Remove any percentages like "- 12.72%".`;
 
-          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
-            headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+            headers: { "x-api-key": anthropicApiKey!, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
+              model: "claude-sonnet-4-20250514", max_tokens: 8192,
               messages: [{ role: "user", content: muniPrompt }],
               tools: [{
-                type: "function",
-                function: {
-                  name: "list_municipalities",
-                  description: "List extracted municipality names",
-                  parameters: {
-                    type: "object",
-                    properties: { municipalities: { type: "array", items: { type: "string" } } },
-                    required: ["municipalities"]
-                  }
+                name: "list_municipalities",
+                description: "List extracted municipality names",
+                input_schema: {
+                  type: "object",
+                  properties: { municipalities: { type: "array", items: { type: "string" } } },
+                  required: ["municipalities"]
                 }
               }],
-              tool_choice: { type: "function", function: { name: "list_municipalities" } }
+              tool_choice: { type: "tool", name: "list_municipalities" }
             }),
           });
 
           if (aiRes.ok) {
             const aiData = await aiRes.json();
-            const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+            const toolCall = aiData.content?.find((block: any) => block.type === "tool_use");
             if (toolCall) {
-              const args = JSON.parse(toolCall.function.arguments);
+              const args = toolCall.input;
               municipalityNames = args.municipalities || [];
             }
           }
@@ -883,87 +880,84 @@ Deno.serve(async (req) => {
           console.log(`Extract AI call attempt ${attempt}/${MAX_RETRIES}`);
           
           // Use fastest model to avoid edge function timeout
-          const aiModel = isEskomExtraction ? "google/gemini-2.5-pro" : "google/gemini-2.5-flash";
+          const aiModel = "claude-sonnet-4-20250514";
           console.log(`Using model: ${aiModel}, text length: ${municipalityText.length}`);
           
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s timeout
           
-          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
-            headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+            headers: { "x-api-key": anthropicApiKey!, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
             signal: controller.signal,
             body: JSON.stringify({
-              model: aiModel,
+              model: aiModel, max_tokens: 8192,
+              system: "You are an expert at extracting South African electricity tariff data from documents. Focus on accuracy.",
               messages: [
-                { role: "system", content: "You are an expert at extracting South African electricity tariff data from documents. Focus on accuracy." },
                 { role: "user", content: extractPrompt }
               ],
               tools: [{
-                type: "function",
-                function: {
-                  name: "save_tariffs",
-                  description: "Save extracted tariffs. Mark each with action: 'new' or 'update'",
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      confidence_score: { type: "integer", minimum: 0, maximum: 100, description: "Extraction accuracy confidence (0-100)" },
-                      tariffs: {
-                        type: "array",
-                        items: {
-                          type: "object",
-                          properties: {
-                            category: { type: "string", description: "Domestic, Commercial, Industrial, Agricultural, Public Lighting, or Other" },
-                            tariff_name: { type: "string", description: "Full tariff name from document" },
-                            tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"] },
-                            voltage_level: { type: "string", enum: ["LV", "MV", "HV"] },
-                            phase_type: { type: "string", enum: ["Single Phase", "Three Phase"] },
-                            amperage_limit: { type: "string" },
-                            is_prepaid: { type: "boolean" },
-                            fixed_monthly_charge: { type: "number", description: "Basic charge R/month" },
-                            demand_charge_per_kva: { type: "number", description: "R/kVA charge" },
-                            tariff_family: { type: "string", description: "Eskom tariff family name" },
-                            transmission_zone: { type: "string", description: "Transmission zone label e.g. '<= 300km', '> 300km and <= 600km'" },
-                            legacy_charge_per_kwh: { type: "number", description: "Legacy surcharge in c/kWh" },
-                            generation_capacity_charge_per_kva: { type: "number", description: "[DISABLED - extract but do not actively use] Generation capacity charge in R/kVA/month" },
-                            network_charge_per_kva: { type: "number", description: "Transmission network charge in R/kVA/month" },
-                            network_demand_charge_peak_per_kwh: { type: "number", description: "Network demand charge for Peak period in c/kWh" },
-                            network_demand_charge_standard_per_kwh: { type: "number", description: "Network demand charge for Standard period in c/kWh" },
-                            ancillary_services_per_kwh: { type: "number", description: "Ancillary services charge in c/kWh" },
-                            electrification_rural_per_kwh: { type: "number", description: "Electrification and rural network subsidy charge in c/kWh" },
-                            service_charge_per_day: { type: "number", description: "[DISABLED - extract but do not actively use] Service charge in R/POD/day" },
-                            administration_charge_per_day: { type: "number", description: "[DISABLED - extract but do not actively use] Administration charge in R/POD/day" },
-                            urban_low_voltage_subsidy_per_kva: { type: "number", description: "Urban low voltage subsidy in R/kVA/month" },
-                            affordability_subsidy_per_kwh: { type: "number", description: "Affordability subsidy in c/kWh" },
-                            reactive_energy_charge_per_kvarh: { type: "number", description: "Reactive energy charge in c/kVArh" },
-                            capacity_kva: { type: "number" },
-                            effective_from: { type: "string", description: "Effective start date (YYYY-MM-DD) if found in document, e.g. 2024-07-01" },
-                            effective_to: { type: "string", description: "Effective end date (YYYY-MM-DD) if found in document, e.g. 2025-06-30" },
-                            rates: {
-                              type: "array",
-                              description: "Energy rates in R/kWh (convert c/kWh by dividing by 100)",
-                              items: {
-                                type: "object",
-                                properties: {
-                                  rate_per_kwh: { type: "number", description: "Energy rate in R/kWh" },
-                                  block_start_kwh: { type: "number" },
-                                  block_end_kwh: { type: ["number", "null"] },
-                                  season: { type: "string", enum: ["All Year", "High/Winter", "Low/Summer"] },
-                                  time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak"] }
-                                },
-                                required: ["rate_per_kwh"]
-                              }
+                name: "save_tariffs",
+                description: "Save extracted tariffs. Mark each with action: 'new' or 'update'",
+                input_schema: {
+                  type: "object",
+                  properties: {
+                    confidence_score: { type: "integer", description: "Extraction accuracy confidence (0-100)" },
+                    tariffs: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          category: { type: "string", description: "Domestic, Commercial, Industrial, Agricultural, Public Lighting, or Other" },
+                          tariff_name: { type: "string", description: "Full tariff name from document" },
+                          tariff_type: { type: "string" },
+                          voltage_level: { type: "string" },
+                          phase_type: { type: "string" },
+                          amperage_limit: { type: "string" },
+                          is_prepaid: { type: "boolean" },
+                          fixed_monthly_charge: { type: "number", description: "Basic charge R/month" },
+                          demand_charge_per_kva: { type: "number", description: "R/kVA charge" },
+                          tariff_family: { type: "string", description: "Eskom tariff family name" },
+                          transmission_zone: { type: "string", description: "Transmission zone label" },
+                          legacy_charge_per_kwh: { type: "number", description: "Legacy surcharge in c/kWh" },
+                          generation_capacity_charge_per_kva: { type: "number", description: "Generation capacity charge in R/kVA/month" },
+                          network_charge_per_kva: { type: "number", description: "Transmission network charge in R/kVA/month" },
+                          network_demand_charge_peak_per_kwh: { type: "number", description: "Network demand charge for Peak period in c/kWh" },
+                          network_demand_charge_standard_per_kwh: { type: "number", description: "Network demand charge for Standard period in c/kWh" },
+                          ancillary_services_per_kwh: { type: "number", description: "Ancillary services charge in c/kWh" },
+                          electrification_rural_per_kwh: { type: "number", description: "Electrification and rural network subsidy charge in c/kWh" },
+                          service_charge_per_day: { type: "number", description: "Service charge in R/POD/day" },
+                          administration_charge_per_day: { type: "number", description: "Administration charge in R/POD/day" },
+                          urban_low_voltage_subsidy_per_kva: { type: "number", description: "Urban low voltage subsidy in R/kVA/month" },
+                          affordability_subsidy_per_kwh: { type: "number", description: "Affordability subsidy in c/kWh" },
+                          reactive_energy_charge_per_kvarh: { type: "number", description: "Reactive energy charge in c/kVArh" },
+                          capacity_kva: { type: "number" },
+                          effective_from: { type: "string", description: "Effective start date (YYYY-MM-DD)" },
+                          effective_to: { type: "string", description: "Effective end date (YYYY-MM-DD)" },
+                          rates: {
+                            type: "array",
+                            description: "Energy rates in R/kWh (convert c/kWh by dividing by 100)",
+                            items: {
+                              type: "object",
+                              properties: {
+                                rate_per_kwh: { type: "number", description: "Energy rate in R/kWh" },
+                                block_start_kwh: { type: "number" },
+                                block_end_kwh: { type: "number" },
+                                season: { type: "string" },
+                                time_of_use: { type: "string" }
+                              },
+                              required: ["rate_per_kwh"]
                             }
-                          },
-                          required: ["category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
-                        }
+                          }
+                        },
+                        required: ["category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
                       }
-                    },
-                    required: ["confidence_score", "tariffs"]
-                  }
+                    }
+                  },
+                  required: ["confidence_score", "tariffs"]
                 }
               }],
-              tool_choice: { type: "function", function: { name: "save_tariffs" } }
+              tool_choice: { type: "tool", name: "save_tariffs" }
             }),
           });
           
@@ -975,8 +969,8 @@ Deno.serve(async (req) => {
           }
 
           const responseData = await aiRes.json();
-          const toolCall = responseData.choices?.[0]?.message?.tool_calls?.[0];
-          const content = responseData.choices?.[0]?.message?.content;
+          const toolCall = responseData.content?.find((block: any) => block.type === "tool_use");
+          const content = responseData.content?.find((block: any) => block.type === "text")?.text;
           
           if (!toolCall && !content) throw new Error("AI returned empty response");
           
@@ -996,14 +990,14 @@ Deno.serve(async (req) => {
         );
       }
       
-      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      const toolCall = aiData.content?.find((block: any) => block.type === "tool_use");
       
       let extractedTariffs: Omit<ExtractedTariff, 'municipality'>[];
       let confidenceScore: number | null = null;
       
       if (toolCall) {
         try {
-          const args = JSON.parse(toolCall.function.arguments);
+          const args = toolCall.input;
           extractedTariffs = args.tariffs;
           confidenceScore = args.confidence_score ?? null;
         } catch {
@@ -1013,7 +1007,7 @@ Deno.serve(async (req) => {
           );
         }
       } else {
-        const content = aiData.choices?.[0]?.message?.content;
+        const content = aiData.content?.[0]?.text;
         if (content) {
           const jsonMatch = content.match(/\{[\s\S]*"tariffs"[\s\S]*\}/);
           if (jsonMatch) {
@@ -1464,71 +1458,68 @@ Deno.serve(async (req) => {
       
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
-            headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+            headers: { "x-api-key": anthropicApiKey!, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "google/gemini-2.5-pro",
+              model: "claude-sonnet-4-20250514", max_tokens: 8192,
+              system: "You are an expert electricity tariff auditor for South African municipalities. Be meticulous. Check every value.",
               messages: [
-                { role: "system", content: "You are an expert electricity tariff auditor for South African municipalities. Be meticulous. Check every value." },
                 { role: "user", content: reprisePrompt }
               ],
               tools: [{
-                type: "function",
-                function: {
-                  name: "report_corrections",
-                  description: "Report tariffs to add or correct",
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      analysis: { type: "string" },
-                      confidence_score: { type: "integer", minimum: 0, maximum: 100 },
-                      tariffs: {
-                        type: "array",
-                        items: {
-                          type: "object",
-                          properties: {
-                            action: { type: "string", enum: ["add", "update"] },
-                            existing_name: { type: "string" },
-                            category: { type: "string" },
-                            tariff_name: { type: "string" },
-                            tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"] },
-                            phase_type: { type: "string", enum: ["Single Phase", "Three Phase"] },
-                            amperage_limit: { type: "string" },
-                            is_prepaid: { type: "boolean" },
-                            fixed_monthly_charge: { type: "number" },
-                            demand_charge_per_kva: { type: "number" },
-                            voltage_level: { type: "string", enum: ["LV", "MV", "HV"] },
-                            rates: {
-                              type: "array",
-                              items: {
-                                type: "object",
-                                properties: {
-                                  rate_per_kwh: { type: "number" },
-                                  block_start_kwh: { type: "number" },
-                                  block_end_kwh: { type: ["number", "null"] },
-                                  season: { type: "string" },
-                                  time_of_use: { type: "string" }
-                                },
-                                required: ["rate_per_kwh"]
-                              }
+                name: "report_corrections",
+                description: "Report tariffs to add or correct",
+                input_schema: {
+                  type: "object",
+                  properties: {
+                    analysis: { type: "string" },
+                    confidence_score: { type: "integer" },
+                    tariffs: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          action: { type: "string" },
+                          existing_name: { type: "string" },
+                          category: { type: "string" },
+                          tariff_name: { type: "string" },
+                          tariff_type: { type: "string" },
+                          phase_type: { type: "string" },
+                          amperage_limit: { type: "string" },
+                          is_prepaid: { type: "boolean" },
+                          fixed_monthly_charge: { type: "number" },
+                          demand_charge_per_kva: { type: "number" },
+                          voltage_level: { type: "string" },
+                          rates: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                rate_per_kwh: { type: "number" },
+                                block_start_kwh: { type: "number" },
+                                block_end_kwh: { type: "number" },
+                                season: { type: "string" },
+                                time_of_use: { type: "string" }
+                              },
+                              required: ["rate_per_kwh"]
                             }
-                          },
-                          required: ["action", "category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
-                        }
+                          }
+                        },
+                        required: ["action", "category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
                       }
-                    },
-                    required: ["analysis", "confidence_score", "tariffs"]
-                  }
+                    }
+                  },
+                  required: ["analysis", "confidence_score", "tariffs"]
                 }
               }],
-              tool_choice: { type: "function", function: { name: "report_corrections" } }
+              tool_choice: { type: "tool", name: "report_corrections" }
             }),
           });
 
           if (!aiRes.ok) throw new Error(`AI returned ${aiRes.status}`);
           const responseData = await aiRes.json();
-          if (!responseData.choices?.[0]?.message?.tool_calls?.[0]) throw new Error("No tool call");
+          if (!responseData.content?.find((block: any) => block.type === "tool_use")) throw new Error("No tool call");
           aiData = responseData;
           break;
         } catch (error) {
@@ -1544,11 +1535,11 @@ Deno.serve(async (req) => {
         );
       }
 
-      const repriseToolCall = aiData.choices[0].message.tool_calls[0];
+      const repriseToolCall = aiData.content?.find((block: any) => block.type === "tool_use");
       let analysis: string, repriseConfidence: number, corrections: any[];
-      
+
       try {
-        const parsed = JSON.parse(repriseToolCall.function.arguments);
+        const parsed = repriseToolCall.input;
         analysis = parsed.analysis;
         repriseConfidence = parsed.confidence_score;
         corrections = parsed.tariffs;

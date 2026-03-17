@@ -76,7 +76,7 @@ export default function Dashboard() {
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-card-foreground">About This Platform</CardTitle>
-            <CardDescription>Green Energy Financial Modelling</CardDescription>
+            <CardDescription>WM Solar - Financial Modelling</CardDescription>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground space-y-2">
             <p>
