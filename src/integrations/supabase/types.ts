@@ -1237,6 +1237,44 @@ export type Database = {
           },
         ]
       }
+      project_tariff_overrides: {
+        Row: {
+          created_at: string
+          id: string
+          overridden_plan_fields: Json | null
+          overridden_rates: Json | null
+          project_id: string
+          source_tariff_plan_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          overridden_plan_fields?: Json | null
+          overridden_rates?: Json | null
+          project_id: string
+          source_tariff_plan_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          overridden_plan_fields?: Json | null
+          overridden_rates?: Json | null
+          project_id?: string
+          source_tariff_plan_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_tariff_overrides_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_tenant_meters: {
         Row: {
           created_at: string
