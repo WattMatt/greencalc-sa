@@ -249,7 +249,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // ── Simplified DC capacity & yield (direct from GHI, or GSA PVOUT_csi) ──
   const simplifiedDcCapacity = solarCapacity * inverterConfig.dcAcRatio;
   const simplifiedSpecificYield = solarDataSource === "gsa" && gsaSpecificYield
-    ? gsaSpecificYield * 0.85
+    ? gsaSpecificYield
     : annualGHI * 0.85 * (1 - productionReductionPercent / 100);
   const simplifiedAnnualProduction = simplifiedDcCapacity > 0
     ? simplifiedDcCapacity * simplifiedSpecificYield / inverterConfig.dcAcRatio
