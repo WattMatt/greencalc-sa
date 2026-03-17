@@ -964,7 +964,7 @@ function TariffCardWithEditor({
 
             <BlendedRatesCard
               rates={mapDbRatesToTariffRates(
-                (selectedTariff as any).tariff_rates || [],
+                (override?.overridden_rates as any[] | null) ?? (selectedTariff as any).tariff_rates ?? [],
                 { legacy_charge_per_kwh: Number((selectedTariff as any).legacy_charge_per_kwh) || 0 }
               )}
               tariff={{ legacy_charge_per_kwh: Number((selectedTariff as any).legacy_charge_per_kwh) || 0 }}
