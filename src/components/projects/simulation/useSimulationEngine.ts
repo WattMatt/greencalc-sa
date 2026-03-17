@@ -367,7 +367,7 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     return baseTariffRates;
   }, [tariffOverride, baseTariffRates]);
 
-  const { data: tariff } = useQuery({
+  const { data: baseTariff } = useQuery({
     queryKey: ["tariff", project.tariff_id],
     queryFn: async () => {
       const { data: plan, error } = await supabase
@@ -394,6 +394,24 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     },
     enabled: !!project.tariff_id,
   });
+
+  // Merge plan-level overrides (basic, demand charges) from project overrides
+  const tariff = useMemo(() => {
+    if (!baseTariff) return baseTariff;
+    if (tariffOverride?.overridden_rates) {
+      const overrides = tariffOverride.overridden_rates as unknown as any[];
+      const basicCharge = overrides.find((r: any) => r.charge === 'basic')?.amount ?? baseTariff.fixed_monthly_charge;
+      const demandCharge = overrides.find((r: any) => r.charge === 'demand')?.amount ?? baseTariff.demand_charge_per_kva;
+      const networkCharge = overrides.find((r: any) => r.charge === 'network_access')?.amount ?? baseTariff.network_access_charge;
+      return {
+        ...baseTariff,
+        fixed_monthly_charge: basicCharge,
+        demand_charge_per_kva: demandCharge,
+        network_access_charge: networkCharge,
+      };
+    }
+    return baseTariff;
+  }, [baseTariff, tariffOverride]);
 
   const hasFinancialData = !!project.tariff_id;
 
