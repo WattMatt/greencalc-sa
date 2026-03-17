@@ -812,24 +812,69 @@ export function TariffSelector({
       </div>
 
       {selectedTariff && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <div>
-                <CardTitle>{(selectedTariff as any).name}</CardTitle>
-                <CardDescription>
-                  {(selectedTariff as any).municipalities?.name},{" "}
-                  {(selectedTariff as any).municipalities?.provinces?.name}
-                </CardDescription>
-              </div>
-              <div className="flex gap-2">
-                <Badge variant="secondary">{(selectedTariff as any).structure}</Badge>
-                {(selectedTariff as any).voltage && (
-                  <Badge variant="outline">{(selectedTariff as any).voltage}</Badge>
+        <TariffCardWithEditor
+          projectId={projectId}
+          selectedTariff={selectedTariff}
+          selectedBlendedRateType={selectedBlendedRateType}
+          onBlendedRateTypeChange={onBlendedRateTypeChange}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Extracted tariff card that includes the edit-rates button and override indicator */
+function TariffCardWithEditor({
+  projectId,
+  selectedTariff,
+  selectedBlendedRateType,
+  onBlendedRateTypeChange,
+}: {
+  projectId: string;
+  selectedTariff: any;
+  selectedBlendedRateType: BlendedRateType;
+  onBlendedRateTypeChange?: (type: BlendedRateType) => void;
+}) {
+  const [editorOpen, setEditorOpen] = useState(false);
+  const tariffId = (selectedTariff as any).id;
+  const { data: override } = useProjectTariffOverride(projectId, tariffId);
+  const hasOverride = !!override;
+
+  return (
+    <>
+      <ProjectTariffEditor
+        projectId={projectId}
+        tariffPlanId={tariffId}
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+      />
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                {(selectedTariff as any).name}
+                {hasOverride && (
+                  <Badge variant="default" className="text-[10px]">Overridden</Badge>
                 )}
-              </div>
+              </CardTitle>
+              <CardDescription>
+                {(selectedTariff as any).municipalities?.name},{" "}
+                {(selectedTariff as any).municipalities?.provinces?.name}
+              </CardDescription>
             </div>
-          </CardHeader>
+            <div className="flex gap-2 items-center">
+              <Button size="sm" variant="outline" onClick={() => setEditorOpen(true)}>
+                <Pencil className="h-3.5 w-3.5 mr-1" />
+                Edit Rates
+              </Button>
+              <Badge variant="secondary">{(selectedTariff as any).structure}</Badge>
+              {(selectedTariff as any).voltage && (
+                <Badge variant="outline">{(selectedTariff as any).voltage}</Badge>
+              )}
+            </div>
+          </div>
+        </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-4 text-sm">
               <div>
