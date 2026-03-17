@@ -318,8 +318,24 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     return dailySlice;
   }, [showAnnualAverage, annualAverageSlice, dailySlice]);
 
+  // ── Tariff overrides (project-level) ──
+  const { data: tariffOverride } = useQuery({
+    queryKey: ["tariff-overrides", cfg.projectId, project.tariff_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_tariff_overrides")
+        .select("*")
+        .eq("project_id", cfg.projectId)
+        .eq("source_tariff_plan_id", project.tariff_id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!project.tariff_id,
+  });
+
   // ── Tariff queries ──
-  const { data: tariffRates } = useQuery({
+  const { data: baseTariffRates } = useQuery({
     queryKey: ["tariff-rates", project.tariff_id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -336,6 +352,20 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     },
     enabled: !!project.tariff_id,
   });
+
+  // Merge: if project-level overrides exist, use them instead of base rates
+  const tariffRates = useMemo(() => {
+    if (tariffOverride?.overridden_rates) {
+      const overrides = tariffOverride.overridden_rates as unknown as any[];
+      return overrides.map((r: any) => ({
+        ...r,
+        rate_per_kwh: r.charge === 'energy' ? r.amount : 0,
+        time_of_use: r.tou === 'all' ? 'Any' : r.tou === 'peak' ? 'Peak' : r.tou === 'standard' ? 'Standard' : 'Off-Peak',
+        season: r.season === 'all' ? 'All Year' : r.season === 'high' ? 'High/Winter' : 'Low/Summer',
+      }));
+    }
+    return baseTariffRates;
+  }, [tariffOverride, baseTariffRates]);
 
   const { data: tariff } = useQuery({
     queryKey: ["tariff", project.tariff_id],
