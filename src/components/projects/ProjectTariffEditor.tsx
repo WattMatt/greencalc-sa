@@ -71,7 +71,7 @@ export function ProjectTariffEditor({ projectId, tariffPlanId, open, onOpenChang
   // Initialise editor state from override or original
   useEffect(() => {
     if (!originalRates) return;
-    const overrideRates = existingOverride?.overridden_rates as RateRow[] | null;
+    const overrideRates = existingOverride?.overridden_rates as unknown as RateRow[] | null;
     const overridePlan = existingOverride?.overridden_plan_fields as Record<string, number> | null;
     setEditedRates(overrideRates ?? originalRates.map(r => ({ ...r })));
     setEditedPlanFields(overridePlan ?? {});
