@@ -973,7 +973,6 @@ function TariffCardWithEditor({
             />
           </CardContent>
         </Card>
-      )}
-    </div>
-  );
+      </>
+    );
 }
