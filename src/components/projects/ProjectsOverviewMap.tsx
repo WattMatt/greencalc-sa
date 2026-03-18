@@ -138,16 +138,34 @@ export function ProjectsOverviewMap({ projects, onProjectClick, fullHeight = fal
 
       wrapper.appendChild(el);
 
+      // Hover tooltip - shows name on hover
+      const tooltip = new mapboxgl.Popup({
+        offset: 20,
+        closeButton: false,
+        closeOnClick: false,
+        className: "marker-tooltip",
+      }).setHTML(`
+        <div style="padding: 6px 10px; font-family: system-ui, sans-serif;">
+          <strong style="font-size: 13px;">${project.name}</strong>
+          ${project.location ? `<br/><span style="font-size: 11px; color: #666;">${project.location}</span>` : ''}
+        </div>
+      `);
+
       wrapper.addEventListener("mouseenter", () => {
         el.style.boxShadow = "0 4px 16px rgba(0,0,0,0.4)";
         el.style.borderColor = "hsl(var(--primary))";
+        // Show tooltip on hover (only if click popup isn't open)
+        if (!marker.getPopup()?.isOpen()) {
+          tooltip.setLngLat([project.longitude!, project.latitude!]).addTo(map.current!);
+        }
       });
       wrapper.addEventListener("mouseleave", () => {
         el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
         el.style.borderColor = "white";
+        tooltip.remove();
       });
 
-      // Build popup with project info card and Open button
+      // Click popup - shows full info card with Open button
       const popupId = `popup-btn-${project.id}`;
       const popup = new mapboxgl.Popup({ offset: 25, closeButton: true, maxWidth: "280px" })
         .setHTML(`
@@ -173,6 +191,7 @@ export function ProjectsOverviewMap({ projects, onProjectClick, fullHeight = fal
         `);
 
       popup.on("open", () => {
+        tooltip.remove(); // Hide tooltip when click popup opens
         const btn = document.getElementById(popupId);
         if (btn && onProjectClick) {
           btn.addEventListener("click", () => onProjectClick(project.id));
