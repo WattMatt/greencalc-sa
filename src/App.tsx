@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import { TourProvider, TourOverlay } from "@/components/onboarding";
+import { TourProvider } from "@/components/onboarding";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { OfflineIndicator, InstallPrompt } from "@/components/pwa";
 
@@ -111,7 +111,7 @@ const App = () => (
         <TourProvider>
           <Toaster />
           <Sonner />
-          <TourOverlay />
+          {/* TourOverlay disabled for now */}
           <OfflineIndicator />
           <InstallPrompt />
           <BrowserRouter>
