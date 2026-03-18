@@ -1,24 +1,30 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const token = Deno.env.get("MAPBOX_PUBLIC_TOKEN");
-  
-  if (!token) {
+  try {
+    const token = Deno.env.get("MAPBOX_ACCESS_TOKEN");
+    if (!token) {
+      throw new Error("MAPBOX_ACCESS_TOKEN not configured");
+    }
+
     return new Response(
-      JSON.stringify({ error: "Mapbox token not configured" }),
+      JSON.stringify({ token }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (err: unknown) {
+    const error = err as Error;
+    return new Response(
+      JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-
-  return new Response(
-    JSON.stringify({ token }),
-    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-  );
 });
