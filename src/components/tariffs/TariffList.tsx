@@ -286,17 +286,30 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
     }
   };
 
-  // Function to open preview - force reload tariffs to ensure fresh data
-  const handleOpenPreview = async (municipalityName: string, muniTariffs: Tariff[]) => {
-    if (muniTariffs.length === 0) {
-      // Force load if no tariffs passed
-      await loadTariffsForMunicipality(municipalityName, true);
-      const loaded = municipalityTariffs[municipalityName];
-      if (loaded) {
-        setPreviewMunicipality({ name: municipalityName, tariffs: loaded });
-      }
+  // Function to open preview - loads tariffs directly and opens dialog with the result
+  const handleOpenPreview = async (municipalityName: string) => {
+    const muni = municipalities?.find(m => m.name === municipalityName);
+    if (!muni) return;
+
+    // Always fetch fresh tariffs directly (don't rely on state)
+    const { data, error } = await supabase
+      .from("tariff_plans")
+      .select(`
+        *,
+        municipality:municipalities(name, province_id),
+        tariff_rates(*)
+      `)
+      .eq("municipality_id", muni.id)
+      .order("name");
+
+    if (!error && data) {
+      const tariffs = data as unknown as Tariff[];
+      // Also update the cache
+      setMunicipalityTariffs(prev => ({ ...prev, [municipalityName]: tariffs }));
+      setPreviewMunicipality({ name: municipalityName, tariffs });
     } else {
-      setPreviewMunicipality({ name: municipalityName, tariffs: muniTariffs });
+      // Fallback: open with whatever we have cached
+      setPreviewMunicipality({ name: municipalityName, tariffs: municipalityTariffs[municipalityName] || [] });
     }
   };
 
@@ -635,10 +648,9 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                           variant="outline"
                           size="sm"
                           className="h-7 text-xs gap-1"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            loadTariffsForMunicipality(municipality.name);
-                            handleOpenPreview(municipality.name, municipalityTariffs[municipality.name] || []);
+                            await handleOpenPreview(municipality.name);
                           }}
                         >
                           <Eye className="h-3 w-3" />
