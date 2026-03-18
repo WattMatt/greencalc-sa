@@ -186,14 +186,33 @@ USING (
 );
 
 -- ============================================================
--- Seed: Create default org for existing admin
+-- Seed: Create default org for any existing admin user
+-- (skips gracefully if no users exist yet)
 -- ============================================================
 
 DO $$
 DECLARE
   _org_id uuid;
-  _admin_id uuid := '912ffa08-c673-4dd3-a91f-788cae2a8d05';
+  _admin_id uuid;
 BEGIN
+  -- Find the first admin user that actually exists in auth.users
+  SELECT ur.user_id INTO _admin_id
+  FROM public.user_roles ur
+  INNER JOIN auth.users au ON au.id = ur.user_id
+  WHERE ur.role = 'admin'
+  LIMIT 1;
+
+  -- If no admin role exists, try the first auth user
+  IF _admin_id IS NULL THEN
+    SELECT id INTO _admin_id FROM auth.users LIMIT 1;
+  END IF;
+
+  -- Skip if no users exist at all
+  IF _admin_id IS NULL THEN
+    RAISE NOTICE 'No users found, skipping org seed. Org will be created on first admin login.';
+    RETURN;
+  END IF;
+
   -- Create org
   INSERT INTO public.organizations (name, created_by)
   VALUES ('WM Solar', _admin_id)
