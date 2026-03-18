@@ -109,28 +109,42 @@ export function ProjectsOverviewMap({ projects, onProjectClick, fullHeight = fal
 
     // Add markers for each project
     projectsWithCoords.forEach(project => {
+      // Outer wrapper gives a stable hit area that doesn't move
+      const wrapper = document.createElement("div");
+      wrapper.style.cssText = `
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      `;
+
       const el = document.createElement("div");
-      el.className = "project-marker";
       el.style.cssText = `
         width: 32px;
         height: 32px;
         background: hsl(var(--primary));
         border: 3px solid white;
         border-radius: 50%;
-        cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        transition: transform 0.2s;
+        transition: box-shadow 0.2s, border-color 0.2s;
+        pointer-events: none;
       `;
       el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`;
-      
-      el.addEventListener("mouseenter", () => {
-        el.style.transform = "scale(1.2)";
+
+      wrapper.appendChild(el);
+
+      wrapper.addEventListener("mouseenter", () => {
+        el.style.boxShadow = "0 4px 16px rgba(0,0,0,0.4)";
+        el.style.borderColor = "hsl(var(--primary))";
       });
-      el.addEventListener("mouseleave", () => {
-        el.style.transform = "scale(1)";
+      wrapper.addEventListener("mouseleave", () => {
+        el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+        el.style.borderColor = "white";
       });
 
       const popup = new mapboxgl.Popup({ offset: 25, closeButton: false })
@@ -141,12 +155,13 @@ export function ProjectsOverviewMap({ projects, onProjectClick, fullHeight = fal
           </div>
         `);
 
-      const marker = new mapboxgl.Marker(el)
+      const marker = new mapboxgl.Marker({ element: wrapper, anchor: "center" })
         .setLngLat([project.longitude!, project.latitude!])
         .setPopup(popup)
         .addTo(map.current!);
 
-      el.addEventListener("click", () => {
+      wrapper.addEventListener("click", (e) => {
+        e.stopPropagation();
         if (onProjectClick) {
           onProjectClick(project.id);
         }
