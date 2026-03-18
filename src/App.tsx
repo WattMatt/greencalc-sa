@@ -31,6 +31,7 @@ const Install = lazy(() => import("./pages/Install"));
 const CodeReview = lazy(() => import("./pages/CodeReview"));
 
 
+const AcceptInvite = lazy(() => import("./pages/AcceptInvite"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Loading fallback component
@@ -67,6 +68,7 @@ function AppRoutes() {
         <Route path="/auth" element={<Auth />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/portal/:token" element={<ClientPortal />} />
+        <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route
           path="/*"
           element={

@@ -44,11 +44,38 @@ export function useOrganizationBranding() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from("organization_branding")
-        .select("*")
+      // First try to get org-scoped branding via the user's org membership
+      let data = null;
+      let error = null;
+
+      // Check if user belongs to an org
+      const { data: membership } = await supabase
+        .from("organization_members")
+        .select("org_id")
         .eq("user_id", user.id)
         .maybeSingle();
+
+      if (membership?.org_id) {
+        // Get org-scoped branding
+        const result = await supabase
+          .from("organization_branding")
+          .select("*")
+          .eq("org_id", membership.org_id)
+          .maybeSingle();
+        data = result.data;
+        error = result.error;
+      }
+
+      // Fallback to user-scoped branding
+      if (!data) {
+        const result = await supabase
+          .from("organization_branding")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) throw error;
       if (data) {

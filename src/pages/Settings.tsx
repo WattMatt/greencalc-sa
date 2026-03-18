@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Settings as SettingsIcon, Bell, Moon, Sun, Monitor, HelpCircle, RotateCcw, Zap, ExternalLink, Users, Building2, Calculator, FileText, Clock } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Moon, Sun, Monitor, HelpCircle, RotateCcw, Zap, ExternalLink, Users, UserPlus, Building2, Calculator, FileText, Clock } from "lucide-react";
 import { NotificationSettings } from "@/components/pwa/NotificationSettings";
 import { ContentEnhancerDemo } from "@/components/onboarding/ContentEnhancerDemo";
 import { APIIntegrationConfigPanel, APIIntegrationStatus } from "@/components/projects/simulation";
@@ -20,8 +20,9 @@ import { SettingsErrorBoundary } from "@/components/settings/SettingsErrorBounda
 import { SettingsLoadingSkeleton } from "@/components/settings/SettingsLoadingSkeleton";
 import { ChecklistTemplatesCard } from "@/components/settings/ChecklistTemplatesCard";
 import { TOUSettingsCard } from "@/components/settings/TOUSettingsCard";
+import { UsersSettingsCard } from "@/components/settings/UsersSettingsCard";
 
-const EXPECTED_TAB_COUNT = 10;
+const EXPECTED_TAB_COUNT = 11;
 
 function SettingsContent() {
   const { theme, setTheme } = useTheme();
@@ -72,6 +73,10 @@ function SettingsContent() {
           <TabsTrigger value="branding" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
             Branding
+          </TabsTrigger>
+          <TabsTrigger value="users" className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4" />
+            Users
           </TabsTrigger>
           <TabsTrigger value="diversity" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
@@ -246,6 +251,12 @@ function SettingsContent() {
 
         <TabsContent value="branding" className="space-y-6">
           <BrandingSettingsCard />
+        </TabsContent>
+
+        <TabsContent value="users" className="space-y-6">
+          <SettingsErrorBoundary>
+            <UsersSettingsCard />
+          </SettingsErrorBoundary>
         </TabsContent>
 
         <TabsContent value="diversity" className="space-y-6">
