@@ -286,9 +286,18 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
     }
   };
 
-  // Function to open preview
-  const handleOpenPreview = (municipalityName: string, muniTariffs: Tariff[]) => {
-    setPreviewMunicipality({ name: municipalityName, tariffs: muniTariffs });
+  // Function to open preview - force reload tariffs to ensure fresh data
+  const handleOpenPreview = async (municipalityName: string, muniTariffs: Tariff[]) => {
+    if (muniTariffs.length === 0) {
+      // Force load if no tariffs passed
+      await loadTariffsForMunicipality(municipalityName, true);
+      const loaded = municipalityTariffs[municipalityName];
+      if (loaded) {
+        setPreviewMunicipality({ name: municipalityName, tariffs: loaded });
+      }
+    } else {
+      setPreviewMunicipality({ name: municipalityName, tariffs: muniTariffs });
+    }
   };
 
   const deleteTariff = useMutation({
@@ -914,7 +923,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
 
       {/* Preview Dialog */}
       <Dialog open={!!previewMunicipality} onOpenChange={(open) => { if (!open) { setPreviewMunicipality(null); setHighlightedTariffName(null); } }}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
