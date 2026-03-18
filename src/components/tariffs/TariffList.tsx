@@ -935,7 +935,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
 
       {/* Preview Dialog */}
       <Dialog open={!!previewMunicipality} onOpenChange={(open) => { if (!open) { setPreviewMunicipality(null); setHighlightedTariffName(null); } }}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogContent className="sm:max-w-[700px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
@@ -971,7 +971,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="overflow-y-auto max-h-[60vh]">
             {previewMunicipality?.tariffs.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
                 No tariffs extracted for this municipality.
