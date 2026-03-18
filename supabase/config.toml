@@ -18,9 +18,6 @@ verify_jwt = false
 [functions.process-scada-profile]
 verify_jwt = false
 
-[functions.fetch-pnpscada]
-verify_jwt = false
-
 [functions.sync-external-projects]
 verify_jwt = false
 
