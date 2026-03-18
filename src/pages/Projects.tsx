@@ -350,6 +350,7 @@ export default function Projects() {
             longitude: p.longitude,
           })) || []}
           onProjectClick={(id) => navigate(`/projects/${id}`)}
+          fullHeight
         />
       ) : viewMode === "grid" ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

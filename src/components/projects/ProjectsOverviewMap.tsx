@@ -18,9 +18,10 @@ interface Project {
 interface ProjectsOverviewMapProps {
   projects: Project[];
   onProjectClick?: (projectId: string) => void;
+  fullHeight?: boolean;
 }
 
-export function ProjectsOverviewMap({ projects, onProjectClick }: ProjectsOverviewMapProps) {
+export function ProjectsOverviewMap({ projects, onProjectClick, fullHeight = false }: ProjectsOverviewMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -210,7 +211,7 @@ export function ProjectsOverviewMap({ projects, onProjectClick }: ProjectsOvervi
       <CardContent className="p-0">
         <div
           ref={mapContainer}
-          className={`w-full rounded-b-lg transition-all ${isExpanded ? "h-[500px]" : "h-[250px]"}`}
+          className={`w-full rounded-b-lg transition-all ${fullHeight ? "h-[calc(100vh-220px)]" : isExpanded ? "h-[500px]" : "h-[250px]"}`}
         >
           {!mapLoaded && (
             <Skeleton className="w-full h-full" />
