@@ -34,7 +34,13 @@ export function InviteUserForm({ orgId }: InviteUserFormProps) {
         body: { email, full_name: fullName, role },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Extract the actual error message from the response
+        const errorBody = typeof error.context?.body === 'string'
+          ? JSON.parse(error.context.body)
+          : null;
+        throw new Error(errorBody?.error || data?.error || error.message);
+      }
       if (data?.error) throw new Error(data.error);
 
       toast.success(`Invitation sent to ${email}`);
