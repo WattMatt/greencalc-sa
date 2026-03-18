@@ -147,25 +147,42 @@ export function ProjectsOverviewMap({ projects, onProjectClick, fullHeight = fal
         el.style.borderColor = "white";
       });
 
-      const popup = new mapboxgl.Popup({ offset: 25, closeButton: false })
+      // Build popup with project info card and Open button
+      const popupId = `popup-btn-${project.id}`;
+      const popup = new mapboxgl.Popup({ offset: 25, closeButton: true, maxWidth: "280px" })
         .setHTML(`
-          <div style="padding: 8px;">
-            <strong style="font-size: 14px;">${project.name}</strong>
-            ${project.location ? `<p style="margin: 4px 0 0; font-size: 12px; color: #666;">${project.location}</p>` : ''}
+          <div style="padding: 12px; font-family: system-ui, sans-serif;">
+            <strong style="font-size: 15px; display: block; margin-bottom: 4px;">${project.name}</strong>
+            ${project.location ? `<p style="margin: 0 0 8px; font-size: 13px; color: #666;">📍 ${project.location}</p>` : '<p style="margin: 0 0 8px; font-size: 13px; color: #999;">No location set</p>'}
+            <button id="${popupId}" style="
+              width: 100%;
+              padding: 8px 16px;
+              background: hsl(221.2, 83.2%, 53.3%);
+              color: white;
+              border: none;
+              border-radius: 6px;
+              font-size: 13px;
+              font-weight: 500;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              gap: 6px;
+            ">Open Project →</button>
           </div>
         `);
+
+      popup.on("open", () => {
+        const btn = document.getElementById(popupId);
+        if (btn && onProjectClick) {
+          btn.addEventListener("click", () => onProjectClick(project.id));
+        }
+      });
 
       const marker = new mapboxgl.Marker({ element: wrapper, anchor: "center" })
         .setLngLat([project.longitude!, project.latitude!])
         .setPopup(popup)
         .addTo(map.current!);
-
-      wrapper.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (onProjectClick) {
-          onProjectClick(project.id);
-        }
-      });
 
       markersRef.current.push(marker);
     });
