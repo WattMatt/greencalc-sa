@@ -45,21 +45,31 @@ export function OrgMembersList({ orgId, isAdmin }: OrgMembersListProps) {
   const { data: members, isLoading } = useQuery({
     queryKey: ["org-members", orgId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Fetch members first
+      const { data: memberData, error: memberError } = await supabase
         .from("organization_members")
-        .select(`
-          id,
-          user_id,
-          role,
-          invited_at,
-          accepted_at,
-          profiles ( full_name, email )
-        `)
+        .select("id, user_id, role, invited_at, accepted_at")
         .eq("org_id", orgId)
         .order("invited_at", { ascending: true });
 
-      if (error) throw error;
-      return data as unknown as OrgMember[];
+      if (memberError) throw memberError;
+      if (!memberData?.length) return [];
+
+      // Fetch profiles separately (no FK between organization_members and profiles)
+      const userIds = memberData.map((m: any) => m.user_id);
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds);
+
+      const profileMap = new Map(
+        (profileData || []).map((p: any) => [p.id, { full_name: p.full_name, email: p.email }])
+      );
+
+      return memberData.map((m: any) => ({
+        ...m,
+        profiles: profileMap.get(m.user_id) || null,
+      })) as OrgMember[];
     },
     enabled: !!orgId,
   });
