@@ -287,7 +287,7 @@ export function InverterSliderPanel({
         )}
         {maxSolarKva && (
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Connection Limit (70%)</span>
+            <span className="text-muted-foreground">Connection Limit (75%)</span>
             <span className="font-medium">{maxSolarKva.toFixed(0)} kVA</span>
           </div>
         )}

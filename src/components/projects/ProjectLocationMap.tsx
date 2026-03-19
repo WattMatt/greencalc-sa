@@ -31,8 +31,35 @@ interface ProjectLocationMapProps {
 
 // South Africa bounds for initial view
 const SA_BOUNDS = {
-  center: [-29.0, 24.0] as [number, number],
+  center: [24.0, -29.0] as [number, number], // [lng, lat] for Mapbox
   zoom: 5,
+};
+
+// Fallback coordinates for major SA cities (used when geocoding API fails)
+const SA_CITY_FALLBACKS: Record<string, { lat: number; lng: number }> = {
+  "pretoria": { lat: -25.7479, lng: 28.2293 },
+  "tshwane": { lat: -25.7479, lng: 28.2293 },
+  "johannesburg": { lat: -26.2041, lng: 28.0473 },
+  "cape town": { lat: -33.9249, lng: 18.4241 },
+  "durban": { lat: -29.8587, lng: 31.0218 },
+  "port elizabeth": { lat: -33.9608, lng: 25.6022 },
+  "gqeberha": { lat: -33.9608, lng: 25.6022 },
+  "bloemfontein": { lat: -29.0852, lng: 26.1596 },
+  "east london": { lat: -33.0153, lng: 27.9116 },
+  "polokwane": { lat: -23.9045, lng: 29.4689 },
+  "nelspruit": { lat: -25.4753, lng: 30.9694 },
+  "mbombela": { lat: -25.4753, lng: 30.9694 },
+  "kimberley": { lat: -28.7382, lng: 24.7639 },
+  "pietermaritzburg": { lat: -29.6006, lng: 30.3794 },
+  "rustenburg": { lat: -25.6715, lng: 27.2420 },
+  "midrand": { lat: -25.9884, lng: 28.1281 },
+  "centurion": { lat: -25.8603, lng: 28.1894 },
+  "sandton": { lat: -26.1076, lng: 28.0567 },
+  "stellenbosch": { lat: -33.9321, lng: 18.8602 },
+  "paarl": { lat: -33.7342, lng: 18.9626 },
+  "george": { lat: -33.9631, lng: 22.4617 },
+  "witbank": { lat: -25.8707, lng: 29.2330 },
+  "emalahleni": { lat: -25.8707, lng: 29.2330 },
 };
 
 type DataSource = "pvgis_monthly" | "pvgis_tmy" | "solcast";
@@ -139,48 +166,79 @@ export function ProjectLocationMap({
   // Auto-geocode when we have location text but no coordinates
   const geocodeLocation = useCallback(async () => {
     if (!location || latitude || longitude || geocodeAttempted) return;
-    
+
     setIsGeocoding(true);
     setGeocodeAttempted(true);
-    
+
+    // Helper to apply found coordinates
+    const applyCoordinates = async (lat: number, lng: number, placeName: string, save: boolean) => {
+      if (save) {
+        // Save coordinates to project
+        try {
+          await supabase.from("projects").update({
+            latitude: lat, longitude: lng, updated_at: new Date().toISOString()
+          }).eq("id", projectId);
+        } catch (e) { console.error("Failed to save coords:", e); }
+      }
+
+      toast.success(`Location found: ${placeName}`);
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      onLocationUpdate?.(lat, lng);
+
+      if (map.current && mapLoaded) {
+        updateMarker(lat, lng, false);
+        map.current.flyTo({ center: [lng, lat], zoom: 12 });
+      }
+
+      if (dataSource === "solcast") {
+        fetchForecast({ latitude: lat, longitude: lng, hours: 168 });
+      } else {
+        fetchBothDatasets({ latitude: lat, longitude: lng, projectId });
+      }
+    };
+
     try {
       console.log(`Auto-geocoding location: ${location}`);
       const { data, error } = await supabase.functions.invoke("geocode-location", {
-        body: { 
+        body: {
           project_id: projectId,
           location,
-          save_to_project: true 
+          save_to_project: true
         },
       });
 
-      if (error) throw error;
-
-      if (data.success && data.latitude && data.longitude) {
-        toast.success(`Location found: ${data.place_name}`);
-        queryClient.invalidateQueries({ queryKey: ["project", projectId] });
-        onLocationUpdate?.(data.latitude, data.longitude);
-        
-        if (map.current && mapLoaded) {
-          updateMarker(data.latitude, data.longitude, false);
-          map.current.flyTo({ center: [data.longitude, data.latitude], zoom: 12 });
-        }
-        
-        // Fetch based on selected source
-        if (dataSource === "solcast") {
-          fetchForecast({ latitude: data.latitude, longitude: data.longitude, hours: 168 });
-        } else {
-          fetchBothDatasets({ latitude: data.latitude, longitude: data.longitude, projectId });
-        }
+      if (!error && data?.success && data.latitude && data.longitude) {
+        await applyCoordinates(data.latitude, data.longitude, data.place_name, false);
       } else {
-        toast.warning("Could not find coordinates for this location");
+        // Fallback: check local SA city dictionary
+        const normalised = location.trim().toLowerCase();
+        const fallback = SA_CITY_FALLBACKS[normalised]
+          ?? Object.entries(SA_CITY_FALLBACKS).find(([key]) => normalised.includes(key))?.[1];
+
+        if (fallback) {
+          console.log(`Using fallback coords for "${location}": ${fallback.lat}, ${fallback.lng}`);
+          await applyCoordinates(fallback.lat, fallback.lng, location, true);
+        } else {
+          toast.warning("Could not find coordinates for this location");
+        }
       }
     } catch (err) {
       console.error("Geocoding failed:", err);
-      toast.error("Failed to geocode location");
+      // Try local fallback on error too
+      const normalised = location.trim().toLowerCase();
+      const fallback = SA_CITY_FALLBACKS[normalised]
+        ?? Object.entries(SA_CITY_FALLBACKS).find(([key]) => normalised.includes(key))?.[1];
+
+      if (fallback) {
+        console.log(`Using fallback coords for "${location}" after API error: ${fallback.lat}, ${fallback.lng}`);
+        await applyCoordinates(fallback.lat, fallback.lng, location, true);
+      } else {
+        toast.error("Failed to geocode location");
+      }
     } finally {
       setIsGeocoding(false);
     }
-  }, [location, latitude, longitude, geocodeAttempted, projectId, mapLoaded, queryClient, onLocationUpdate, fetchForecast, fetchBothDatasets, dataSource]);
+  }, [location, latitude, longitude, geocodeAttempted, projectId, mapLoaded, queryClient, onLocationUpdate, fetchForecast, fetchBothDatasets, dataSource, updateMarker]);
 
   // Trigger auto-geocode when map loads
   useEffect(() => {

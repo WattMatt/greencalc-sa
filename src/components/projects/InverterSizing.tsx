@@ -489,7 +489,7 @@ export function InverterSizing({
             </div>
             {maxSolarKva && (
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Connection Limit (70%)</span>
+                <span className="text-muted-foreground">Connection Limit (75%)</span>
                 <span className={exceedsConnectionLimit ? "text-destructive font-medium" : ""}>
                   {maxSolarKva.toFixed(0)} kVA
                 </span>
@@ -564,7 +564,7 @@ export function InverterSizing({
             <div className="flex items-center gap-2 p-2 rounded bg-destructive/10 border border-destructive/30">
               <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
               <span className="text-xs text-destructive">
-                Exceeds 70% connection limit ({maxSolarKva?.toFixed(0)} kVA)
+                Exceeds 75% connection limit ({maxSolarKva?.toFixed(0)} kVA)
               </span>
             </div>
           )}

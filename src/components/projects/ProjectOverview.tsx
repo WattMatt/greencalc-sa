@@ -40,7 +40,7 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
   
   const hasTariff = !!project.tariff_id;
   const hasConnectionSize = !!project.connection_size_kva;
-  const maxSolarKva = hasConnectionSize ? project.connection_size_kva * 0.7 : null;
+  const maxSolarKva = hasConnectionSize ? project.connection_size_kva * 0.75 : null;
 
   // Calculate estimated monthly consumption (simplified)
   const estimatedMonthlyKwh = totalArea * 50; // Default 50 kWh/m²/month

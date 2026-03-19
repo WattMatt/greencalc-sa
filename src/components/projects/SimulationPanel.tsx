@@ -71,13 +71,15 @@ interface SimulationPanelProps {
   onBlendedRateTypeChange?: (type: BlendedRateType) => void;
   useHourlyTouRates?: boolean;
   onUseHourlyTouRatesChange?: (value: boolean) => void;
+  onLiveSolarCapacityChange?: (capacity: number) => void;
+  onLiveBatteryCapacityChange?: (capacityKwh: number) => void;
 }
 
 export interface SimulationPanelRef {
   autoSave: () => Promise<void>;
 }
 
-export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, includesSolar = true, onRequestEnableFeature, blendedRateType = 'solarHours', onBlendedRateTypeChange, useHourlyTouRates = true, onUseHourlyTouRatesChange }, ref) => {
+export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, includesSolar = true, onRequestEnableFeature, blendedRateType = 'solarHours', onBlendedRateTypeChange, useHourlyTouRates = true, onUseHourlyTouRatesChange, onLiveSolarCapacityChange, onLiveBatteryCapacityChange }, ref) => {
   const queryClient = useQueryClient();
   const { touSettings: touSettingsData } = useTOUSettings();
 
@@ -138,6 +140,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const batteryChargePower = Math.round(batteryAcCapacity * batteryChargeCRate * 10) / 10;
   const batteryDischargePower = Math.round(batteryAcCapacity * batteryDischargeCRate * 10) / 10;
   const batteryPower = Math.max(batteryChargePower, batteryDischargePower);
+
+  // Notify parent of live capacity changes (for costs tab)
+  useEffect(() => { onLiveSolarCapacityChange?.(solarCapacity); }, [solarCapacity, onLiveSolarCapacityChange]);
+  useEffect(() => { onLiveBatteryCapacityChange?.(batteryCapacity); }, [batteryCapacity, onLiveBatteryCapacityChange]);
 
   const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -322,7 +328,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   useImperativeHandle(ref, () => ({ autoSave: triggerSave }), [triggerSave]);
 
   const connectionSizeKva = project.connection_size_kva ? Number(project.connection_size_kva) : null;
-  const maxSolarKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
+  const maxSolarKva = connectionSizeKva ? connectionSizeKva * 0.75 : null;
   const solarExceedsLimit = maxSolarKva && solarCapacity > maxSolarKva;
   const systemEfficiency = calculateSystemEfficiency(pvConfig);
 
@@ -398,7 +404,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           <CardContent className="py-3 flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-destructive" />
             <p className="text-sm text-destructive">
-              Solar capacity ({solarCapacity} kWp) exceeds the 70% limit of {maxSolarKva?.toFixed(0)} kVA for a {connectionSizeKva} kVA connection.
+              Solar capacity ({solarCapacity} kWp) exceeds the 75% limit of {maxSolarKva?.toFixed(0)} kVA for a {connectionSizeKva} kVA connection.
             </p>
           </CardContent>
         </Card>

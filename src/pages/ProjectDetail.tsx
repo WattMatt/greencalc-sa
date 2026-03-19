@@ -885,6 +885,10 @@ export default function ProjectDetail() {
   const systemIncludesBattery = projectSystemConfig.battery;
   const systemIncludesSolar = projectSystemConfig.solarPV;
 
+  // Live capacity from simulation panel (used by Costs tab for accurate totals)
+  const [liveSolarCapacity, setLiveSolarCapacity] = useState<number | null>(null);
+  const [liveBatteryCapacity, setLiveBatteryCapacity] = useState<number | null>(null);
+
   // Handle enable feature request from carousel
   const handleRequestEnableFeature = useCallback(async (feature: string) => {
     const newConfig = { ...projectSystemConfig };
@@ -1059,7 +1063,7 @@ export default function ProjectDetail() {
 
   // Sync connection size input when project loads
   const connectionSize = project?.connection_size_kva;
-  const maxSolarKva = connectionSize ? connectionSize * 0.7 : null;
+  const maxSolarKva = connectionSize ? connectionSize * 0.75 : null;
 
   // Wait for all critical queries to load before rendering
   const isLoadingCritical = isLoading || isLoadingTenants || isLoadingSimulation;
@@ -1336,8 +1340,8 @@ export default function ProjectDetail() {
             costs={systemCosts}
             onChange={setSystemCosts}
             onBlur={() => simulationRef.current?.saveIfNeeded()}
-            solarCapacity={latestSimulation?.solar_capacity_kwp ?? 100}
-            batteryCapacity={latestSimulation?.battery_capacity_kwh ?? 50}
+            solarCapacity={liveSolarCapacity ?? latestSimulation?.solar_capacity_kwp ?? 100}
+            batteryCapacity={liveBatteryCapacity ?? latestSimulation?.battery_capacity_kwh ?? 50}
             includesBattery={systemIncludesBattery}
           />
         </TabsContent>
@@ -1375,6 +1379,8 @@ export default function ProjectDetail() {
             onBlendedRateTypeChange={setBlendedRateType}
             useHourlyTouRates={useHourlyTouRates}
             onUseHourlyTouRatesChange={setUseHourlyTouRates}
+            onLiveSolarCapacityChange={setLiveSolarCapacity}
+            onLiveBatteryCapacityChange={setLiveBatteryCapacity}
           />
         </TabsContent>
 

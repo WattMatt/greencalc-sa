@@ -112,7 +112,7 @@ export function LoadProfileChart({
   );
   const chartRef = useRef<HTMLDivElement>(null);
 
-  const maxPossiblePvKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
+  const maxPossiblePvKva = connectionSizeKva ? connectionSizeKva * 0.75 : null;
   const maxPvAcKva = simulatedSolarCapacityKwp ?? maxPossiblePvKva;
   const effectiveDcAcRatio = simulatedDcAcRatio ?? dcAcRatio;
   const dcCapacityKwp = useMemo(() => maxPvAcKva ? maxPvAcKva * effectiveDcAcRatio : null, [maxPvAcKva, effectiveDcAcRatio]);

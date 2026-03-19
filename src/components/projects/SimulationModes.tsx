@@ -28,13 +28,15 @@ interface SimulationModesProps {
   onBlendedRateTypeChange?: (type: BlendedRateType) => void;
   useHourlyTouRates?: boolean;
   onUseHourlyTouRatesChange?: (value: boolean) => void;
+  onLiveSolarCapacityChange?: (capacity: number) => void;
+  onLiveBatteryCapacityChange?: (capacityKwh: number) => void;
 }
 
 export interface SimulationModesRef {
   saveIfNeeded: () => Promise<void>;
 }
 
-export const SimulationModes = forwardRef<SimulationModesRef, SimulationModesProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, includesSolar = true, onRequestEnableFeature, blendedRateType, onBlendedRateTypeChange, useHourlyTouRates, onUseHourlyTouRatesChange }, ref) => {
+export const SimulationModes = forwardRef<SimulationModesRef, SimulationModesProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, includesSolar = true, onRequestEnableFeature, blendedRateType, onBlendedRateTypeChange, useHourlyTouRates, onUseHourlyTouRatesChange, onLiveSolarCapacityChange, onLiveBatteryCapacityChange }, ref) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeMode, setActiveMode] = useState("profile-builder");
@@ -124,6 +126,8 @@ export const SimulationModes = forwardRef<SimulationModesRef, SimulationModesPro
           onBlendedRateTypeChange={onBlendedRateTypeChange}
           useHourlyTouRates={useHourlyTouRates}
           onUseHourlyTouRatesChange={onUseHourlyTouRatesChange}
+          onLiveSolarCapacityChange={onLiveSolarCapacityChange}
+          onLiveBatteryCapacityChange={onLiveBatteryCapacityChange}
         />
       </TabsContent>
 
