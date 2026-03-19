@@ -439,7 +439,9 @@ export function useSimulationEngine(cfg: SimulationEngineConfig): SimulationEngi
     demandChargePerKva: Number(tariff?.demand_charge_per_kva || 0),
     networkAccessCharge: Number(tariff?.network_access_charge || 0),
     averageRatePerKwh: selectedBlendedRate,
-    exportRatePerKwh: 0,
+    // Export rate: use tariff-level override if available, otherwise 0 (no export credit)
+    // Can be set per-project when SSEG/WEPS feed-in tariffs are configured
+    exportRatePerKwh: Number((tariff as any)?.export_rate_per_kwh || 0),
   }), [tariff, selectedBlendedRate]);
 
   // ── Helper: override annual results for solar-only financials ──

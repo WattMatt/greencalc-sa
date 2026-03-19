@@ -14,6 +14,8 @@ export interface FinancialMetricsInput {
   discountRate: number;      // decimal (e.g. 0.09)
   financeRate: number;       // decimal
   reinvestmentRate: number;  // decimal
+  annualDegradationRate?: number; // decimal (e.g. 0.005 = 0.5%/yr) - used for LCOE
+  maintenancePerYear?: number;    // R/year - included in LCOE numerator
 }
 
 export interface FinancialMetricsResult {
@@ -50,16 +52,31 @@ export function calculateFinancialMetrics(input: FinancialMetricsInput): Financi
     irr = newIrr;
   }
 
-  // ── MIRR ──
+  // ── MIRR (proper separation of finance & reinvestment rates) ──
+  // PV of negative cash flows at finance rate (borrowing cost)
+  const pvNegative = -systemCost; // Year 0 outflow discounted at t=0 = systemCost
+  // FV of positive cash flows at reinvestment rate
   let fvPositive = 0;
   for (let y = 1; y <= projectLifeYears; y++) {
     fvPositive += annualSavings * Math.pow(1 + reinvestmentRate, projectLifeYears - y);
   }
-  const mirr = systemCost > 0 ? Math.pow(fvPositive / systemCost, 1 / projectLifeYears) - 1 : 0;
+  const mirr = (pvNegative !== 0 && fvPositive > 0)
+    ? Math.pow(fvPositive / Math.abs(pvNegative), 1 / projectLifeYears) - 1
+    : 0;
 
-  // ── LCOE ──
-  const lifetimeGeneration = annualGeneration * projectLifeYears * 0.9;
-  const lcoe = lifetimeGeneration > 0 ? systemCost / lifetimeGeneration : 0;
+  // ── LCOE (with actual year-by-year degradation) ──
+  const degradationRate = input.annualDegradationRate ?? 0.005; // default 0.5%/yr
+  const maintenance = input.maintenancePerYear ?? 0;
+  let totalDiscountedGeneration = 0;
+  let totalDiscountedCosts = systemCost; // initial capital
+  for (let y = 1; y <= projectLifeYears; y++) {
+    const yearEfficiency = Math.max(0, 1 - degradationRate * (y - 1));
+    const yearGeneration = annualGeneration * yearEfficiency;
+    const df = Math.pow(1 + discountRate, y);
+    totalDiscountedGeneration += yearGeneration / df;
+    totalDiscountedCosts += maintenance / df;
+  }
+  const lcoe = totalDiscountedGeneration > 0 ? totalDiscountedCosts / totalDiscountedGeneration : 0;
 
   return {
     npv,

@@ -454,7 +454,7 @@ export function runAdvancedSimulation(
     : 0;
   
   // Calculate demand saving (kVA) from peak load reduction
-  const powerFactor = 0.9;
+  const powerFactor = systemCosts.powerFactor ?? 0.9;
   const peakLoadKva = baseEnergyResults.peakLoad / powerFactor;
   const peakWithSolarKva = baseEnergyResults.peakGridImport / powerFactor;
   const demandSavingKva = Math.max(0, peakLoadKva - peakWithSolarKva);
@@ -504,11 +504,14 @@ export function runAdvancedSimulation(
     let yearlyGridImport = baseAnnualGridImport * loadGrowthFactor / generationFactor;
     let yearlyGridExport = baseAnnualGridExport * generationFactor;
     
-    // Apply grid constraints (simplified - just reduce export)
+    // Apply grid constraints — cap per-hour export at maxExportKw, then sum annually
+    // Approximation: assume export is spread across ~6 solar hours/day average
     if (gridConstraints.enabled && gridConstraints.exportLimitEnabled) {
-      const maxAnnualExport = gridConstraints.maxExportKw * 365 * 5;
-      if (yearlyGridExport > maxAnnualExport) {
-        yearlyGridExport = maxAnnualExport;
+      const solarHoursPerDay = 6;
+      const avgHourlyExport = yearlyGridExport / (365 * solarHoursPerDay);
+      if (avgHourlyExport > gridConstraints.maxExportKw) {
+        // Cap hourly export and scale back annual total
+        yearlyGridExport = gridConstraints.maxExportKw * 365 * solarHoursPerDay;
       }
     }
     

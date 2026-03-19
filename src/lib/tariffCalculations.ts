@@ -18,8 +18,19 @@ import { TOUSettings, TOUHourMap, DEFAULT_TOU_SETTINGS } from "@/components/proj
 function readStoredTOUSettings(): TOUSettings {
   try {
     const raw = localStorage.getItem("tou-settings");
-    if (raw) return JSON.parse(raw) as TOUSettings;
-  } catch { /* ignore */ }
+    if (raw) {
+      const parsed = JSON.parse(raw) as TOUSettings;
+      // Validate structure: must have both season configs with weekday hour maps
+      if (parsed?.highSeason?.weekday && parsed?.lowSeason?.weekday &&
+          typeof parsed.highSeason.weekday[0] === 'string' &&
+          typeof parsed.lowSeason.weekday[0] === 'string') {
+        return parsed;
+      }
+      console.warn("TOU settings in localStorage have invalid structure, using defaults");
+    }
+  } catch (err) {
+    console.warn("Failed to parse TOU settings from localStorage:", err);
+  }
   return DEFAULT_TOU_SETTINGS;
 }
 
@@ -47,7 +58,13 @@ function countTOUHours(hourMap: TOUHourMap): { peak: number; standard: number; o
   return { peak, standard, offPeak };
 }
 
-/** Count TOU hours within a solar window (default 12h: 06:00–18:00) */
+/**
+ * Count TOU hours within a solar generation window.
+ * Default 06:00–18:00 (12h). For SA latitudes (-22° to -35°):
+ *   Summer (Sep-Mar): ~05:30-19:00 → effective 06:00-18:00 (conservative)
+ *   Winter (Apr-Aug): ~07:00-17:30 → could use 07:00-17:00
+ * Using 06:00-18:00 year-round is a reasonable SA average.
+ */
 function countSolarTOUHours(hourMap: TOUHourMap, start = 6, end = 18): { peak: number; standard: number; offPeak: number } {
   let peak = 0, standard = 0, offPeak = 0;
   for (let h = start; h < end; h++) {

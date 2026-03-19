@@ -62,6 +62,9 @@ export interface SystemCosts {
   inverterReplacementPercent?: number;         // % of inverter cost to replace (default: 50%)
   batteryReplacementPercent?: number;          // % of battery cost to replace (default: 30%)
   
+  // Power Factor (for demand charge kW→kVA conversion)
+  powerFactor?: number;             // decimal, default 0.9 (typical industrial)
+
   // Financial Return Parameters
   costOfCapital?: number;           // % - General WACC (default: 9)
   cpi?: number;                     // % - Inflation (default: 6)
@@ -160,7 +163,7 @@ export function calculateFinancialsFromAnnual(
 
   // === Grid-only scenario (annual-first) ===
   const gridOnlyAnnualEnergyCost = totalAnnualLoad * averageRatePerKwh;
-  const powerFactor = 0.9;
+  const powerFactor = systemCosts.powerFactor ?? 0.9;
   const peakLoadKva = peakLoad / powerFactor;
   const gridOnlyAnnualDemandCost = peakLoadKva * demandChargePerKva * 12; // Monthly charge × 12
   const gridOnlyAnnualFixedCost = fixedMonthlyCharge * 12;

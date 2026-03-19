@@ -41,6 +41,9 @@ export interface SystemCostsData {
   inverterReplacementPercent: number;         // % of inverter cost to replace (default: 50%)
   batteryReplacementPercent: number;          // % of battery cost to replace (default: 30%)
   
+  // Power Factor (for demand charge kW→kVA conversion)
+  powerFactor?: number;             // decimal, default 0.9 (typical industrial)
+
   // Financial Return Parameters
   costOfCapital: number;           // % - General WACC
   cpi: number;                     // % - Inflation
