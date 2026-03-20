@@ -614,7 +614,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
       </Card>
 
       {/* Eskom Direct Supply — Top Level */}
-      {eskomMuni && eskomMuni.tariffCount > 0 && selectedProvince === "all" && !filterMunicipalityId && (
+      {eskomMuni && selectedProvince === "all" && !filterMunicipalityId && (
         <Accordion type="multiple" className="space-y-3">
           <AccordionItem value="eskom-direct" className="border rounded-lg bg-card overflow-hidden border-amber-500/30">
             <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-accent/50" onClick={() => loadTariffsForMunicipality(ESKOM_MUNICIPALITY_NAME)}>
@@ -624,7 +624,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                   <div className="text-left">
                     <div className="font-semibold text-foreground">Eskom Direct Supply</div>
                     <div className="text-sm text-muted-foreground">
-                      National tariffs 2025/26 • {eskomMuni.tariffCount} tariffs
+                      National tariffs 2025/26{eskomMuni.tariffCount > 0 ? ` • ${eskomMuni.tariffCount} tariffs` : ''}
                     </div>
                   </div>
                 </div>
