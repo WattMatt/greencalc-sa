@@ -405,16 +405,19 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
   // Separate Eskom Direct Supply from regular municipalities
   const ESKOM_MUNICIPALITY_NAME = "Eskom Direct Supply";
 
-  // Eskom data: pick the first Eskom Direct Supply municipality (all share same tariffs)
+  // Eskom data: find any Eskom Direct Supply municipality that has tariffs
   const eskomMuni = useMemo(() => {
     if (!municipalities || !tariffCountsData) return null;
-    const eskom = municipalities.find(m => m.name === ESKOM_MUNICIPALITY_NAME);
-    if (!eskom) return null;
+    const eskomMunis = municipalities.filter(m => m.name === ESKOM_MUNICIPALITY_NAME);
+    if (eskomMunis.length === 0) return null;
+    // Find the one with tariffs (they all have the same tariffs, pick whichever has a count)
+    const withTariffs = eskomMunis.find(m => (tariffCountsData.get(m.id) || 0) > 0) || eskomMunis[0];
+    const totalCount = eskomMunis.reduce((sum, m) => Math.max(sum, tariffCountsData.get(m.id) || 0), 0);
     return {
-      id: eskom.id,
-      name: eskom.name,
-      tariffCount: tariffCountsData.get(eskom.id) || 0,
-      tariffs: municipalityTariffs[eskom.name] || [],
+      id: withTariffs.id,
+      name: withTariffs.name,
+      tariffCount: totalCount,
+      tariffs: municipalityTariffs[withTariffs.name] || [],
     };
   }, [municipalities, tariffCountsData, municipalityTariffs]);
 
