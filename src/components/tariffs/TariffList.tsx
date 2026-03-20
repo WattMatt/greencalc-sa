@@ -615,9 +615,11 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
 
       {/* Eskom Direct Supply — Top Level */}
       {eskomMuni && selectedProvince === "all" && !filterMunicipalityId && (
-        <Accordion type="multiple" className="space-y-3">
+        <Accordion type="multiple" className="space-y-3" onValueChange={(values) => {
+          if (values.includes("eskom-direct")) loadTariffsForMunicipality(ESKOM_MUNICIPALITY_NAME);
+        }}>
           <AccordionItem value="eskom-direct" className="border rounded-lg bg-card overflow-hidden border-amber-500/30">
-            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-accent/50" onClick={() => loadTariffsForMunicipality(ESKOM_MUNICIPALITY_NAME)}>
+            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-accent/50">
               <div className="flex items-center justify-between w-full pr-4">
                 <div className="flex items-center gap-3">
                   <Zap className="h-5 w-5 text-amber-500" />
@@ -643,21 +645,42 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                   </p>
                 ) : (
                   <div className="grid gap-2">
-                    {eskomMuni.tariffs.sort((a: any, b: any) => a.name.localeCompare(b.name)).map((tariff: any) => (
-                      <div key={tariff.id} className="flex items-center justify-between p-2 rounded bg-accent/30 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Zap className="h-3.5 w-3.5 text-amber-500" />
-                          <span className="font-medium">{tariff.name}</span>
-                          <Badge variant="outline" className="text-[10px]">{tariff.category}</Badge>
-                          <Badge variant="outline" className="text-[10px]">{tariff.structure}</Badge>
+                    {eskomMuni.tariffs.sort((a: any, b: any) => a.name.localeCompare(b.name)).map((tariff: any) => {
+                      const energyRates = (tariff.tariff_rates || []).filter((r: any) => r.charge === 'energy');
+                      const highPeak = energyRates.find((r: any) => r.season === 'high' && r.tou === 'peak');
+                      const lowPeak = energyRates.find((r: any) => r.season === 'low' && r.tou === 'peak');
+                      const flatRate = energyRates.find((r: any) => r.season === 'all' && r.tou === 'all');
+                      return (
+                        <div key={tariff.id} className="flex items-center justify-between p-2.5 rounded bg-accent/30 text-sm">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                            <span className="font-medium truncate">{tariff.name}</span>
+                            <Badge variant="outline" className="text-[10px] shrink-0">{tariff.category}</Badge>
+                            <Badge variant="outline" className="text-[10px] shrink-0">{tariff.structure}</Badge>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0 ml-2">
+                            {highPeak && (
+                              <span className="text-xs text-muted-foreground">
+                                Winter Peak: <span className="font-semibold text-foreground">{Number(highPeak.amount).toFixed(2)} {highPeak.unit}</span>
+                              </span>
+                            )}
+                            {lowPeak && (
+                              <span className="text-xs text-muted-foreground">
+                                Summer Peak: <span className="font-semibold text-foreground">{Number(lowPeak.amount).toFixed(2)} {lowPeak.unit}</span>
+                              </span>
+                            )}
+                            {flatRate && !highPeak && (
+                              <span className="text-xs text-muted-foreground">
+                                Rate: <span className="font-semibold text-foreground">{Number(flatRate.amount).toFixed(2)} {flatRate.unit}</span>
+                              </span>
+                            )}
+                            {energyRates.length === 0 && (
+                              <span className="text-xs text-muted-foreground italic">No energy rates</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Badge variant="secondary" className="text-[10px]">
-                            {tariff.tariff_rates?.length || 0} rates
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
