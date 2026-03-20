@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sun, Clock, Calculator, Info, Pencil } from "lucide-react";
+import { Sun, Clock, Calculator, Info, Pencil, Zap } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProjectTariffEditor, useProjectTariffOverride } from "./ProjectTariffEditor";
 
@@ -483,6 +483,7 @@ export function TariffSelector({
 }: TariffSelectorProps) {
   const [provinceId, setProvinceId] = useState<string>("");
   const [municipalityId, setMunicipalityId] = useState<string>("");
+  const [isEskomDirect, setIsEskomDirect] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("");
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
@@ -508,6 +509,22 @@ export function TariffSelector({
       return data;
     },
     enabled: !!provinceId,
+  });
+
+  // Eskom Direct Supply: fetch the first Eskom municipality (they all share the same tariffs)
+  const { data: eskomMunicipality } = useQuery({
+    queryKey: ["eskom-direct-municipality"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("municipalities")
+        .select("id, name")
+        .eq("name", "Eskom Direct Supply")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: isEskomDirect,
   });
 
   // Auto-select province and municipality based on project coordinates (reverse geocoding)
@@ -602,6 +619,13 @@ export function TariffSelector({
     // Clean up
     sessionStorage.removeItem(`tariff-selector-municipality-${projectId}`);
   }, [municipalities, hasAutoSelected, municipalityId, projectId]);
+
+  // Auto-set municipality when Eskom Direct mode is toggled
+  useEffect(() => {
+    if (isEskomDirect && eskomMunicipality) {
+      setMunicipalityId(eskomMunicipality.id);
+    }
+  }, [isEskomDirect, eskomMunicipality]);
 
   const { data: tariffs } = useQuery({
     queryKey: ["tariff-plans", municipalityId],
@@ -723,7 +747,37 @@ export function TariffSelector({
         </p>
       </div>
 
+      {/* Eskom Direct toggle */}
+      <div className="flex items-center gap-3 pb-2">
+        <Button
+          variant={isEskomDirect ? "default" : "outline"}
+          size="sm"
+          onClick={() => {
+            setIsEskomDirect(true);
+            setProvinceId("");
+            setSelectedPeriod("");
+          }}
+          className="gap-2"
+        >
+          <Zap className="h-4 w-4" />
+          Eskom Direct
+        </Button>
+        <Button
+          variant={!isEskomDirect ? "default" : "outline"}
+          size="sm"
+          onClick={() => {
+            setIsEskomDirect(false);
+            setMunicipalityId("");
+            setSelectedPeriod("");
+          }}
+          className="gap-2"
+        >
+          Municipal Tariff
+        </Button>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-4">
+        {!isEskomDirect && (
         <div className="space-y-2">
           <Label>Province</Label>
           <Select value={provinceId} onValueChange={(value) => {
@@ -743,7 +797,9 @@ export function TariffSelector({
             </SelectContent>
           </Select>
         </div>
+        )}
 
+        {!isEskomDirect && (
         <div className="space-y-2">
           <Label>Municipality</Label>
           <Select
@@ -766,6 +822,7 @@ export function TariffSelector({
             </SelectContent>
           </Select>
         </div>
+        )}
 
         <div className="space-y-2">
           <Label>Year</Label>
