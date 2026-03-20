@@ -170,19 +170,26 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
     },
   });
 
-  // Fetch tariff counts per municipality
+  // Fetch tariff counts per municipality (paginated to handle >1000 rows)
   const { data: tariffCountsData } = useQuery({
     queryKey: ["tariff-counts-per-municipality"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tariff_plans")
-        .select("municipality_id");
-      if (error) throw error;
-      // Count per municipality
       const counts = new Map<string, number>();
-      (data || []).forEach((t) => {
-        counts.set(t.municipality_id, (counts.get(t.municipality_id) || 0) + 1);
-      });
+      const PAGE_SIZE = 1000;
+      let offset = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("tariff_plans")
+          .select("municipality_id")
+          .range(offset, offset + PAGE_SIZE - 1);
+        if (error) throw error;
+        (data || []).forEach((t) => {
+          counts.set(t.municipality_id, (counts.get(t.municipality_id) || 0) + 1);
+        });
+        hasMore = (data?.length || 0) === PAGE_SIZE;
+        offset += PAGE_SIZE;
+      }
       return counts;
     },
   });
