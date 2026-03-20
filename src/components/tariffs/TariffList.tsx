@@ -402,7 +402,23 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
     },
   });
 
-  // Group municipalities by province
+  // Separate Eskom Direct Supply from regular municipalities
+  const ESKOM_MUNICIPALITY_NAME = "Eskom Direct Supply";
+
+  // Eskom data: pick the first Eskom Direct Supply municipality (all share same tariffs)
+  const eskomMuni = useMemo(() => {
+    if (!municipalities || !tariffCountsData) return null;
+    const eskom = municipalities.find(m => m.name === ESKOM_MUNICIPALITY_NAME);
+    if (!eskom) return null;
+    return {
+      id: eskom.id,
+      name: eskom.name,
+      tariffCount: tariffCountsData.get(eskom.id) || 0,
+      tariffs: municipalityTariffs[eskom.name] || [],
+    };
+  }, [municipalities, tariffCountsData, municipalityTariffs]);
+
+  // Group municipalities by province (excluding Eskom Direct Supply)
   const groupedData = useMemo(() => {
     if (!municipalities || !provinces || !tariffCountsData) return [];
 
@@ -413,7 +429,8 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
 
     municipalities.forEach((muni) => {
       if (!muni.province_id) return;
-      
+      if (muni.name === ESKOM_MUNICIPALITY_NAME) return; // Exclude Eskom — shown separately
+
       if (!grouped[muni.province_id]) {
         grouped[muni.province_id] = [];
       }
@@ -431,10 +448,10 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
 
       const municipalityList = muniList
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map(m => ({ 
+        .map(m => ({
           name: m.name,
           id: m.id,
-          tariffs: municipalityTariffs[m.name] || [] 
+          tariffs: municipalityTariffs[m.name] || []
         }));
 
       result.push({ province, municipalities: municipalityList });
@@ -592,6 +609,59 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
           </div>
         </CardHeader>
       </Card>
+
+      {/* Eskom Direct Supply — Top Level */}
+      {eskomMuni && eskomMuni.tariffCount > 0 && selectedProvince === "all" && !filterMunicipalityId && (
+        <Accordion type="multiple" className="space-y-3">
+          <AccordionItem value="eskom-direct" className="border rounded-lg bg-card overflow-hidden border-amber-500/30">
+            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-accent/50" onClick={() => loadTariffsForMunicipality(ESKOM_MUNICIPALITY_NAME)}>
+              <div className="flex items-center justify-between w-full pr-4">
+                <div className="flex items-center gap-3">
+                  <Zap className="h-5 w-5 text-amber-500" />
+                  <div className="text-left">
+                    <div className="font-semibold text-foreground">Eskom Direct Supply</div>
+                    <div className="text-sm text-muted-foreground">
+                      National tariffs 2025/26 • {eskomMuni.tariffCount} tariffs
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4">
+              <div className="space-y-2 mt-2">
+                {loadingMunicipalities.has(ESKOM_MUNICIPALITY_NAME) ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
+                    <span className="text-sm text-muted-foreground">Loading Eskom tariffs...</span>
+                  </div>
+                ) : eskomMuni.tariffs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Click to load Eskom tariffs
+                  </p>
+                ) : (
+                  <div className="grid gap-2">
+                    {eskomMuni.tariffs.sort((a: any, b: any) => a.name.localeCompare(b.name)).map((tariff: any) => (
+                      <div key={tariff.id} className="flex items-center justify-between p-2 rounded bg-accent/30 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Zap className="h-3.5 w-3.5 text-amber-500" />
+                          <span className="font-medium">{tariff.name}</span>
+                          <Badge variant="outline" className="text-[10px]">{tariff.category}</Badge>
+                          <Badge variant="outline" className="text-[10px]">{tariff.structure}</Badge>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Badge variant="secondary" className="text-[10px]">
+                            {tariff.tariff_rates?.length || 0} rates
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      )}
 
       {/* Province Level Accordion */}
       <Accordion type="multiple" className="space-y-3">
