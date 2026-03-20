@@ -511,7 +511,7 @@ export function TariffSelector({
     enabled: !!provinceId,
   });
 
-  // Eskom Direct Supply: fetch the first Eskom municipality (they all share the same tariffs)
+  // Eskom Direct Supply: always fetch so it's ready when toggled
   const { data: eskomMunicipality } = useQuery({
     queryKey: ["eskom-direct-municipality"],
     queryFn: async () => {
@@ -524,7 +524,7 @@ export function TariffSelector({
       if (error) throw error;
       return data;
     },
-    enabled: isEskomDirect,
+    staleTime: Infinity,
   });
 
   // Auto-select province and municipality based on project coordinates (reverse geocoding)
@@ -756,6 +756,9 @@ export function TariffSelector({
             setIsEskomDirect(true);
             setProvinceId("");
             setSelectedPeriod("");
+            if (eskomMunicipality) {
+              setMunicipalityId(eskomMunicipality.id);
+            }
           }}
           className="gap-2"
         >
