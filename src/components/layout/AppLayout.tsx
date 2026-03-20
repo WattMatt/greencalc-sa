@@ -1,6 +1,6 @@
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
-import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
+// WelcomeModal disabled — onboarding demos turned off
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -20,7 +20,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           </main>
         </SidebarInset>
       </div>
-      <WelcomeModal />
+      {/* WelcomeModal disabled */}
     </SidebarProvider>
   );
 }
