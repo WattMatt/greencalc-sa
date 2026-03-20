@@ -615,8 +615,22 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
 
       {/* Eskom Direct Supply — Top Level */}
       {eskomMuni && selectedProvince === "all" && !filterMunicipalityId && (
-        <Accordion type="multiple" className="space-y-3" onValueChange={(values) => {
-          if (values.includes("eskom-direct")) loadTariffsForMunicipality(ESKOM_MUNICIPALITY_NAME);
+        <Accordion type="multiple" className="space-y-3" onValueChange={async (values) => {
+          if (values.includes("eskom-direct") && eskomMuni && !municipalityTariffs[ESKOM_MUNICIPALITY_NAME]) {
+            setLoadingMunicipalities(prev => new Set(prev).add(ESKOM_MUNICIPALITY_NAME));
+            try {
+              const { data, error } = await supabase
+                .from("tariff_plans")
+                .select("*, municipality:municipalities(name, province_id), tariff_rates(*)")
+                .eq("municipality_id", eskomMuni.id)
+                .order("name");
+              if (!error && data) {
+                setMunicipalityTariffs(prev => ({ ...prev, [ESKOM_MUNICIPALITY_NAME]: data as unknown as Tariff[] }));
+              }
+            } finally {
+              setLoadingMunicipalities(prev => { const next = new Set(prev); next.delete(ESKOM_MUNICIPALITY_NAME); return next; });
+            }
+          }
         }}>
           <AccordionItem value="eskom-direct" className="border rounded-lg bg-card overflow-hidden border-amber-500/30">
             <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-accent/50">
