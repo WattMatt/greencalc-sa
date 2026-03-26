@@ -55,12 +55,12 @@ export function useOrganizationBranding() {
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (membership?.org_id) {
+      if ((membership as any)?.org_id) {
         // Get org-scoped branding
         const result = await supabase
           .from("organization_branding")
           .select("*")
-          .eq("org_id", membership.org_id)
+          .eq("org_id", (membership as any).org_id)
           .maybeSingle();
         data = result.data;
         error = result.error;
