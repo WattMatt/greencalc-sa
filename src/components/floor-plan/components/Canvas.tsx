@@ -73,7 +73,12 @@ interface CanvasProps {
   // Selected cable configs for cable creation
   selectedDcCableConfig?: DCCableConfig | null;
   selectedAcCableConfig?: ACCableConfig | null;
-  exportRef?: React.MutableRefObject<{ getCanvasElements: () => { pdfCanvas: HTMLCanvasElement | null; drawingCanvas: HTMLCanvasElement | null } } | null>;
+  exportRef?: React.MutableRefObject<{ 
+    getCanvasElements: () => { 
+      pdfCanvas: HTMLCanvasElement | null; 
+      drawingCanvas: HTMLCanvasElement | null;
+    } 
+  } | null>;
 }
 
 export function Canvas({
