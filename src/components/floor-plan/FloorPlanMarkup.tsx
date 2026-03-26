@@ -62,6 +62,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   
+  // Canvas export ref
+  const canvasExportRef = useRef<{ getCanvasElements: () => { pdfCanvas: HTMLCanvasElement | null; drawingCanvas: HTMLCanvasElement | null } } | null>(null);
+
   // Assigned simulation for this layout
   const [assignedSimulationId, setAssignedSimulationId] = useState<string | null>(null);
   const [assignedSimulation, setAssignedSimulation] = useState<SimulationData>(null);
@@ -2438,6 +2441,56 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     toast.info(`Draw a new roof mask (pitch: ${mask.pitch}°)`);
   };
 
+  const handleExportSVG = useCallback(() => {
+    const elements = canvasExportRef.current?.getCanvasElements();
+    if (!elements?.pdfCanvas) {
+      toast.error("No layout loaded to export");
+      return;
+    }
+
+    try {
+      toast.loading("Generating SVG...", { id: "svg-export" });
+
+      const { pdfCanvas, drawingCanvas } = elements;
+      const width = pdfCanvas.width;
+      const height = pdfCanvas.height;
+
+      // Composite both canvases at full resolution
+      const compositeCanvas = document.createElement("canvas");
+      compositeCanvas.width = width;
+      compositeCanvas.height = height;
+      const ctx = compositeCanvas.getContext("2d")!;
+      
+      // Draw background
+      ctx.drawImage(pdfCanvas, 0, 0);
+      
+      // Draw markup overlay
+      if (drawingCanvas) {
+        ctx.drawImage(drawingCanvas, 0, 0, drawingCanvas.width, drawingCanvas.height, 0, 0, width, height);
+      }
+
+      const dataUrl = compositeCanvas.toDataURL("image/png");
+
+      const svgString = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
+     width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <image width="${width}" height="${height}" href="${dataUrl}" />
+</svg>`;
+
+      const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `pv-layout-${currentLayoutName.replace(/\s+/g, '-').toLowerCase()}.svg`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("SVG exported successfully", { id: "svg-export" });
+    } catch (error) {
+      console.error("SVG export error:", error);
+      toast.error("Failed to export SVG", { id: "svg-export" });
+    }
+  }, [currentLayoutName]);
+
   // Show browser view first (unless in readOnly mode)
   if (viewMode === 'browser' && !readOnly) {
     return (
@@ -2509,6 +2562,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           setSelectedAcCableId={setSelectedAcCableId}
           is3DView={is3DView}
           onToggle3DView={() => setIs3DView(v => !v)}
+          onExportSVG={handleExportSVG}
         />
       )}
       
@@ -2620,6 +2674,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         onContextMenuOpen={readOnly ? undefined : handleContextMenuOpen}
         selectedDcCableConfig={getSelectedDcCable()}
         selectedAcCableConfig={getSelectedAcCable()}
+        exportRef={canvasExportRef}
       />
       )}
 

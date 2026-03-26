@@ -3,7 +3,7 @@ import {
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
   Upload, Undo2, Redo2, Save, Loader2, ArrowLeft,
   ChevronLeft, ChevronRight, ChevronDown, Copy, MoveHorizontal, AlignVerticalJustifyStart,
-  Settings, Box
+  Settings, Box, Download
 } from 'lucide-react';
 import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig, WalkwayConfig, CableTrayConfig, SolarModuleConfig, InverterLayoutConfig, DCCableConfig, ACCableConfig } from '../types';
 import { Button } from '@/components/ui/button';
@@ -220,6 +220,7 @@ interface ToolbarProps {
   // 3D view toggle
   is3DView?: boolean;
   onToggle3DView?: () => void;
+  onExportSVG?: () => void;
 }
 
 export function Toolbar({
@@ -272,6 +273,7 @@ export function Toolbar({
   setSelectedAcCableId,
   is3DView,
   onToggle3DView,
+  onExportSVG,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -408,6 +410,17 @@ export function Toolbar({
             )}
             <span className="text-xs">{isSaving ? 'Saving...' : 'Save'}</span>
           </Button>
+          {onExportSVG && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full justify-start"
+              onClick={onExportSVG}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              <span className="text-xs">Export SVG</span>
+            </Button>
+          )}
         </CollapsibleSection>
 
         <Separator className="my-2" />

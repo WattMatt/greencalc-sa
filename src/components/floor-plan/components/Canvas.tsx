@@ -73,6 +73,7 @@ interface CanvasProps {
   // Selected cable configs for cable creation
   selectedDcCableConfig?: DCCableConfig | null;
   selectedAcCableConfig?: ACCableConfig | null;
+  exportRef?: React.MutableRefObject<{ getCanvasElements: () => { pdfCanvas: HTMLCanvasElement | null; drawingCanvas: HTMLCanvasElement | null } } | null>;
 }
 
 export function Canvas({
@@ -104,12 +105,25 @@ export function Canvas({
   onContextMenuOpen,
   selectedDcCableConfig,
   selectedAcCableConfig,
+  exportRef,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
   const prevContainerSizeRef = useRef<{ width: number; height: number } | null>(null);
-  
+
+  // Expose canvas elements for export
+  useEffect(() => {
+    if (exportRef) {
+      exportRef.current = {
+        getCanvasElements: () => ({
+          pdfCanvas: pdfCanvasRef.current,
+          drawingCanvas: drawingCanvasRef.current,
+        }),
+      };
+    }
+  }, [exportRef]);
+
   const [isPanning, setIsPanning] = useState(false);
   const [lastMousePos, setLastMousePos] = useState<Point>({ x: 0, y: 0 });
   const [currentDrawing, setCurrentDrawing] = useState<Point[]>([]);
