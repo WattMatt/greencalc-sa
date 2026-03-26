@@ -2562,6 +2562,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           setSelectedAcCableId={setSelectedAcCableId}
           is3DView={is3DView}
           onToggle3DView={() => setIs3DView(v => !v)}
+          onExportSVG={handleExportSVG}
         />
       )}
       
