@@ -2441,21 +2441,6 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     toast.info(`Draw a new roof mask (pitch: ${mask.pitch}°)`);
   };
 
-  // Show browser view first (unless in readOnly mode)
-  if (viewMode === 'browser' && !readOnly) {
-    return (
-      <LayoutBrowser
-        projectId={projectId}
-        onSelectLayout={handleSelectLayout}
-        onNewDesign={handleNewDesign}
-        onLoadPDF={handleLoadPDFFromBrowser}
-        onRenameLayout={renameLayout}
-        onDeleteLayout={deleteLayout}
-        onDuplicateLayout={handleDuplicateLayout}
-      />
-    );
-  }
-
   const handleExportSVG = useCallback(() => {
     const elements = canvasExportRef.current?.getCanvasElements();
     if (!elements?.pdfCanvas) {
@@ -2505,6 +2490,21 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       toast.error("Failed to export SVG", { id: "svg-export" });
     }
   }, [currentLayoutName]);
+
+  // Show browser view first (unless in readOnly mode)
+  if (viewMode === 'browser' && !readOnly) {
+    return (
+      <LayoutBrowser
+        projectId={projectId}
+        onSelectLayout={handleSelectLayout}
+        onNewDesign={handleNewDesign}
+        onLoadPDF={handleLoadPDFFromBrowser}
+        onRenameLayout={renameLayout}
+        onDeleteLayout={deleteLayout}
+        onDuplicateLayout={handleDuplicateLayout}
+      />
+    );
+  }
 
   return (
     <div className="flex h-[calc(100vh-200px)] min-h-[600px] rounded-lg overflow-hidden border">
