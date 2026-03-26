@@ -62,6 +62,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   
+  // Canvas export ref
+  const canvasExportRef = useRef<{ getCanvasElements: () => { pdfCanvas: HTMLCanvasElement | null; drawingCanvas: HTMLCanvasElement | null } } | null>(null);
+
   // Assigned simulation for this layout
   const [assignedSimulationId, setAssignedSimulationId] = useState<string | null>(null);
   const [assignedSimulation, setAssignedSimulation] = useState<SimulationData>(null);
