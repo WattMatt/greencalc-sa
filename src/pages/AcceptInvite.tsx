@@ -31,8 +31,8 @@ export default function AcceptInvite() {
 
           // Mark the invitation as accepted
           if (meta?.org_id) {
-            await supabase
-              .from("organization_members")
+            await (supabase
+              .from("organization_members" as any) as any)
               .update({ accepted_at: new Date().toISOString() })
               .eq("user_id", session.user.id)
               .eq("org_id", meta.org_id);

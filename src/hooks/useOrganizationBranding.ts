@@ -49,8 +49,8 @@ export function useOrganizationBranding() {
       let error = null;
 
       // Check if user belongs to an org
-      const { data: membership } = await supabase
-        .from("organization_members")
+      const { data: membership } = await (supabase
+        .from("organization_members" as any) as any)
         .select("org_id")
         .eq("user_id", user.id)
         .maybeSingle();
