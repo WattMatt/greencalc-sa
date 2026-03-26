@@ -1163,6 +1163,13 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
           {showBackground ? <Eye className="w-4 h-4 mr-1" /> : <EyeOff className="w-4 h-4 mr-1" />}
           Background
         </Button>
+
+        <Separator orientation="vertical" className="h-6" />
+
+        <Button variant="outline" size="sm" onClick={handleExportSVG}>
+          <Download className="w-4 h-4 mr-1" />
+          Export SVG
+        </Button>
       </div>
 
       {/* Canvas */}
