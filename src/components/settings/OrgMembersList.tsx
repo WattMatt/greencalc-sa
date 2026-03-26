@@ -46,8 +46,8 @@ export function OrgMembersList({ orgId, isAdmin }: OrgMembersListProps) {
     queryKey: ["org-members", orgId],
     queryFn: async () => {
       // Fetch members first
-      const { data: memberData, error: memberError } = await supabase
-        .from("organization_members")
+      const { data: memberData, error: memberError } = await (supabase
+        .from("organization_members" as any) as any)
         .select("id, user_id, role, invited_at, accepted_at")
         .eq("org_id", orgId)
         .order("invited_at", { ascending: true });

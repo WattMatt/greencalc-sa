@@ -238,7 +238,7 @@ export function ProjectLocationMap({
     } finally {
       setIsGeocoding(false);
     }
-  }, [location, latitude, longitude, geocodeAttempted, projectId, mapLoaded, queryClient, onLocationUpdate, fetchForecast, fetchBothDatasets, dataSource, updateMarker]);
+  }, [location, latitude, longitude, geocodeAttempted, projectId, mapLoaded, queryClient, onLocationUpdate, fetchForecast, fetchBothDatasets, dataSource]);
 
   // Trigger auto-geocode when map loads
   useEffect(() => {

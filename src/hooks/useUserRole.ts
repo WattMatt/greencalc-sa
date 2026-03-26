@@ -21,8 +21,8 @@ export function useUserRole(): UserRoleData {
     queryFn: async () => {
       if (!user?.id) return null;
 
-      const { data, error } = await supabase
-        .from("organization_members")
+      const { data, error } = await (supabase
+        .from("organization_members" as any) as any)
         .select(`
           id,
           org_id,
@@ -48,8 +48,8 @@ export function useUserRole(): UserRoleData {
 
     try {
       // Create the organization
-      const { data: org, error: orgError } = await supabase
-        .from("organizations")
+      const { data: org, error: orgError } = await (supabase
+        .from("organizations" as any) as any)
         .insert({ name, created_by: user.id })
         .select("id")
         .single();
@@ -57,8 +57,8 @@ export function useUserRole(): UserRoleData {
       if (orgError) throw orgError;
 
       // Add the creator as admin member
-      const { error: memberError } = await supabase
-        .from("organization_members")
+      const { error: memberError } = await (supabase
+        .from("organization_members" as any) as any)
         .insert({
           org_id: org.id,
           user_id: user.id,

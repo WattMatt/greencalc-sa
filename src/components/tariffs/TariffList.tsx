@@ -229,26 +229,8 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
   const [loadingMunicipalities, setLoadingMunicipalities] = useState<Set<string>>(new Set());
   const [isLoading] = useState(false);
 
-  // Auto-load Eskom tariffs when available
-  useEffect(() => {
-    if (eskomMuni && !municipalityTariffs[ESKOM_MUNICIPALITY_NAME] && !loadingMunicipalities.has(ESKOM_MUNICIPALITY_NAME)) {
-      (async () => {
-        setLoadingMunicipalities(prev => new Set(prev).add(ESKOM_MUNICIPALITY_NAME));
-        try {
-          const { data, error } = await supabase
-            .from("tariff_plans")
-            .select("*, municipality:municipalities(name, province_id), tariff_rates(*)")
-            .eq("municipality_id", eskomMuni.id)
-            .order("name");
-          if (!error && data) {
-            setMunicipalityTariffs(prev => ({ ...prev, [ESKOM_MUNICIPALITY_NAME]: data as unknown as Tariff[] }));
-          }
-        } finally {
-          setLoadingMunicipalities(prev => { const next = new Set(prev); next.delete(ESKOM_MUNICIPALITY_NAME); return next; });
-        }
-      })();
-    }
-  }, [eskomMuni]);
+
+
 
   // Clear cached municipality tariffs when tariff counts change (i.e. after extraction/import)
   const prevCountsRef = useRef(tariffCountsData);
@@ -441,6 +423,27 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
       tariffs: municipalityTariffs[withTariffs.name] || [],
     };
   }, [municipalities, tariffCountsData, municipalityTariffs]);
+
+  // Auto-load Eskom tariffs when available
+  useEffect(() => {
+    if (eskomMuni && !municipalityTariffs[ESKOM_MUNICIPALITY_NAME] && !loadingMunicipalities.has(ESKOM_MUNICIPALITY_NAME)) {
+      (async () => {
+        setLoadingMunicipalities(prev => new Set(prev).add(ESKOM_MUNICIPALITY_NAME));
+        try {
+          const { data, error } = await supabase
+            .from("tariff_plans")
+            .select("*, municipality:municipalities(name, province_id), tariff_rates(*)")
+            .eq("municipality_id", eskomMuni.id)
+            .order("name");
+          if (!error && data) {
+            setMunicipalityTariffs(prev => ({ ...prev, [ESKOM_MUNICIPALITY_NAME]: data as unknown as Tariff[] }));
+          }
+        } finally {
+          setLoadingMunicipalities(prev => { const next = new Set(prev); next.delete(ESKOM_MUNICIPALITY_NAME); return next; });
+        }
+      })();
+    }
+  }, [eskomMuni]);
 
   // Group municipalities by province (excluding Eskom Direct Supply)
   const groupedData = useMemo(() => {

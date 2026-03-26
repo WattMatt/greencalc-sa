@@ -49,18 +49,18 @@ export function useOrganizationBranding() {
       let error = null;
 
       // Check if user belongs to an org
-      const { data: membership } = await supabase
-        .from("organization_members")
+      const { data: membership } = await (supabase
+        .from("organization_members" as any) as any)
         .select("org_id")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (membership?.org_id) {
+      if ((membership as any)?.org_id) {
         // Get org-scoped branding
-        const result = await supabase
-          .from("organization_branding")
+        const result = await (supabase
+          .from("organization_branding") as any)
           .select("*")
-          .eq("org_id", membership.org_id)
+          .eq("org_id", (membership as any).org_id)
           .maybeSingle();
         data = result.data;
         error = result.error;
