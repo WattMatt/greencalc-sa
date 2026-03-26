@@ -24,6 +24,7 @@ import { Loader2 } from 'lucide-react';
 import { getModulePresetById, getDefaultModulePreset, SolarModulePreset } from '../projects/SolarModulePresets';
 import { getObjectEdgeDistance, calculateNewPositionAtDistance, calculateAlignedPosition, getPVArrayDimensions, getEquipmentDimensions, getMaterialDimensions } from './utils/geometry';
 import { autopopulateCableElevations } from './utils/elevation';
+import { exportLayeredSVG } from './utils/svgExport';
 
 type ViewMode = 'browser' | 'editor';
 
@@ -2455,8 +2456,6 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
 
     try {
       toast.loading("Generating layered SVG...", { id: "svg-export" });
-
-      const { exportLayeredSVG } = require('./utils/svgExport') as typeof import('./utils/svgExport');
 
       const svgString = exportLayeredSVG({
         backgroundCanvas: elements.pdfCanvas,
