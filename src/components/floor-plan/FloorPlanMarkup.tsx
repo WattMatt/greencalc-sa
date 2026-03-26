@@ -2674,6 +2674,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         onContextMenuOpen={readOnly ? undefined : handleContextMenuOpen}
         selectedDcCableConfig={getSelectedDcCable()}
         selectedAcCableConfig={getSelectedAcCable()}
+        exportRef={canvasExportRef}
       />
       )}
 
