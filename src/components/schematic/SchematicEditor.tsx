@@ -1050,6 +1050,49 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
     setIsInitialDataLoaded(true);
     toast.success("Refreshed");
   };
+  const handleExportSVG = () => {
+    const canvas = canvasInstanceRef.current;
+    if (!canvas) {
+      toast.error("Canvas not ready");
+      return;
+    }
+
+    try {
+      // Reset viewport to capture full canvas at 1:1 scale
+      const currentVpt = [...canvas.viewportTransform!];
+      const currentZoom = canvas.getZoom();
+      
+      canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+      canvas.setZoom(1);
+
+      const svgString = canvas.toSVG({
+        width: `${canvas.getWidth()}`,
+        height: `${canvas.getHeight()}`,
+        viewBox: {
+          x: 0,
+          y: 0,
+          width: canvas.getWidth(),
+          height: canvas.getHeight(),
+        },
+      } as any);
+
+      // Restore viewport
+      canvas.setViewportTransform(currentVpt as any);
+      canvas.setZoom(currentZoom);
+
+      const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `schematic-${schematicId}.svg`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("SVG exported successfully");
+    } catch (error) {
+      console.error("SVG export error:", error);
+      toast.error("Failed to export SVG");
+    }
+  };
 
   return (
     <div className="space-y-2">
