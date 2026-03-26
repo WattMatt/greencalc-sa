@@ -14,7 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Save, Link2, Trash2, Plus, ZoomIn, ZoomOut, Maximize2, Edit, Loader2, Eye, EyeOff, GitBranch } from "lucide-react";
+import { Save, Link2, Trash2, Plus, ZoomIn, ZoomOut, Maximize2, Edit, Loader2, Eye, EyeOff, GitBranch, Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { QuickMeterDialog } from "./QuickMeterDialog";
@@ -1050,6 +1050,49 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
     setIsInitialDataLoaded(true);
     toast.success("Refreshed");
   };
+  const handleExportSVG = () => {
+    const canvas = canvasInstanceRef.current;
+    if (!canvas) {
+      toast.error("Canvas not ready");
+      return;
+    }
+
+    try {
+      // Reset viewport to capture full canvas at 1:1 scale
+      const currentVpt = [...canvas.viewportTransform!];
+      const currentZoom = canvas.getZoom();
+      
+      canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+      canvas.setZoom(1);
+
+      const svgString = canvas.toSVG({
+        width: `${canvas.getWidth()}`,
+        height: `${canvas.getHeight()}`,
+        viewBox: {
+          x: 0,
+          y: 0,
+          width: canvas.getWidth(),
+          height: canvas.getHeight(),
+        },
+      } as any);
+
+      // Restore viewport
+      canvas.setViewportTransform(currentVpt as any);
+      canvas.setZoom(currentZoom);
+
+      const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `schematic-${schematicId}.svg`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("SVG exported successfully");
+    } catch (error) {
+      console.error("SVG export error:", error);
+      toast.error("Failed to export SVG");
+    }
+  };
 
   return (
     <div className="space-y-2">
@@ -1119,6 +1162,13 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
         <Button variant={showBackground ? "secondary" : "outline"} size="sm" onClick={() => setShowBackground(!showBackground)}>
           {showBackground ? <Eye className="w-4 h-4 mr-1" /> : <EyeOff className="w-4 h-4 mr-1" />}
           Background
+        </Button>
+
+        <Separator orientation="vertical" className="h-6" />
+
+        <Button variant="outline" size="sm" onClick={handleExportSVG}>
+          <Download className="w-4 h-4 mr-1" />
+          Export SVG
         </Button>
       </div>
 
