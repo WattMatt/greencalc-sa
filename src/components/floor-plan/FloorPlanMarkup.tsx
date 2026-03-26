@@ -2441,7 +2441,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     toast.info(`Draw a new roof mask (pitch: ${mask.pitch}°)`);
   };
 
-  const handleExportSVG = useCallback(() => {
+  const handleExportSVG = () => {
     const elements = canvasExportRef.current?.getCanvasElements();
     if (!elements?.pdfCanvas) {
       toast.error("No layout loaded to export");
@@ -2489,7 +2489,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       console.error("SVG export error:", error);
       toast.error("Failed to export SVG", { id: "svg-export" });
     }
-  }, [currentLayoutName]);
+  };
 
   // Show browser view first (unless in readOnly mode)
   if (viewMode === 'browser' && !readOnly) {
