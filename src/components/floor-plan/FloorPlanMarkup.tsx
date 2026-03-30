@@ -2477,8 +2477,11 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       const link = document.createElement("a");
       link.href = url;
       link.download = `pv-layout-${currentLayoutName.replace(/\s+/g, '-').toLowerCase()}.svg`;
+      link.style.display = "none";
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success("Layered SVG exported — open in Inkscape or Illustrator to view layers", { id: "svg-export" });
     } catch (error) {
       console.error("SVG export error:", error);
