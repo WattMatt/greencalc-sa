@@ -431,7 +431,7 @@ export function Toolbar({
               onClick={onExportPNG}
             >
               <Download className="h-4 w-4 mr-2" />
-              <span className="text-xs">Export Image</span>
+              <span className="text-xs">Export Drawing (PDF)</span>
             </Button>
           )}
         </CollapsibleSection>
