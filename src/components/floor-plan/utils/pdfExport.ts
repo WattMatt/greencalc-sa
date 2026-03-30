@@ -17,10 +17,8 @@ import {
   drawWalkway, drawCableTray
 } from './drawing';
 import { calculateTotalPVCapacity } from './geometry';
+import '@/lib/pdfmake/pdfmakeConfig';
 import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
-
-pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
 
 export interface DrawingSheetData {
   backgroundCanvas: HTMLCanvasElement | null;
