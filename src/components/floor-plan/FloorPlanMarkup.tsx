@@ -25,6 +25,7 @@ import { getModulePresetById, getDefaultModulePreset, SolarModulePreset } from '
 import { getObjectEdgeDistance, calculateNewPositionAtDistance, calculateAlignedPosition, getPVArrayDimensions, getEquipmentDimensions, getMaterialDimensions } from './utils/geometry';
 import { autopopulateCableElevations } from './utils/elevation';
 import { exportLayeredSVG } from './utils/svgExport';
+import { exportProductionPNG, downloadCanvasAsPNG } from './utils/pngExport';
 
 type ViewMode = 'browser' | 'editor';
 
