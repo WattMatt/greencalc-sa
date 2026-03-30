@@ -27,6 +27,7 @@ import { autopopulateCableElevations } from './utils/elevation';
 import { exportLayeredSVG } from './utils/svgExport';
 import { exportProductionPNG, downloadCanvasAsPNG } from './utils/pngExport';
 import { exportDrawingSheetPDF } from './utils/pdfExport';
+import { exportLayeredA0, downloadA0PNG } from './utils/a0Export';
 
 type ViewMode = 'browser' | 'editor';
 
@@ -2536,6 +2537,44 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     }
   };
 
+  const handleExportA0 = () => {
+    const elements = canvasExportRef.current?.getCanvasElements();
+    if (!elements?.pdfCanvas) {
+      toast.error("No layout loaded to export");
+      return;
+    }
+
+    try {
+      toast.loading("Generating A0 layered drawing sheet...", { id: "a0-export" });
+
+      const a0Canvas = exportLayeredA0({
+        backgroundCanvas: elements.pdfCanvas,
+        drawingCanvas: elements.drawingCanvas,
+        width: elements.pdfCanvas.width,
+        height: elements.pdfCanvas.height,
+        roofMasks,
+        pvArrays,
+        pvPanelConfig,
+        equipment,
+        lines,
+        placedWalkways,
+        placedCableTrays,
+        scaleInfo,
+        plantSetupConfig,
+        projectName: currentLayoutName,
+        layoutName: currentLayoutName,
+      });
+
+      const filename = `${currentLayoutName || 'PV-Layout'}_A0_Layered.png`;
+      downloadA0PNG(a0Canvas, filename);
+
+      toast.success("A0 layered sheet opened — right-click to save", { id: "a0-export", duration: 8000 });
+    } catch (error) {
+      console.error("A0 export error:", error);
+      toast.error("Failed to export A0 sheet", { id: "a0-export" });
+    }
+  };
+
 
   if (viewMode === 'browser' && !readOnly) {
     return (
@@ -2609,6 +2648,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           onToggle3DView={() => setIs3DView(v => !v)}
           onExportSVG={handleExportSVG}
           onExportPNG={handleExportPDF}
+          onExportA0={handleExportA0}
         />
       )}
       
