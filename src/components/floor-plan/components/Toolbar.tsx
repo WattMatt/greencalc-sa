@@ -221,6 +221,7 @@ interface ToolbarProps {
   is3DView?: boolean;
   onToggle3DView?: () => void;
   onExportSVG?: () => void;
+  onExportPNG?: () => void;
 }
 
 export function Toolbar({
@@ -274,6 +275,7 @@ export function Toolbar({
   is3DView,
   onToggle3DView,
   onExportSVG,
+  onExportPNG,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -419,6 +421,17 @@ export function Toolbar({
             >
               <Download className="h-4 w-4 mr-2" />
               <span className="text-xs">Export SVG</span>
+            </Button>
+          )}
+          {onExportPNG && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full justify-start"
+              onClick={onExportPNG}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              <span className="text-xs">Export Image</span>
             </Button>
           )}
         </CollapsibleSection>
