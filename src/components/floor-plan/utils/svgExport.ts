@@ -189,9 +189,12 @@ export function exportLayeredSVG(data: LayeredExportData): string {
     });
   }
 
+  // XML-escape helper for attribute values
+  const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
   // Assemble SVG with named groups (Inkscape/Illustrator layer format)
   const layerGroups = layerImages.map(l => 
-    `  <g id="${l.id}" inkscape:groupmode="layer" inkscape:label="${l.label}" style="display:inline">
+    `  <g id="${escXml(l.id)}" inkscape:groupmode="layer" inkscape:label="${escXml(l.label)}" style="display:inline">
     <image width="${width}" height="${height}" href="${l.dataUrl}" />
   </g>`
   ).join('\n');
@@ -203,7 +206,7 @@ export function exportLayeredSVG(data: LayeredExportData): string {
      width="${width}" height="${height}" 
      viewBox="0 0 ${width} ${height}">
   <title>PV Layout - Layered Export</title>
-  <desc>Layers: ${layerImages.map(l => l.label).join(', ')}</desc>
+  <desc>Layers: ${escXml(layerImages.map(l => l.label).join(', '))}</desc>
 ${layerGroups}
 </svg>`;
 }
