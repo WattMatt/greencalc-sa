@@ -2474,19 +2474,25 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
 
       const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `pv-layout-${currentLayoutName.replace(/\s+/g, "-").toLowerCase()}.svg`;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      requestAnimationFrame(() => {
+      
+      // Try download first, fall back to opening in new tab for sandboxed iframes
+      const newWindow = window.open(url, '_blank');
+      if (newWindow) {
+        // Give the tab time to load, then provide download instructions
+        toast.success("SVG opened in new tab — use Ctrl+S / Cmd+S to save the file. Open in Inkscape or Illustrator to view layers.", { id: "svg-export", duration: 8000 });
+      } else {
+        // Popup blocked — try anchor download as fallback
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `pv-layout-${currentLayoutName.replace(/\s+/g, "-").toLowerCase()}.svg`;
+        a.style.display = "none";
+        document.body.appendChild(a);
         a.click();
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, 1000);
-      });
-      toast.success("Layered SVG exported — open in Inkscape or Illustrator to view layers", { id: "svg-export" });
+        document.body.removeChild(a);
+        toast.success("Layered SVG exported — open in Inkscape or Illustrator to view layers", { id: "svg-export" });
+      }
+      // Clean up blob URL after delay
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
     } catch (error) {
       console.error("SVG export error:", error);
       toast.error("Failed to export SVG", { id: "svg-export" });
