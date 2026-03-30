@@ -2648,6 +2648,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           onToggle3DView={() => setIs3DView(v => !v)}
           onExportSVG={handleExportSVG}
           onExportPNG={handleExportPDF}
+          onExportA0={handleExportA0}
         />
       )}
       
