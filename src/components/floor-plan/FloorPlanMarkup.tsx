@@ -25,6 +25,7 @@ import { getModulePresetById, getDefaultModulePreset, SolarModulePreset } from '
 import { getObjectEdgeDistance, calculateNewPositionAtDistance, calculateAlignedPosition, getPVArrayDimensions, getEquipmentDimensions, getMaterialDimensions } from './utils/geometry';
 import { autopopulateCableElevations } from './utils/elevation';
 import { exportLayeredSVG } from './utils/svgExport';
+import { exportProductionPNG, downloadCanvasAsPNG } from './utils/pngExport';
 
 type ViewMode = 'browser' | 'editor';
 
@@ -2499,7 +2500,46 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     }
   };
 
-  // Show browser view first (unless in readOnly mode)
+  const handleExportPNG = () => {
+    const elements = canvasExportRef.current?.getCanvasElements();
+    if (!elements?.pdfCanvas) {
+      toast.error("No layout loaded to export");
+      return;
+    }
+
+    try {
+      toast.loading("Generating production image...", { id: "png-export" });
+
+      const exportCanvas = exportProductionPNG({
+        backgroundCanvas: elements.pdfCanvas,
+        drawingCanvas: elements.drawingCanvas,
+        width: elements.pdfCanvas.width,
+        height: elements.pdfCanvas.height,
+        roofMasks,
+        pvArrays,
+        pvPanelConfig,
+        equipment,
+        lines,
+        placedWalkways,
+        placedCableTrays,
+        scaleInfo,
+        plantSetupConfig,
+        projectName: currentLayoutName,
+        layoutName: currentLayoutName,
+      });
+
+      const filename = `pv-layout-${currentLayoutName.replace(/\s+/g, "-").toLowerCase()}.png`;
+      const success = downloadCanvasAsPNG(exportCanvas, filename);
+      if (success) {
+        toast.success("Production image opened in new tab — right-click to save", { id: "png-export", duration: 8000 });
+      }
+    } catch (error) {
+      console.error("PNG export error:", error);
+      toast.error("Failed to export image", { id: "png-export" });
+    }
+  };
+
+
   if (viewMode === 'browser' && !readOnly) {
     return (
       <LayoutBrowser
@@ -2571,6 +2611,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           is3DView={is3DView}
           onToggle3DView={() => setIs3DView(v => !v)}
           onExportSVG={handleExportSVG}
+          onExportPNG={handleExportPNG}
         />
       )}
       
