@@ -26,6 +26,7 @@ import { getObjectEdgeDistance, calculateNewPositionAtDistance, calculateAligned
 import { autopopulateCableElevations } from './utils/elevation';
 import { exportLayeredSVG } from './utils/svgExport';
 import { exportProductionPNG, downloadCanvasAsPNG } from './utils/pngExport';
+import { exportDrawingSheetPDF } from './utils/pdfExport';
 
 type ViewMode = 'browser' | 'editor';
 
@@ -2500,7 +2501,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     }
   };
 
-  const handleExportPNG = () => {
+  const handleExportPDF = () => {
     const elements = canvasExportRef.current?.getCanvasElements();
     if (!elements?.pdfCanvas) {
       toast.error("No layout loaded to export");
@@ -2508,9 +2509,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     }
 
     try {
-      toast.loading("Generating production image...", { id: "png-export" });
+      toast.loading("Generating A3 drawing sheet...", { id: "pdf-export" });
 
-      const exportCanvas = exportProductionPNG({
+      exportDrawingSheetPDF({
         backgroundCanvas: elements.pdfCanvas,
         drawingCanvas: elements.drawingCanvas,
         width: elements.pdfCanvas.width,
@@ -2528,14 +2529,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         layoutName: currentLayoutName,
       });
 
-      const filename = `pv-layout-${currentLayoutName.replace(/\s+/g, "-").toLowerCase()}.png`;
-      const success = downloadCanvasAsPNG(exportCanvas, filename);
-      if (success) {
-        toast.success("Production image opened in new tab — right-click to save", { id: "png-export", duration: 8000 });
-      }
+      toast.success("Drawing sheet PDF opened — save or print from your browser", { id: "pdf-export", duration: 8000 });
     } catch (error) {
-      console.error("PNG export error:", error);
-      toast.error("Failed to export image", { id: "png-export" });
+      console.error("PDF export error:", error);
+      toast.error("Failed to export drawing sheet", { id: "pdf-export" });
     }
   };
 
@@ -2611,7 +2608,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           is3DView={is3DView}
           onToggle3DView={() => setIs3DView(v => !v)}
           onExportSVG={handleExportSVG}
-          onExportPNG={handleExportPNG}
+          onExportPNG={handleExportPDF}
         />
       )}
       
