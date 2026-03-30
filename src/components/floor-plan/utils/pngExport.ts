@@ -55,8 +55,7 @@ function computeStats(data: PngExportData): LegendEntry[] {
 
   // PV Panels
   if (data.pvArrays.length > 0 && data.pvPanelConfig) {
-    const totalPanels = data.pvArrays.reduce((s, a) => s + a.rows * a.columns, 0);
-    const capacityKwp = calculateTotalPVCapacity(data.pvArrays, data.pvPanelConfig);
+    const { panelCount: totalPanels, capacityKwp } = calculateTotalPVCapacity(data.pvArrays, data.pvPanelConfig!);
     entries.push({
       color: '#3b82f6',
       label: 'PV Modules',
