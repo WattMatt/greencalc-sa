@@ -2474,14 +2474,18 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
 
       const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `pv-layout-${currentLayoutName.replace(/\s+/g, '-').toLowerCase()}.svg`;
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pv-layout-${currentLayoutName.replace(/\s+/g, "-").toLowerCase()}.svg`;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      requestAnimationFrame(() => {
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 1000);
+      });
       toast.success("Layered SVG exported — open in Inkscape or Illustrator to view layers", { id: "svg-export" });
     } catch (error) {
       console.error("SVG export error:", error);
