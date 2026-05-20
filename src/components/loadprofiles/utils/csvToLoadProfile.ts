@@ -572,10 +572,15 @@ export function processCSVToLoadProfile(
     totalKwh = parsedRows.reduce((sum, row) => sum + row.value, 0);
   }
   
-  const allValues = [...weekdayProfile, ...weekendProfile].filter(v => v > 0);
-  const peakKw = Math.max(...allValues, 0);
-  const avgKw = allValues.length > 0 
-    ? allValues.reduce((sum, v) => sum + v, 0) / allValues.length 
+  const allProfileValues = [...weekdayProfile, ...weekendProfile].filter(v => v > 0);
+
+  // Profile values represent average kW for each hour:
+  // - Power data: averaged kW readings per hour → already in kW
+  // - Energy data: total kWh consumed in that hour per average day → kWh/h = kW
+  // So profile values ARE in kW regardless of input unit type.
+  const peakKw = Math.max(...allProfileValues, 0);
+  const avgKw = allProfileValues.length > 0
+    ? allProfileValues.reduce((sum, v) => sum + v, 0) / allProfileValues.length
     : 0;
   
   // Get date range

@@ -537,10 +537,12 @@ export function CsvImportWizard({
       peakKw = peak;
       avgKw = avg;
     } else {
-      // Auto mode - assume values are what they claim (likely kWh interval readings)
+      // Auto mode - assume kWh interval readings (most common for meter data)
       dailyKwh = uniqueDays > 0 ? sum / uniqueDays : sum / estimatedDays;
-      peakKw = peak;
-      avgKw = avg;
+      // Convert interval energy to power: kW = kWh / intervalHours
+      const intervalHours = 24 / readingsPerDay;
+      peakKw = peak / intervalHours;
+      avgKw = avg / intervalHours;
     }
     
     // Calculate load factor (average / peak)
